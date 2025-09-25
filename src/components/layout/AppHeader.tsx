@@ -1,14 +1,33 @@
-import { Search, Bell, User, Menu } from 'lucide-react';
+import { Search, Bell, User, Menu, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useAuth } from '@/hooks/useAuth';
 
 interface AppHeaderProps {
   onMenuClick?: () => void;
 }
 
 export function AppHeader({ onMenuClick }: AppHeaderProps) {
+  const { user, signOut } = useAuth();
+
+  const handleLogout = async () => {
+    await signOut();
+  };
+
+  const getUserName = () => {
+    if (user?.user_metadata?.nome) {
+      return user.user_metadata.nome;
+    }
+    return user?.email?.split('@')[0] || 'Usuário';
+  };
+
+  const getUserInitials = () => {
+    const name = getUserName();
+    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+  };
+
   return (
     <header className="h-16 bg-gradient-to-r from-purple-600 to-purple-800 border-b border-purple-500/20 px-4 flex items-center justify-between shadow-lg">
       <div className="flex items-center gap-4">
@@ -56,14 +75,14 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8 border-2 border-white/20">
                 <AvatarImage src="/api/placeholder/32/32" />
-                <AvatarFallback className="bg-white/20 text-white">PS</AvatarFallback>
+                <AvatarFallback className="bg-white/20 text-white">{getUserInitials()}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent className="w-56" align="end" forceMount>
             <div className="flex flex-col space-y-1 p-2">
-              <p className="text-sm font-medium leading-none">Pedro Sabóia</p>
-              <p className="text-xs leading-none text-muted-foreground">Encarregado</p>
+              <p className="text-sm font-medium leading-none">{getUserName()}</p>
+              <p className="text-xs leading-none text-muted-foreground">{user?.email}</p>
             </div>
             <DropdownMenuSeparator />
             <DropdownMenuItem>
@@ -74,7 +93,8 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
               <span>Configurações</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
+              <LogOut className="mr-2 h-4 w-4" />
               <span>Sair</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
