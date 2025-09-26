@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, Filter, Eye, Edit, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { mockPedidos } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { Pedido } from '@/types';
 
 const etiquetaLabels = {
@@ -24,13 +24,121 @@ const etiquetaColors = {
 
 export function Comercial() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [pedidos] = useState<Pedido[]>(mockPedidos);
+  const [pedidos, setPedidos] = useState<Pedido[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchPedidos = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        // Select pedidos with related plataforma, responsavel (usuarios), status and etiqueta (tipos_etiqueta)
+        const { data, error: supaError } = await supabase
+          .from('pedidos')
+          .select(`*, plataformas(id,nome,cor,img_url), usuarios(id,nome,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem,criado_em,atualizado_em)`) 
+          .order('criado_em', { ascending: false });
+
+        if (supaError) throw supaError;
+
+        if (!mounted) return;
+
+        const mapped: Pedido[] = (data || []).map((row: any) => {
+          const pick = (val: any) => Array.isArray(val) ? val[0] : val;
+
+          const plataformaRow = pick(row.plataformas);
+          const usuarioRow = pick(row.usuarios);
+          const statusRow = pick(row.status);
+          const etiquetaRow = pick(row.tipos_etiqueta);
+
+          const normalizeEtiqueta = (nome?: string) => {
+            if (!nome) return 'NAO_LIBERADO' as const;
+            const key = nome.toUpperCase();
+            if (key.includes('PEND')) return 'PENDENTE' as const;
+            if (key.includes('DISP')) return 'DISPONIVEL' as const;
+            return 'NAO_LIBERADO' as const;
+          }
+
+          return {
+            id: row.id,
+            idExterno: row.id_externo,
+            clienteNome: row.cliente_nome,
+            contato: row.contato || '',
+            responsavelId: row.responsavel_id,
+            plataformaId: row.plataforma_id,
+            statusId: row.status_id,
+            etiquetaEnvio: normalizeEtiqueta(etiquetaRow?.nome) || (row.etiqueta_envio_id ? 'PENDENTE' : 'NAO_LIBERADO'),
+            urgente: !!row.urgente,
+            dataPrevista: row.data_prevista || undefined,
+            observacoes: row.observacoes || '',
+            itens: [],
+            responsavel: usuarioRow
+              ? {
+                  id: usuarioRow.id,
+                  nome: usuarioRow.nome,
+                  email: '',
+                  papel: 'operador',
+                  avatar: usuarioRow.img_url || undefined,
+                  ativo: true,
+                  criadoEm: '',
+                  atualizadoEm: '',
+                }
+              : undefined,
+            plataforma: plataformaRow
+              ? {
+                  id: plataformaRow.id,
+                  nome: plataformaRow.nome,
+                  cor: plataformaRow.cor,
+                  imagemUrl: plataformaRow.img_url || undefined,
+                  criadoEm: '',
+                  atualizadoEm: '',
+                }
+              : undefined,
+            status: statusRow
+              ? {
+                  id: statusRow.id,
+                  nome: statusRow.nome,
+                  corHex: statusRow.cor_hex,
+                  ordem: statusRow.ordem ?? 0,
+                  criadoEm: '',
+                  atualizadoEm: '',
+                }
+              : undefined,
+            etiqueta: etiquetaRow
+              ? {
+                  id: etiquetaRow.id,
+                  nome: etiquetaRow.nome,
+                  corHex: etiquetaRow.cor_hex,
+                  ordem: etiquetaRow.ordem ?? 0,
+                  criadoEm: etiquetaRow.criado_em || '',
+                  atualizadoEm: etiquetaRow.atualizado_em || '',
+                }
+              : undefined,
+            criadoEm: row.criado_em,
+            atualizadoEm: row.atualizado_em,
+          };
+        });
+
+        setPedidos(mapped);
+      } catch (err: any) {
+        console.error('Erro ao buscar pedidos', err);
+        setError(err?.message || String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPedidos();
+
+    return () => { mounted = false };
+  }, []);
 
   const filteredPedidos = pedidos.filter(pedido =>
-    pedido.idExterno.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.clienteNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.plataforma?.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.responsavel?.nome.toLowerCase().includes(searchTerm.toLowerCase())
+    pedido.idExterno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    pedido.clienteNome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    pedido.plataforma?.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    pedido.responsavel?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -86,6 +194,21 @@ export function Comercial() {
               </TableRow>
             </TableHeader>
             <TableBody>
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center">
+                    Carregando pedidos...
+                  </TableCell>
+                </TableRow>
+              )}
+              {error && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center text-red-600">
+                    {error}
+                  </TableCell>
+                </TableRow>
+              )}
+
               {filteredPedidos.map((pedido) => (
                 <TableRow key={pedido.id} className="hover:bg-muted/50">
                   <TableCell className="font-medium">
@@ -93,7 +216,12 @@ export function Comercial() {
                       {pedido.urgente && (
                         <div className="w-2 h-2 bg-red-500 rounded-full" />
                       )}
-                      {pedido.idExterno}
+                      <div
+                        className="max-w-[220px] truncate overflow-hidden whitespace-nowrap"
+                        title={pedido.idExterno}
+                      >
+                        {pedido.idExterno}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -101,18 +229,32 @@ export function Comercial() {
                   </TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{pedido.clienteNome}</div>
-                      <div className="text-sm text-muted-foreground">{pedido.contato}</div>
+                      <div
+                        className="font-medium max-w-[260px] truncate overflow-hidden whitespace-nowrap"
+                        title={pedido.clienteNome}
+                      >
+                        {pedido.clienteNome}
+                      </div>
+                      <div
+                        className="text-sm text-muted-foreground max-w-[260px] truncate overflow-hidden whitespace-nowrap"
+                        title={pedido.contato}
+                      >
+                        {pedido.contato}
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="w-3 h-3 rounded-full"
-                        style={{ backgroundColor: pedido.plataforma?.cor }}
-                      />
-                      {pedido.plataforma?.nome}
-                    </div>
+                      <div className="flex items-center gap-2">
+                        {pedido.plataforma?.imagemUrl ? (
+                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-6 h-6 rounded" />
+                        ) : (
+                          <div 
+                            className="w-3 h-3 rounded-full"
+                            style={{ backgroundColor: pedido.plataforma?.cor }}
+                          />
+                        )}
+                        {pedido.plataforma?.nome}
+                      </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
