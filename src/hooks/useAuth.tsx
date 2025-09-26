@@ -46,27 +46,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Configurar listener de mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          // Verificar se o usuário está ativo
-          const active = await checkUserActive(session.user.id);
-          setIsUserActive(active);
-          
-          if (!active && event === 'SIGNED_IN') {
-            toast({
-              title: "Conta inativa",
-              description: "Sua conta ainda não foi ativada por um administrador. Entre em contato para mais informações.",
-              variant: "destructive",
-            });
-          }
+          // Usar setTimeout para evitar deadlock no callback
+          setTimeout(async () => {
+            try {
+              const active = await checkUserActive(session.user.id);
+              setIsUserActive(active);
+              
+              if (!active && event === 'SIGNED_IN') {
+                toast({
+                  title: "Conta inativa",
+                  description: "Sua conta ainda não foi ativada por um administrador. Entre em contato para mais informações.",
+                  variant: "destructive",
+                });
+              }
+            } catch (error) {
+              console.error('Erro ao verificar status do usuário:', error);
+              setIsUserActive(false);
+            }
+            setIsLoading(false);
+          }, 0);
         } else {
           setIsUserActive(false);
+          setIsLoading(false);
         }
-        
-        setIsLoading(false);
       }
     );
 
@@ -77,8 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       
       if (session?.user) {
         setTimeout(async () => {
-          const active = await checkUserActive(session.user.id);
-          setIsUserActive(active);
+          try {
+            const active = await checkUserActive(session.user.id);
+            setIsUserActive(active);
+          } catch (error) {
+            console.error('Erro ao verificar status do usuário:', error);
+            setIsUserActive(false);
+          }
           setIsLoading(false);
         }, 0);
       } else {
