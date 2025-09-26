@@ -13,6 +13,7 @@ export interface Plataforma {
   id: string;
   nome: string;
   cor: string;
+  imagemUrl?: string;
   criadoEm: string;
   atualizadoEm: string;
 }
@@ -65,6 +66,15 @@ export interface ItemPedido {
 
 export type EtiquetaEnvio = 'NAO_LIBERADO' | 'PENDENTE' | 'DISPONIVEL';
 
+export interface TipoEtiqueta {
+  id: string;
+  nome: string;
+  corHex: string;
+  ordem: number;
+  criadoEm: string;
+  atualizadoEm: string;
+}
+
 export interface Pedido {
   id: string;
   idExterno: string;
@@ -74,6 +84,7 @@ export interface Pedido {
   plataformaId: string;
   statusId: string;
   etiquetaEnvio: EtiquetaEnvio;
+  etiqueta?: TipoEtiqueta;
   urgente: boolean;
   dataPrevista?: string;
   observacoes: string;
