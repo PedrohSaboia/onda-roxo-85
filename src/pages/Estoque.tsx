@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, Filter, Package, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,10 +7,78 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { mockProdutos } from '@/data/mockData';
 import { Produto } from '@/types';
+import ProductForm from '@/components/products/ProductForm';
+import { supabase } from '@/integrations/supabase/client';
 
 export function Estoque() {
   const [searchTerm, setSearchTerm] = useState('');
-  const [produtos] = useState<Produto[]>(mockProdutos);
+  const [produtos, setProdutos] = useState<Produto[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const fetchProdutos = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const { data, error: supaError } = await supabase
+          .from('produtos')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,criado_em,atualizado_em')
+          .order('criado_em', { ascending: false });
+
+        if (supaError) throw supaError;
+        if (!mounted) return;
+
+        const mapped: Produto[] = (data || []).map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          sku: p.sku,
+          preco: Number(p.preco),
+          unidade: p.unidade || 'un',
+          categoria: p.categoria || '',
+          imagemUrl: p.img_url || undefined,
+          qntd: p.qntd ?? 0,
+          criadoEm: p.criado_em,
+          atualizadoEm: p.atualizado_em,
+        }));
+
+        setProdutos(mapped);
+      } catch (err: any) {
+        console.error('Erro ao buscar produtos', err);
+        setError(err?.message || String(err));
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProdutos();
+    return () => { mounted = false };
+  }, []);
+
+  const [showNewProduct, setShowNewProduct] = useState(false);
+
+  const handleModalClose = () => {
+    setShowNewProduct(false);
+    // refetch produtos after modal close
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,criado_em,atualizado_em').order('criado_em', { ascending: false });
+      if (data) setProdutos(data.map((p: any) => ({
+        id: p.id,
+        nome: p.nome,
+        sku: p.sku,
+        preco: Number(p.preco),
+        unidade: p.unidade || 'un',
+        categoria: p.categoria || '',
+        imagemUrl: p.img_url || undefined,
+        qntd: p.qntd ?? 0,
+        criadoEm: p.criado_em,
+        atualizadoEm: p.atualizado_em,
+      })));
+      setLoading(false);
+    })();
+  }
 
   const filteredProdutos = produtos.filter(produto =>
     produto.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -27,7 +95,7 @@ export function Estoque() {
             {filteredProdutos.length} produtos cadastrados
           </p>
         </div>
-        <Button className="bg-purple-600 hover:bg-purple-700">
+  <Button className="bg-purple-600 hover:bg-purple-700" onClick={()=>setShowNewProduct(true)}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Produto
         </Button>
@@ -40,10 +108,16 @@ export function Estoque() {
             <CardTitle className="text-sm font-medium">Total de Produtos</CardTitle>
             <Package className="h-4 w-4 text-purple-600" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{produtos.length}</div>
-            <p className="text-xs text-muted-foreground">produtos ativos</p>
-          </CardContent>
+            <CardContent>
+              {loading ? (
+                <div className="text-sm text-muted-foreground">Carregando...</div>
+              ) : (
+                <>
+                  <div className="text-2xl font-bold">{produtos.length}</div>
+                  <p className="text-xs text-muted-foreground">produtos ativos</p>
+                </>
+              )}
+            </CardContent>
         </Card>
 
         <Card>
@@ -52,10 +126,16 @@ export function Estoque() {
             <BarChart3 className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {new Set(produtos.map(p => p.categoria)).size}
-            </div>
-            <p className="text-xs text-muted-foreground">categorias diferentes</p>
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Carregando...</div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  {new Set(produtos.map(p => p.categoria)).size}
+                </div>
+                <p className="text-xs text-muted-foreground">categorias diferentes</p>
+              </>
+            )}
           </CardContent>
         </Card>
 
@@ -65,10 +145,16 @@ export function Estoque() {
             <Package className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              R$ {(produtos.reduce((acc, p) => acc + p.preco, 0) / produtos.length).toFixed(2)}
-            </div>
-            <p className="text-xs text-muted-foreground">preço médio</p>
+            {loading ? (
+              <div className="text-sm text-muted-foreground">Carregando...</div>
+            ) : (
+              <>
+                <div className="text-2xl font-bold">
+                  R$ {produtos.length > 0 ? (produtos.reduce((acc, p) => acc + p.preco, 0) / produtos.length).toFixed(2) : '0.00'}
+                </div>
+                <p className="text-xs text-muted-foreground">preço médio</p>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -94,6 +180,8 @@ export function Estoque() {
         </CardHeader>
       </Card>
 
+  <ProductForm open={showNewProduct} onClose={handleModalClose} />
+
       {/* Tabela de produtos */}
       <Card>
         <CardContent className="p-0">
@@ -109,7 +197,18 @@ export function Estoque() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredProdutos.map((produto) => (
+              {loading && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center">Carregando produtos...</TableCell>
+                </TableRow>
+              )}
+              {error && (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-red-600">{error}</TableCell>
+                </TableRow>
+              )}
+
+              {!loading && !error && filteredProdutos.map((produto) => (
                 <TableRow key={produto.id} className="hover:bg-muted/50">
                   <TableCell>
                     <div className="flex items-center gap-3">
