@@ -3,7 +3,6 @@ import { AppHeader } from './AppHeader';
 import { AppNavigation } from './AppNavigation';
 import { Dashboard } from '@/pages/Dashboard';
 import { Comercial } from '@/pages/Comercial';
-import { Design } from '@/pages/Design';
 import { Producao } from '@/pages/Producao';
 import { Logistica } from '@/pages/Logistica';
 import { Estoque } from '@/pages/Estoque';
@@ -18,8 +17,6 @@ export function AppLayout() {
         return <Dashboard />;
       case 'comercial':
         return <Comercial />;
-      case 'design':
-        return <Design />;
       case 'producao':
         return <Producao />;
       case 'logistica':

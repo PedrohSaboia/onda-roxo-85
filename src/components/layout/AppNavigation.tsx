@@ -16,7 +16,6 @@ interface AppNavigationProps {
 const navigationItems: NavigationItem[] = [
   { id: 'home', label: 'Home', icon: Home },
   { id: 'comercial', label: 'Comercial', icon: Package },
-  { id: 'design', label: 'Design', icon: Palette },
   { id: 'producao', label: 'Produção', icon: Cog },
   { id: 'logistica', label: 'Logística', icon: Truck },
   { id: 'estoque', label: 'Estoque', icon: BarChart3 },
