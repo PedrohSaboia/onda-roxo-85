@@ -11,6 +11,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
+function formatAddress(cliente: any) {
+  if (!cliente) return '-';
+  const parts = [] as string[];
+  if (cliente.endereco) parts.push(cliente.endereco + (cliente.numero ? `, ${cliente.numero}` : ''));
+  if (cliente.complemento) parts.push(cliente.complemento);
+  const cityParts = [] as string[];
+  if (cliente.bairro) cityParts.push(cliente.bairro);
+  if (cliente.cidade) cityParts.push(cliente.cidade);
+  if (cliente.estado) cityParts.push(cliente.estado);
+  if (cityParts.length) parts.push(cityParts.join(' / '));
+  if (cliente.cep) parts.push(`CEP: ${cliente.cep}`);
+  return parts.join(' • ');
+}
+
 export default function Pedido() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -146,10 +160,10 @@ export default function Pedido() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="col-span-2">
-          <Card>
-            <CardContent className="flex gap-8 items-start">
+      <div>
+        <Card>
+          <CardContent className="flex flex-col lg:flex-row gap-6 items-stretch pt-6">
+            <div className="flex-1 flex gap-8 items-start h-full">
               <div className="flex-1">
                 <div className="text-sm text-muted-foreground">CLIENTE</div>
                 <div className="font-medium text-lg">
@@ -165,30 +179,36 @@ export default function Pedido() {
                 <div className="mt-2 text-sm text-muted-foreground">IP da compra: {pedido?.ip || '—'}</div>
               </div>
 
-              <div className="w-1/3">
+              <div className="w-48">
                 <div className="text-sm text-muted-foreground">PAGAMENTO</div>
                 <div className="mt-2">Pix</div>
               </div>
 
-              <div className="w-1/3">
+              <div className="w-56">
                 <div className="text-sm text-muted-foreground">ENTREGA</div>
                 <div className="font-medium">{pedido?.cliente?.nome || pedido?.cliente_nome}</div>
-                <div className="text-sm">{pedido?.cliente?.endereco || '-'}</div>
+                <div className="text-sm">{formatAddress(pedido?.cliente)}</div>
                 <div className="mt-2 text-sm text-muted-foreground">Prazo: 0 dias</div>
                 <div className="text-sm text-muted-foreground">Data prevista: {pedido?.data_prevista || '—'}</div>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
 
-        <div>
-          <Card>
-            <CardContent>
+            <div className="border-l pl-6 flex-shrink-0 w-full lg:w-64 h-full">
               <div className="text-sm text-muted-foreground">VALOR TOTAL</div>
               <div className="text-2xl font-bold">R$ {pedido?.total ? Number(pedido.total).toFixed(2) : '0,00'}</div>
-            </CardContent>
-          </Card>
-        </div>
+
+              <div className="mt-4">
+                <div className="text-sm text-muted-foreground">Frete: Venda</div>
+                <Input value={pedido?.frete_venda ? String(pedido.frete_venda) : '0,00'} readOnly />
+              </div>
+
+              <div className="mt-3">
+                <div className="text-sm text-muted-foreground">Frete: Melhor Envio</div>
+                <Input value={pedido?.frete_me ? String(pedido.frete_me) : '0,00'} readOnly />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       <Tabs defaultValue="resumo" className="space-y-4">
