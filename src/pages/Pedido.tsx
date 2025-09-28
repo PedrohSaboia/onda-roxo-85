@@ -34,6 +34,7 @@ export default function Pedido() {
   const [usuarios, setUsuarios] = useState<any[]>([]);
   const [etiquetas, setEtiquetas] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
+  const [etiquetaText, setEtiquetaText] = useState('');
   const { toast } = useToast();
 
   useEffect(() => {
@@ -101,6 +102,9 @@ export default function Pedido() {
           itens
         });
 
+  // init etiqueta input
+  setEtiquetaText(etiquetaRow?.nome || '');
+
         setStatuses((statusesData || []).map((s: any) => ({ id: s.id, nome: s.nome, corHex: s.cor_hex })));
         setUsuarios(usuariosData || []);
         setEtiquetas((etiquetasData || []).map((t: any) => ({ id: t.id, nome: t.nome, corHex: t.cor_hex })));
@@ -142,6 +146,20 @@ export default function Pedido() {
       setSaving(false);
     }
   };
+
+  function handleCalcularFrete() {
+    toast({ title: 'Cálculo de frete', description: 'Simulando cálculo de frete (fake).' });
+  }
+
+  async function handleEnviarMaisBarato() {
+    try {
+      const fake = 'Loggi (fake)';
+      setPedido((p: any) => p ? { ...p, transportadora: fake } : p);
+      toast({ title: 'Enviado', description: `Pedido enviado via ${fake} (simulado).` });
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Não foi possível enviar (simulado).', variant: 'destructive' });
+    }
+  }
 
   if (!id) return <div className="p-6">Pedido inválido</div>;
 
@@ -215,6 +233,7 @@ export default function Pedido() {
         <TabsList>
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
           <TabsTrigger value="status">Status</TabsTrigger>
+          <TabsTrigger value="entrega">Entrega</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo">
@@ -295,6 +314,33 @@ export default function Pedido() {
 
               <div className="flex gap-3 justify-end">
                 <Button onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="entrega">
+          <Card>
+            <CardContent className="flex items-center justify-between">
+              <div className="w-1/3">
+                <div className="text-sm text-muted-foreground">Link</div>
+                <input value={pedido?.cliente?.link_formulario || ''} readOnly className="mt-2 border rounded px-3 py-2 w-full" />
+              </div>
+
+              <div className="flex-1 text-center">
+                <div className="text-sm text-muted-foreground">Status atual: {pedido?.etiqueta?.nome || 'Não liberado'}</div>
+                <div className="mt-4 flex flex-col items-center gap-3">
+                  <input placeholder="Etiqueta de envio" value={etiquetaText} onChange={(e) => setEtiquetaText(e.target.value)} className="border rounded px-3 py-2 w-80 text-center" />
+                  <div className="flex gap-3 mt-2">
+                    <Button onClick={handleCalcularFrete} className="bg-amber-500 hover:bg-amber-600">📦 Calcular Frete</Button>
+                    <Button onClick={handleEnviarMaisBarato} className="bg-purple-700 hover:bg-purple-800">ENVIAR O MAIS BARATO</Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="w-1/4 text-right">
+                <div className="text-sm text-muted-foreground">Transportadora atual:</div>
+                <div className="font-medium mt-2">{pedido?.transportadora || 'Loggi (fake)'}</div>
               </div>
             </CardContent>
           </Card>
