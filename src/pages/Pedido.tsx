@@ -44,7 +44,6 @@ export default function Pedido() {
   // Estados para gerenciar embalagem/remetente selecionados
   const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
   const [remetentes, setRemetentes] = useState<Remetente[]>([]);
-  const [servicos, setServicos] = useState<Servico[]>([]);
   const [embalagensVisible, setEmbalagensVisible] = useState(false);
   const [remetentesVisible, setRemetentesVisible] = useState(false);
   const [selectedEmbalagem, setSelectedEmbalagem] = useState<Embalagem | null>(null);
@@ -71,12 +70,6 @@ export default function Pedido() {
     estado: string;
   };
 
-  type Servico = {
-    id: number;
-    nome: string;
-    transportadora: string | null;
-  };
-
   type CotacaoFrete = {
     service_id: number;
     transportadora: string;
@@ -90,26 +83,22 @@ export default function Pedido() {
     if (!id) return;
     let mounted = true;
     
-    // Carregar dados de embalagens, remetentes e serviços
+    // Carregar dados de embalagens e remetentes
     const loadData = async () => {
       try {
         const [
           { data: embalagensData, error: embalagensError },
-          { data: remetentesData, error: remetentesError },
-          { data: servicosData, error: servicosError }
+          { data: remetentesData, error: remetentesError }
         ] = await Promise.all([
           supabase.from('embalagens').select('*').order('nome'),
-          supabase.from('remetentes').select('*').order('nome'),
-          supabase.from('servicos').select('*').order('nome')
+          supabase.from('remetentes').select('*').order('nome')
         ]);
 
         if (embalagensError) throw embalagensError;
         if (remetentesError) throw remetentesError;
-        if (servicosError) throw servicosError;
 
         setEmbalagens(embalagensData || []);
         setRemetentes(remetentesData || []);
-        setServicos(servicosData || []);
 
         // Auto-selecionar primeiro remetente e embalagem
         if (embalagensData?.length) setSelectedEmbalagem(embalagensData[0]);
@@ -281,36 +270,39 @@ export default function Pedido() {
         // Opcionalmente incluir services se houver seleção
       };
 
-      const resp = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/calculo-frete-melhorenvio', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-        },
-        body: JSON.stringify(payload)
+      const { data: resp, error: functionError } = await supabase.functions.invoke('calculo-frete-melhorenvio', {
+        body: payload
       });
 
-      if (!resp.ok) {
-        const errorData = await resp.json().catch(() => null);
-        throw new Error(errorData?.message || 'Erro ao calcular frete');
+      if (functionError) {
+        throw new Error(functionError.message || 'Erro ao calcular frete');
       }
 
-      const json = await resp.json();
-      setCotacoes(json.map((quote: any) => ({
-        service_id: quote.id,
-        transportadora: quote.company.name,
-        modalidade: quote.name,
-        prazo: quote.delivery_range.min === quote.delivery_range.max 
-          ? `${quote.delivery_range.min} dias úteis`
-          : `${quote.delivery_range.min}-${quote.delivery_range.max} dias úteis`,
-        preco: quote.price,
-        raw_response: quote
-      })));
+      if (!resp?.cotacoes) {
+        throw new Error('Resposta inválida do serviço de frete');
+      }
+      // Filtra cotações com erro e mapeia apenas as válidas
+      const cotacoesValidas = resp.cotacoes
+        .filter((quote: any) => !quote.error)
+        .map((quote: any) => ({
+          service_id: quote.id,
+          transportadora: quote.company.name,
+          modalidade: quote.name,
+          prazo: `${quote.delivery_time} dias úteis`,
+          preco: Number(quote.price),
+          raw_response: quote
+        }));
+
+      if (cotacoesValidas.length === 0) {
+        throw new Error('Nenhuma opção de frete disponível para este endereço');
+      }
+
+      setCotacoes(cotacoesValidas);
     } catch (err) {
       console.error('Erro ao calcular frete:', err);
       toast({ 
         title: 'Erro', 
-        description: 'Não foi possível calcular o frete. Tente novamente.',
+        description: err instanceof Error ? err.message : 'Não foi possível calcular o frete. Tente novamente.',
         variant: 'destructive'
       });
       setCotacaoModal(false);

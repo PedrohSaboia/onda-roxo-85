@@ -29,10 +29,7 @@ export default function EmbalagensManager() {
   const loadEmbalagens = async () => {
     try {
       const { data, error } = await supabase
-        .from(        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
-        })
+        .from('embalagens')
         .select('*')
         .order('nome');
       

@@ -48,7 +48,7 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
               Nenhuma cotação retornada. Tente outro remetente/embalagem.
             </div>
           ) : (
-            cotacoes.map((cotacao, index) => (
+            [...cotacoes].sort((a, b) => a.preco - b.preco).map((cotacao, index) => (
               <Card key={index}>
                 <CardContent className="flex items-center justify-between p-4">
                   <div className="flex-1">

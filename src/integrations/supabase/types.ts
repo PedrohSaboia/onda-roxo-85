@@ -474,30 +474,6 @@ export type Database = {
           atualizado_em?: string
         }
         Relationships: []
-      },
-      servicos: {
-        Row: {
-          id: number
-          nome: string
-          transportadora: string | null
-          criado_em: string
-          atualizado_em: string
-        }
-        Insert: {
-          id?: number
-          nome: string
-          transportadora?: string | null
-          criado_em?: string
-          atualizado_em?: string
-        }
-        Update: {
-          id?: number
-          nome?: string
-          transportadora?: string | null
-          criado_em?: string
-          atualizado_em?: string
-        }
-        Relationships: []
       }
     }
     Views: {
