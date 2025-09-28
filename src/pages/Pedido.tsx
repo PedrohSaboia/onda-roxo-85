@@ -5,8 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import EmbalagensManager from '@/components/shipping/EmbalagensManager';
+import RemetentesManager from '@/components/shipping/RemetentesManager';
+import CotacaoFreteModal from '@/components/shipping/CotacaoFreteModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
@@ -35,11 +37,94 @@ export default function Pedido() {
   const [etiquetas, setEtiquetas] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [etiquetaText, setEtiquetaText] = useState('');
+  const [calculandoFrete, setCalculandoFrete] = useState(false);
+  const [cotacaoModal, setCotacaoModal] = useState(false);
+  const [cotacoes, setCotacoes] = useState<CotacaoFrete[]>([]);
+  
+  // Estados para gerenciar embalagem/remetente selecionados
+  const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
+  const [remetentes, setRemetentes] = useState<Remetente[]>([]);
+  const [servicos, setServicos] = useState<Servico[]>([]);
+  const [embalagensVisible, setEmbalagensVisible] = useState(false);
+  const [remetentesVisible, setRemetentesVisible] = useState(false);
+  const [selectedEmbalagem, setSelectedEmbalagem] = useState<Embalagem | null>(null);
+  const [selectedRemetente, setSelectedRemetente] = useState<Remetente | null>(null);
+
   const { toast } = useToast();
+
+  // Tipos
+  type Embalagem = {
+    id: string;
+    nome: string;
+    altura: number;
+    largura: number;
+    comprimento: number;
+    peso: number;
+  };
+
+  type Remetente = {
+    id: string;
+    nome: string;
+    cep: string;
+    endereco: string;
+    cidade: string;
+    estado: string;
+  };
+
+  type Servico = {
+    id: number;
+    nome: string;
+    transportadora: string | null;
+  };
+
+  type CotacaoFrete = {
+    service_id: number;
+    transportadora: string;
+    modalidade: string;
+    prazo: string;
+    preco: number;
+    raw_response: any;
+  };
 
   useEffect(() => {
     if (!id) return;
     let mounted = true;
+    
+    // Carregar dados de embalagens, remetentes e serviços
+    const loadData = async () => {
+      try {
+        const [
+          { data: embalagensData, error: embalagensError },
+          { data: remetentesData, error: remetentesError },
+          { data: servicosData, error: servicosError }
+        ] = await Promise.all([
+          supabase.from('embalagens').select('*').order('nome'),
+          supabase.from('remetentes').select('*').order('nome'),
+          supabase.from('servicos').select('*').order('nome')
+        ]);
+
+        if (embalagensError) throw embalagensError;
+        if (remetentesError) throw remetentesError;
+        if (servicosError) throw servicosError;
+
+        setEmbalagens(embalagensData || []);
+        setRemetentes(remetentesData || []);
+        setServicos(servicosData || []);
+
+        // Auto-selecionar primeiro remetente e embalagem
+        if (embalagensData?.length) setSelectedEmbalagem(embalagensData[0]);
+        if (remetentesData?.length) setSelectedRemetente(remetentesData[0]);
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err);
+        toast({ 
+          title: 'Erro', 
+          description: 'Não foi possível carregar alguns dados',
+          variant: 'destructive'
+        });
+      }
+    };
+
+    loadData();
 
     const fetchData = async () => {
       setLoading(true);
@@ -147,19 +232,137 @@ export default function Pedido() {
     }
   };
 
-  function handleCalcularFrete() {
-    toast({ title: 'Cálculo de frete', description: 'Simulando cálculo de frete (fake).' });
-  }
-
-  async function handleEnviarMaisBarato() {
-    try {
-      const fake = 'Loggi (fake)';
-      setPedido((p: any) => p ? { ...p, transportadora: fake } : p);
-      toast({ title: 'Enviado', description: `Pedido enviado via ${fake} (simulado).` });
-    } catch (err) {
-      toast({ title: 'Erro', description: 'Não foi possível enviar (simulado).', variant: 'destructive' });
+  const handleCalcularFrete = async () => {
+    // Validar CEP do cliente
+    if (!pedido?.cliente?.cep) {
+      toast({ 
+        title: 'Erro', 
+        description: 'O CEP do cliente não está preenchido',
+        variant: 'destructive'
+      });
+      return;
     }
-  }
+
+    const cepLimpo = pedido.cliente.cep.replace(/\D/g, '');
+    if (!/^\d{8}$/.test(cepLimpo)) {
+      toast({ 
+        title: 'Erro', 
+        description: 'O CEP do cliente é inválido. Atualize os dados antes de prosseguir.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    if (!selectedRemetente || !selectedEmbalagem) {
+      toast({ 
+        title: 'Erro', 
+        description: 'Selecione um remetente e uma embalagem',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setCalculandoFrete(true);
+    setCotacaoModal(true);
+
+    try {
+      const payload = {
+        origem: { postal_code: selectedRemetente.cep.replace(/\D/g,'') },
+        destino: { postal_code: cepLimpo },
+        pacote: [{
+          weight: selectedEmbalagem.peso,
+          insurance_value: 1,
+          length: selectedEmbalagem.comprimento,
+          height: selectedEmbalagem.altura,
+          width: selectedEmbalagem.largura,
+          id: "1",
+          quantity: 1
+        }]
+        // Opcionalmente incluir services se houver seleção
+      };
+
+      const resp = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/calculo-frete-melhorenvio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`
+        },
+        body: JSON.stringify(payload)
+      });
+
+      if (!resp.ok) {
+        const errorData = await resp.json().catch(() => null);
+        throw new Error(errorData?.message || 'Erro ao calcular frete');
+      }
+
+      const json = await resp.json();
+      setCotacoes(json.map((quote: any) => ({
+        service_id: quote.id,
+        transportadora: quote.company.name,
+        modalidade: quote.name,
+        prazo: quote.delivery_range.min === quote.delivery_range.max 
+          ? `${quote.delivery_range.min} dias úteis`
+          : `${quote.delivery_range.min}-${quote.delivery_range.max} dias úteis`,
+        preco: quote.price,
+        raw_response: quote
+      })));
+    } catch (err) {
+      console.error('Erro ao calcular frete:', err);
+      toast({ 
+        title: 'Erro', 
+        description: 'Não foi possível calcular o frete. Tente novamente.',
+        variant: 'destructive'
+      });
+      setCotacaoModal(false);
+    } finally {
+      setCalculandoFrete(false);
+    }
+  };
+
+  const handleSelectCotacao = async (cotacao: CotacaoFrete) => {
+    try {
+      const { error } = await supabase
+        .from('pedidos')
+        .update({
+          frete_melhor_envio: {
+            transportadora: cotacao.transportadora,
+            modalidade: cotacao.modalidade,
+            prazo: cotacao.prazo,
+            preco: cotacao.preco,
+            service_id: cotacao.service_id,
+            raw_response: cotacao.raw_response
+          }
+        })
+        .eq('id', id);
+      
+      if (error) throw error;
+
+      toast({ title: 'Sucesso', description: 'Frete selecionado e salvo no pedido' });
+      setCotacaoModal(false);
+      
+      // Recarregar página para atualizar dados
+      navigate(0);
+    } catch (err) {
+      console.error('Erro ao salvar frete:', err);
+      toast({ 
+        title: 'Erro', 
+        description: 'Não foi possível salvar o frete selecionado',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const handleEnviarMaisBarato = async () => {
+    setCalculandoFrete(true);
+    await handleCalcularFrete();
+    // Após calcular, selecionar automaticamente o mais barato
+    if (cotacoes.length > 0) {
+      const maisBarato = cotacoes.reduce((prev, curr) => 
+        prev.preco < curr.preco ? prev : curr
+      );
+      await handleSelectCotacao(maisBarato);
+    }
+  };
 
   if (!id) return <div className="p-6">Pedido inválido</div>;
 
@@ -321,31 +524,173 @@ export default function Pedido() {
 
         <TabsContent value="entrega">
           <Card>
-            <CardContent className="flex items-center justify-between">
-              <div className="w-1/3">
-                <div className="text-sm text-muted-foreground">Link</div>
-                <input value={pedido?.cliente?.link_formulario || ''} readOnly className="mt-2 border rounded px-3 py-2 w-full" />
-              </div>
-
-              <div className="flex-1 text-center">
-                <div className="text-sm text-muted-foreground">Status atual: {pedido?.etiqueta?.nome || 'Não liberado'}</div>
-                <div className="mt-4 flex flex-col items-center gap-3">
-                  <input placeholder="Etiqueta de envio" value={etiquetaText} onChange={(e) => setEtiquetaText(e.target.value)} className="border rounded px-3 py-2 w-80 text-center" />
-                  <div className="flex gap-3 mt-2">
-                    <Button onClick={handleCalcularFrete} className="bg-amber-500 hover:bg-amber-600">📦 Calcular Frete</Button>
-                    <Button onClick={handleEnviarMaisBarato} className="bg-purple-700 hover:bg-purple-800">ENVIAR O MAIS BARATO</Button>
+            <CardContent>
+              {/* Dados do envio atual */}
+              <div className="grid grid-cols-3 gap-6 mb-6">
+                <div>
+                  <div className="text-sm text-muted-foreground">CEP de destino</div>
+                  <div className="font-medium mt-1">{pedido?.cliente?.cep || '—'}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Transportadora atual</div>
+                  <div className="font-medium mt-1">
+                    {pedido?.frete_melhor_envio?.transportadora || '—'}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm text-muted-foreground">Prazo estimado</div>
+                  <div className="font-medium mt-1">
+                    {pedido?.frete_melhor_envio?.prazo || '—'}
                   </div>
                 </div>
               </div>
 
-              <div className="w-1/4 text-right">
-                <div className="text-sm text-muted-foreground">Transportadora atual:</div>
-                <div className="font-medium mt-2">{pedido?.transportadora || 'Loggi (fake)'}</div>
+              {/* Seleção de remetente e embalagem */}
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-2">Remetente</div>
+                      <div className="flex items-center gap-2">
+                        <select 
+                          className="flex-1 border rounded px-3 py-2"
+                          value={selectedRemetente?.id || ''}
+                          onChange={(e) => setSelectedRemetente(
+                            remetentes.find(r => r.id === e.target.value) || null
+                          )}
+                        >
+                          {remetentes.map(r => (
+                            <option key={r.id} value={r.id}>{r.nome}</option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setRemetentesVisible(true)}
+                        >
+                          Gerenciar
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="text-sm text-muted-foreground mb-2">Embalagem</div>
+                      <div className="flex items-center gap-2">
+                        <select
+                          className="flex-1 border rounded px-3 py-2"
+                          value={selectedEmbalagem?.id || ''}
+                          onChange={(e) => setSelectedEmbalagem(
+                            embalagens.find(em => em.id === e.target.value) || null
+                          )}
+                        >
+                          {embalagens.map(em => (
+                            <option key={em.id} value={em.id}>
+                              {em.nome} ({em.altura}×{em.largura}×{em.comprimento}cm - {em.peso}kg)
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEmbalagensVisible(true)}
+                        >
+                          Gerenciar
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Botões de ação */}
+              <div className="flex justify-center gap-3">
+                <Button
+                  onClick={handleCalcularFrete}
+                  disabled={calculandoFrete}
+                  className="bg-amber-500 hover:bg-amber-600"
+                >
+                  {calculandoFrete ? (
+                    <>
+                      <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                      Calculando...
+                    </>
+                  ) : (
+                    '📦 Calcular Frete'
+                  )}
+                </Button>
+                
+                <Button
+                  onClick={handleEnviarMaisBarato}
+                  disabled={calculandoFrete}
+                  className="bg-purple-700 hover:bg-purple-800"
+                >
+                  {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
+                </Button>
               </div>
             </CardContent>
           </Card>
+
+          {/* Cards de gerenciamento */}
+          <div className="grid grid-cols-2 gap-6 mt-6">
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Etiqueta
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Status atual: {pedido?.etiqueta?.nome || 'Não liberado'}
+                </div>
+                <Input 
+                  placeholder="Etiqueta de envio" 
+                  value={etiquetaText} 
+                  onChange={(e) => setEtiquetaText(e.target.value)} 
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Link do formulário
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="text-sm text-muted-foreground mb-2">
+                  Use este link para acessar o formulário
+                </div>
+                <Input 
+                  value={pedido?.cliente?.link_formulario || ''} 
+                  readOnly
+                />
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
+
+      {/* Modais de gerenciamento */}
+      <Dialog open={remetentesVisible} onOpenChange={setRemetentesVisible}>
+        <DialogContent className="max-w-4xl">
+          <RemetentesManager />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={embalagensVisible} onOpenChange={setEmbalagensVisible}>
+        <DialogContent className="max-w-4xl">
+          <EmbalagensManager />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de cotações */}
+      <CotacaoFreteModal
+        open={cotacaoModal}
+        onClose={() => setCotacaoModal(false)}
+        onSelect={handleSelectCotacao}
+        cotacoes={cotacoes}
+        loading={calculandoFrete}
+      />
     </div>
   );
 }

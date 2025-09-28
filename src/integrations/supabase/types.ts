@@ -7,8 +7,6 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instantiate createClient with right options
-  // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
     PostgrestVersion: "13.0.5"
   }
@@ -138,6 +136,7 @@ export type Database = {
           criado_em: string
           data_prevista: string | null
           etiqueta_envio_id: string | null
+          frete_melhor_envio: Json | null
           id: string
           id_externo: string
           observacoes: string | null
@@ -407,8 +406,98 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "produtos"
             referencedColumns: ["id"]
-          },
+          }
         ]
+      },
+      embalagens: {
+        Row: {
+          id: string
+          nome: string
+          altura: number
+          largura: number
+          comprimento: number
+          peso: number
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          nome: string
+          altura: number
+          largura: number
+          comprimento: number
+          peso: number
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          nome?: string
+          altura?: number
+          largura?: number
+          comprimento?: number
+          peso?: number
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: []
+      },
+      remetentes: {
+        Row: {
+          id: string
+          nome: string
+          cep: string
+          endereco: string
+          cidade: string
+          estado: string
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: string
+          nome: string
+          cep: string
+          endereco: string
+          cidade: string
+          estado: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: string
+          nome?: string
+          cep?: string
+          endereco?: string
+          cidade?: string
+          estado?: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: []
+      },
+      servicos: {
+        Row: {
+          id: number
+          nome: string
+          transportadora: string | null
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: number
+          nome: string
+          transportadora?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: number
+          nome?: string
+          transportadora?: string | null
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: []
       }
     }
     Views: {
