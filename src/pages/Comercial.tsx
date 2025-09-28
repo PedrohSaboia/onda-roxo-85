@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Search, Filter, Eye, Edit, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -23,6 +24,7 @@ const etiquetaColors = {
 } as const;
 
 export function Comercial() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(false);
@@ -210,7 +212,7 @@ export function Comercial() {
               )}
 
               {filteredPedidos.map((pedido) => (
-                <TableRow key={pedido.id} className="hover:bg-muted/50">
+                <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => navigate(`/pedido/${pedido.id}`)}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       {pedido.urgente && (
@@ -290,10 +292,10 @@ export function Comercial() {
                   <TableCell className="text-right">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          •••
-                        </Button>
-                      </DropdownMenuTrigger>
+                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
+                            •••
+                          </Button>
+                        </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
                         <DropdownMenuItem>
                           <Eye className="h-4 w-4 mr-2" />
