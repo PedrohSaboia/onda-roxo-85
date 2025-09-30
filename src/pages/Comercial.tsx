@@ -29,6 +29,9 @@ export function Comercial() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [total, setTotal] = useState<number>(0);
 
   useEffect(() => {
     let mounted = true;
@@ -37,10 +40,18 @@ export function Comercial() {
       setError(null);
       try {
         // Select pedidos with related plataforma, responsavel (usuarios), status and etiqueta (tipos_etiqueta)
-        const { data, error: supaError } = await supabase
+        // use range for pagination and request exact count
+        const from = (page - 1) * pageSize;
+        const to = page * pageSize - 1;
+
+        const { data, error: supaError, count } = await supabase
           .from('pedidos')
-          .select(`*, plataformas(id,nome,cor,img_url), usuarios(id,nome,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem,criado_em,atualizado_em)`) 
-          .order('criado_em', { ascending: false });
+          .select(
+            `*, plataformas(id,nome,cor,img_url), usuarios(id,nome,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem,criado_em,atualizado_em)`,
+            { count: 'exact' }
+          )
+          .order('criado_em', { ascending: false })
+          .range(from, to);
 
         if (supaError) throw supaError;
 
@@ -123,6 +134,7 @@ export function Comercial() {
         });
 
         setPedidos(mapped);
+        setTotal(count || 0);
       } catch (err: any) {
         console.error('Erro ao buscar pedidos', err);
         setError(err?.message || String(err));
@@ -134,7 +146,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, []);
+  }, [page, pageSize]);
 
   const filteredPedidos = pedidos.filter(pedido =>
     pedido.idExterno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -142,6 +154,13 @@ export function Comercial() {
     pedido.plataforma?.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     pedido.responsavel?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const totalPages = Math.max(1, Math.ceil((total || filteredPedidos.length) / pageSize));
+
+  const handlePrev = () => setPage(p => Math.max(1, p - 1));
+  const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
+
+  const pageSizeOptions = [10, 20, 30, 50];
 
   return (
     <div className="space-y-6 p-6">
@@ -171,10 +190,12 @@ export function Comercial() {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline" size="sm">
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm">
+                <Filter className="h-4 w-4 mr-2" />
+                Filtrar
+              </Button>
+            </div>
           </div>
         </CardHeader>
       </Card>
@@ -321,6 +342,32 @@ export function Comercial() {
             </TableBody>
           </Table>
         </CardContent>
+        <div className="flex items-center justify-between p-4 border-t">
+          <div className="flex items-center gap-4">
+            <div className="text-sm text-muted-foreground">
+              Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total || filteredPedidos.length)}</strong> de <strong>{total || filteredPedidos.length}</strong>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-muted-foreground">Mostrar</label>
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                className="border rounded px-2 py-1"
+              >
+                {pageSizeOptions.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))}
+              </select>
+              <span className="text-sm text-muted-foreground">/ página</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={handlePrev} disabled={page <= 1}>Anterior</Button>
+            <div className="text-sm">{page} / {totalPages}</div>
+            <Button size="sm" variant="outline" onClick={handleNext} disabled={page >= totalPages}>Próximo</Button>
+          </div>
+        </div>
       </Card>
     </div>
   );
