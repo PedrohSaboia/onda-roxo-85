@@ -24,7 +24,7 @@ export function Estoque() {
       try {
         const { data, error: supaError } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,criado_em,atualizado_em')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)')
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -38,6 +38,8 @@ export function Estoque() {
           unidade: p.unidade || 'un',
           categoria: p.categoria || '',
           imagemUrl: p.img_url || undefined,
+          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+          nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
           criadoEm: p.criado_em,
           atualizadoEm: p.atualizado_em,
@@ -63,7 +65,7 @@ export function Estoque() {
     // refetch produtos after modal close
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,criado_em,atualizado_em').order('criado_em', { ascending: false });
+      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)').order('criado_em', { ascending: false });
       if (data) setProdutos(data.map((p: any) => ({
         id: p.id,
         nome: p.nome,
@@ -72,6 +74,8 @@ export function Estoque() {
         unidade: p.unidade || 'un',
         categoria: p.categoria || '',
         imagemUrl: p.img_url || undefined,
+        variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+        nomeVariacao: p.nome_variacao || null,
         qntd: p.qntd ?? 0,
         criadoEm: p.criado_em,
         atualizadoEm: p.atualizado_em,
@@ -212,14 +216,25 @@ export function Estoque() {
                 <TableRow key={produto.id} className="hover:bg-muted/50">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                        <Package className="h-5 w-5 text-purple-600" />
-                      </div>
+                          <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center overflow-hidden">
+                            {produto.imagemUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img src={produto.imagemUrl} alt={produto.nome} className="w-full h-full object-cover" />
+                            ) : (
+                              <Package className="h-5 w-5 text-purple-600" />
+                            )}
+                          </div>
                       <div>
                         <div className="font-medium">{produto.nome}</div>
                         <div className="text-sm text-muted-foreground">
                           Criado em {new Date(produto.criadoEm).toLocaleDateString('pt-BR')}
                         </div>
+                        {produto.variacoes && produto.variacoes.length > 0 && (
+                          <div className="text-sm mt-1">
+                            <strong>{produto.nomeVariacao || 'Variação'}:</strong> {` ${produto.variacoes[0].nome} - `}
+                            <span className="font-mono">SKU: {produto.variacoes[0].sku}</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </TableCell>

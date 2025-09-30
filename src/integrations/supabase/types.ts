@@ -245,6 +245,7 @@ export type Database = {
           categoria: string | null
           criado_em: string
           embalgens_id: string | null
+          nome_variacao: string | null
           id: string
           img_url: string | null
           nome: string
@@ -258,6 +259,7 @@ export type Database = {
           categoria?: string | null
           criado_em?: string
           embalgens_id?: string | null
+          nome_variacao?: string | null
           id?: string
           img_url?: string | null
           nome: string
@@ -271,6 +273,7 @@ export type Database = {
           categoria?: string | null
           criado_em?: string
           embalgens_id?: string | null
+          nome_variacao?: string | null
           id?: string
           img_url?: string | null
           nome?: string

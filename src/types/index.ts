@@ -35,6 +35,15 @@ export interface Produto {
   unidade: string;
   categoria: string;
   imagemUrl?: string;
+  variacoes?: Array<{
+    id: string;
+    nome: string;
+    sku: string;
+    valor: number;
+    qntd: number;
+    img_url?: string | null;
+  }>;
+  nomeVariacao?: string | null;
   criadoEm: string;
   atualizadoEm: string;
 }

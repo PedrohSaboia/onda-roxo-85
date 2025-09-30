@@ -36,6 +36,7 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
   const [embalagemModalOpen, setEmbalagemModalOpen] = useState(false);
   const [selectedEmbalagemForModal, setSelectedEmbalagemForModal] = useState<any | undefined>(undefined);
   const [selectedEmbalagemId, setSelectedEmbalagemId] = useState<string | ''>('');
+  const [nomeVariacao, setNomeVariacao] = useState<string>('');
 
 
 
@@ -51,20 +52,40 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
 
   const handleSubmit = async () => {
     if (!nome.trim()) { toast({ title: 'Nome é obrigatório' }); return; }
-    if (!sku.trim()) { toast({ title: 'SKU é obrigatório' }); return; }
-    if (isNaN(Number(preco))) { toast({ title: 'Preço inválido' }); return; }
+
+    // If the product has variations, require validations on variations instead of product-level SKU/price/qntd
+    if (hasVariations) {
+      if (!nomeVariacao.trim()) { toast({ title: 'Nome da variação é obrigatório' }); return; }
+      if (variations.length === 0) { toast({ title: 'Adicione ao menos uma variação' }); return; }
+      for (let i = 0; i < variations.length; i++) {
+        const v = variations[i];
+        if (!v.nome || !v.nome.trim()) { toast({ title: `Nome da variação ${i + 1} é obrigatório` }); return; }
+        if (!v.sku || !v.sku.trim()) { toast({ title: `SKU da variação ${i + 1} é obrigatório` }); return; }
+        if (isNaN(Number(v.valor))) { toast({ title: `Valor da variação ${i + 1} inválido` }); return; }
+        if (v.qntd === undefined || v.qntd === null || isNaN(Number(v.qntd))) { toast({ title: `Quantidade da variação ${i + 1} inválida` }); return; }
+      }
+    } else {
+      // No variations: product-level validations apply
+      if (!sku.trim()) { toast({ title: 'SKU é obrigatório' }); return; }
+      if (isNaN(Number(preco))) { toast({ title: 'Preço inválido' }); return; }
+    }
 
     setSaving(true);
     try {
       // Insert product
+      // If product has variations, make product-level sku/preco defaults so DB constraints are satisfied
+      const autoSku = (str: string) =>
+        (str || 'PROD').replace(/\s+/g, '-').toUpperCase().slice(0, 10) + '-B' + String(Date.now()).slice(-3);
+
       const prodInsert = {
         nome: nome.trim(),
-        sku: sku.trim(),
-        preco: Number(preco),
+        sku: (!hasVariations && sku.trim()) ? sku.trim() : (hasVariations ? autoSku(nome) : sku.trim()),
+        preco: !hasVariations ? Number(preco) : 0.00,
         unidade: unidade || 'un',
         categoria: categoria || null,
         img_url: imgUrl || null,
         embalgens_id: selectedEmbalagemId || null,
+        nome_variacao: nomeVariacao || null,
         qntd: qntd === '' ? 0 : Number(qntd),
       } as any;
 
@@ -201,6 +222,13 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
               <span>Possui variações</span>
             </label>
           </div>
+
+          {hasVariations && (
+            <div className="mt-3">
+              <Label>Nome da variação (ex: Cor, Tamanho)</Label>
+              <Input value={nomeVariacao} onChange={(e)=>setNomeVariacao(e.target.value)} placeholder="Ex: Cor" />
+            </div>
+          )}
 
           {hasVariations && (
             <div className="mt-4 space-y-2">
