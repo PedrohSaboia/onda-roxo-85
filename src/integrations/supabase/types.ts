@@ -244,6 +244,7 @@ export type Database = {
           atualizado_em: string
           categoria: string | null
           criado_em: string
+          embalgens_id: string | null
           id: string
           img_url: string | null
           nome: string
@@ -256,6 +257,7 @@ export type Database = {
           atualizado_em?: string
           categoria?: string | null
           criado_em?: string
+          embalgens_id?: string | null
           id?: string
           img_url?: string | null
           nome: string
@@ -268,6 +270,7 @@ export type Database = {
           atualizado_em?: string
           categoria?: string | null
           criado_em?: string
+          embalgens_id?: string | null
           id?: string
           img_url?: string | null
           nome?: string

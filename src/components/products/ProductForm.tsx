@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import EmballagemModal from '@/components/shipping/EmballagemModal';
 
 type Variation = {
   id?: string;
@@ -30,11 +31,18 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
   const [hasVariations, setHasVariations] = useState(false);
   const [variations, setVariations] = useState<Variation[]>([]);
 
-  if (!open) return null;
+  // Embalagens
+  const [embalagens, setEmbalagens] = useState<any[]>([]);
+  const [embalagemModalOpen, setEmbalagemModalOpen] = useState(false);
+  const [selectedEmbalagemForModal, setSelectedEmbalagemForModal] = useState<any | undefined>(undefined);
+  const [selectedEmbalagemId, setSelectedEmbalagemId] = useState<string | ''>('');
+
+
 
   const reset = () => {
     setNome(''); setSku(''); setPreco('0.00'); setUnidade('un'); setCategoria(''); setImgUrl(''); setQntd('');
     setHasVariations(false); setVariations([]);
+    setSelectedEmbalagemId('');
   }
 
   const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0 }]);
@@ -56,8 +64,11 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
         unidade: unidade || 'un',
         categoria: categoria || null,
         img_url: imgUrl || null,
+        embalgens_id: selectedEmbalagemId || null,
         qntd: qntd === '' ? 0 : Number(qntd),
       } as any;
+
+      console.log('Produto a ser inserido:', prodInsert);
 
       const { data: prodData, error: prodErr } = await supabase
         .from('produtos')
@@ -94,11 +105,47 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
     }
   }
 
+  // load embalagens when modal opens/closes (refresh after create)
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.from('embalagens').select('*').order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        setEmbalagens(data || []);
+      } catch (err: any) {
+        console.error('Erro ao carregar embalagens:', err);
+      }
+    })();
+    return () => { mounted = false };
+  }, [embalagemModalOpen]);
+
+  const handleSaveEmbalagem = async (data: any) => {
+    try {
+      if (selectedEmbalagemForModal && selectedEmbalagemForModal.id) {
+        const { error } = await supabase.from('embalagens').update(data).eq('id', selectedEmbalagemForModal.id);
+        if (error) throw error;
+        setSelectedEmbalagemId(selectedEmbalagemForModal.id);
+      } else {
+        const { data: ins, error } = await supabase.from('embalagens').insert(data).select('id').single();
+        if (error) throw error;
+        setSelectedEmbalagemId(ins.id);
+      }
+    } catch (err: any) {
+      throw err;
+    } finally {
+      setEmbalagemModalOpen(false);
+    }
+  }
+
+  if (!open) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-6">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-6 overflow-auto">
       <div className="absolute inset-0 bg-black/40" onClick={() => onClose()} />
 
-      <Card className="w-full max-w-3xl z-50">
+      <Card className="w-full max-w-3xl z-50 max-h-[90vh] overflow-auto">
         <CardHeader>
           <CardTitle>Cadastrar Produto</CardTitle>
         </CardHeader>
@@ -127,6 +174,20 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
             <div>
               <Label>Quantidade (qntd)</Label>
               <Input type="number" value={qntd as any} onChange={(e)=>setQntd(e.target.value === '' ? '' : Number(e.target.value))} />
+            </div>
+            <div>
+              <Label>Embalagem</Label>
+              <div className="flex items-center gap-2">
+                <select className="flex-1 border rounded px-2 py-1" value={selectedEmbalagemId} onChange={e => setSelectedEmbalagemId(e.target.value)}>
+                  <option value="">-- Selecionar --</option>
+                  {embalagens.map(em => (
+                    <option key={em.id} value={em.id}>{em.nome} ({em.comprimento}×{em.largura}×{em.altura} cm - {em.peso} kg)</option>
+                  ))}
+                </select>
+                <Button size="sm" variant="outline" onClick={() => { setSelectedEmbalagemForModal(undefined); setEmbalagemModalOpen(true); }}>
+                  Nova
+                </Button>
+              </div>
             </div>
             <div className="md:col-span-2">
               <Label>Imagem URL (img_url)</Label>
@@ -186,6 +247,7 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
           </div>
         </CardContent>
       </Card>
+      <EmballagemModal open={embalagemModalOpen} onClose={() => setEmbalagemModalOpen(false)} onSave={handleSaveEmbalagem} embalagem={selectedEmbalagemForModal} />
     </div>
   )
 }
