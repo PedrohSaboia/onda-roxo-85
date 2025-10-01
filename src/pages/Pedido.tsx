@@ -42,6 +42,7 @@ export default function Pedido() {
   const [cotacaoModal, setCotacaoModal] = useState(false);
   const [cotacoes, setCotacoes] = useState<CotacaoFrete[]>([]);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [paymentMethods, setPaymentMethods] = useState<Record<number, string> | null>(null);
   
   // Estados para gerenciar embalagem/remetente selecionados
   const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
@@ -105,6 +106,19 @@ export default function Pedido() {
         // Auto-selecionar primeiro remetente e embalagem
         if (embalagensData?.length) setSelectedEmbalagem(embalagensData[0]);
         if (remetentesData?.length) setSelectedRemetente(remetentesData[0]);
+        // try to load payment methods table if exists
+        (async () => {
+          try {
+            const { data: pmData, error: pmError } = await supabase.from('formas_pagamento').select('id,nome');
+            if (!pmError && pmData) {
+              const map: Record<number, string> = {};
+              pmData.forEach((r: any) => { map[r.id] = r.nome; });
+              setPaymentMethods(map);
+            }
+          } catch (e) {
+            // ignore if table doesn't exist
+          }
+        })();
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
         toast({ 
@@ -421,7 +435,14 @@ export default function Pedido() {
 
               <div className="w-48">
                 <div className="text-sm text-muted-foreground">PAGAMENTO</div>
-                <div className="mt-2">Pix</div>
+                  <div className="mt-2">{
+                    // prefer text field 'pagamento', then lookup by id_pagamento, then fallback
+                    pedido?.pagamento || (pedido?.id_pagamento && (paymentMethods ? paymentMethods[pedido.id_pagamento] : ( {
+                      1: 'Pix',
+                      2: 'Boleto',
+                      3: 'Cartão'
+                    }[pedido.id_pagamento] )) ) || '—'
+                  }</div>
               </div>
 
               <div className="w-56">
@@ -434,12 +455,19 @@ export default function Pedido() {
             </div>
 
             <div className="border-l pl-6 flex-shrink-0 w-full lg:w-64 h-full">
-              <div className="text-sm text-muted-foreground">VALOR TOTAL</div>
-              <div className="text-2xl font-bold">R$ {pedido?.total ? Number(pedido.total).toFixed(2) : '0,00'}</div>
+                <div className="text-sm text-muted-foreground">VALOR TOTAL</div>
+                <div className="text-2xl font-bold">R$ {((pedido?.valor_total ?? pedido?.total) ? Number(pedido?.valor_total ?? pedido?.total).toFixed(2) : '0,00')}</div>
 
               <div className="mt-4">
                 <div className="text-sm text-muted-foreground">Frete: Venda</div>
-                <Input value={pedido?.frete_venda ? String(pedido.frete_venda) : '0,00'} readOnly />
+                {
+                  (() => {
+                    // Prefer valor_frete_yampi when populated, then frete_venda, otherwise zero
+                    const raw = pedido?.valor_frete_yampi ?? pedido?.frete_venda ?? 0;
+                    const num = Number(raw) || 0;
+                    return <Input value={num.toFixed(2)} readOnly />;
+                  })()
+                }
               </div>
 
               <div className="mt-3">
