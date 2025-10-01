@@ -186,7 +186,7 @@ export function Estoque() {
         </CardHeader>
       </Card>
 
-  <ProductForm open={showNewProduct} onClose={handleModalClose} product={editingProduct} />
+  <ProductForm key={editingProduct?.id ?? 'new'} open={showNewProduct} onClose={handleModalClose} product={editingProduct} />
 
       {/* Tabela de produtos */}
       <Card>

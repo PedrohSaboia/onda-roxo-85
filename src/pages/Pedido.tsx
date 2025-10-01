@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import EmbalagensManager from '@/components/shipping/EmbalagensManager';
@@ -369,6 +370,27 @@ export default function Pedido() {
           <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
             {pedido?.status?.nome}
           </Badge>
+          {pedido && (
+            <Button variant="ghost" className="text-red-600" onClick={async () => {
+              const ok = confirm('Deseja realmente excluir este pedido e todos os seus itens? Esta ação não poderá ser desfeita.');
+              if (!ok) return;
+              try {
+                // delete itens_pedido first
+                const { error: delItemsErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', pedido.id);
+                if (delItemsErr) throw delItemsErr;
+                // delete pedido
+                const { error: delPedidoErr } = await supabase.from('pedidos').delete().eq('id', pedido.id);
+                if (delPedidoErr) throw delPedidoErr;
+                toast({ title: 'Pedido excluído', description: 'Pedido e itens removidos com sucesso.' });
+                navigate('/?module=comercial');
+              } catch (err: any) {
+                console.error('Erro ao excluir pedido:', err);
+                toast({ title: 'Erro ao excluir', description: err?.message || String(err), variant: 'destructive' });
+              }
+            }}>
+              <Trash className="h-5 w-5" />
+            </Button>
+          )}
           <Button onClick={() => navigate(-1)} variant="outline">Voltar</Button>
         </div>
       </div>

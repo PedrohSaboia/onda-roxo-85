@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AppHeader } from './AppHeader';
 import { AppNavigation } from './AppNavigation';
 import { Dashboard } from '@/pages/Dashboard';
@@ -8,8 +8,25 @@ import { Logistica } from '@/pages/Logistica';
 import { Estoque } from '@/pages/Estoque';
 import { Configuracoes } from '@/pages/Configuracoes';
 
+import { useLocation } from 'react-router-dom';
+
 export function AppLayout() {
-  const [activeModule, setActiveModule] = useState('home');
+  const location = useLocation();
+  const getModuleFromQuery = () => {
+    try {
+      const params = new URLSearchParams(location.search);
+      const m = params.get('module');
+      return m || 'home';
+    } catch {
+      return 'home';
+    }
+  };
+
+  const [activeModule, setActiveModule] = useState<string>(getModuleFromQuery());
+
+  useEffect(() => {
+    setActiveModule(getModuleFromQuery());
+  }, [location.search]);
 
   const renderContent = () => {
     switch (activeModule) {
