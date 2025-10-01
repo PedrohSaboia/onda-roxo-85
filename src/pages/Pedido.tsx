@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import EmbalagensManager from '@/components/shipping/EmbalagensManager';
 import RemetentesManager from '@/components/shipping/RemetentesManager';
 import CotacaoFreteModal from '@/components/shipping/CotacaoFreteModal';
@@ -41,6 +41,7 @@ export default function Pedido() {
   const [calculandoFrete, setCalculandoFrete] = useState(false);
   const [cotacaoModal, setCotacaoModal] = useState(false);
   const [cotacoes, setCotacoes] = useState<CotacaoFrete[]>([]);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   
   // Estados para gerenciar embalagem/remetente selecionados
   const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
@@ -357,6 +358,24 @@ export default function Pedido() {
     }
   };
 
+  const handleDeletePedido = async () => {
+    if (!pedido) return;
+    try {
+      // delete itens_pedido first
+      const { error: delItemsErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', pedido.id);
+      if (delItemsErr) throw delItemsErr;
+      // delete pedido
+      const { error: delPedidoErr } = await supabase.from('pedidos').delete().eq('id', pedido.id);
+      if (delPedidoErr) throw delPedidoErr;
+      toast({ title: 'Pedido excluído', description: 'Pedido e itens removidos com sucesso.' });
+      setDeleteConfirmOpen(false);
+      navigate('/?module=comercial');
+    } catch (err: any) {
+      console.error('Erro ao excluir pedido:', err);
+      toast({ title: 'Erro ao excluir', description: err?.message || String(err), variant: 'destructive' });
+    }
+  };
+
   if (!id) return <div className="p-6">Pedido inválido</div>;
 
   return (
@@ -371,25 +390,11 @@ export default function Pedido() {
             {pedido?.status?.nome}
           </Badge>
           {pedido && (
-            <Button variant="ghost" className="text-red-600" onClick={async () => {
-              const ok = confirm('Deseja realmente excluir este pedido e todos os seus itens? Esta ação não poderá ser desfeita.');
-              if (!ok) return;
-              try {
-                // delete itens_pedido first
-                const { error: delItemsErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', pedido.id);
-                if (delItemsErr) throw delItemsErr;
-                // delete pedido
-                const { error: delPedidoErr } = await supabase.from('pedidos').delete().eq('id', pedido.id);
-                if (delPedidoErr) throw delPedidoErr;
-                toast({ title: 'Pedido excluído', description: 'Pedido e itens removidos com sucesso.' });
-                navigate('/?module=comercial');
-              } catch (err: any) {
-                console.error('Erro ao excluir pedido:', err);
-                toast({ title: 'Erro ao excluir', description: err?.message || String(err), variant: 'destructive' });
-              }
-            }}>
-              <Trash className="h-5 w-5" />
-            </Button>
+            <>
+              <Button variant="ghost" className="text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
+                <Trash className="h-5 w-5" />
+              </Button>
+            </>
           )}
           <Button onClick={() => navigate(-1)} variant="outline">Voltar</Button>
         </div>
@@ -688,6 +693,24 @@ export default function Pedido() {
       <Dialog open={remetentesVisible} onOpenChange={setRemetentesVisible}>
         <DialogContent className="max-w-4xl">
           <RemetentesManager />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir Pedido</DialogTitle>
+          </DialogHeader>
+          <div className="py-4 text-center">
+            <h3 className="text-lg font-semibold text-red-600">Você tem certeza?</h3>
+            <p className="text-sm text-muted-foreground mt-2">Esta ação não poderá ser desfeita.</p>
+          </div>
+          <DialogFooter>
+            <div className="flex justify-between w-full">
+              <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancelar</Button>
+              <Button className="bg-red-600 hover:bg-red-700" onClick={handleDeletePedido}>Sim, quero excluir</Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
