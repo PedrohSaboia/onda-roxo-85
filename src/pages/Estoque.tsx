@@ -59,6 +59,7 @@ export function Estoque() {
   }, []);
 
   const [showNewProduct, setShowNewProduct] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
 
   const handleModalClose = () => {
     setShowNewProduct(false);
@@ -184,7 +185,7 @@ export function Estoque() {
         </CardHeader>
       </Card>
 
-  <ProductForm open={showNewProduct} onClose={handleModalClose} />
+  <ProductForm open={showNewProduct} onClose={handleModalClose} product={editingProduct} />
 
       {/* Tabela de produtos */}
       <Card>
@@ -252,11 +253,8 @@ export function Estoque() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-2 justify-end">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" onClick={() => { setEditingProduct(produto); setShowNewProduct(true); }}>
                         Editar
-                      </Button>
-                      <Button variant="outline" size="sm">
-                        Variações
                       </Button>
                     </div>
                   </TableCell>

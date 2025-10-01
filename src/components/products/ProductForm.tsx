@@ -7,6 +7,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import EmballagemModal from '@/components/shipping/EmballagemModal';
 
+import { Produto } from '@/types';
+
 type Variation = {
   id?: string;
   nome: string;
@@ -16,7 +18,7 @@ type Variation = {
   qntd?: number;
 }
 
-export default function ProductForm({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
   const { toast } = useToast();
   const [saving, setSaving] = useState(false);
 
@@ -30,6 +32,7 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
 
   const [hasVariations, setHasVariations] = useState(false);
   const [variations, setVariations] = useState<Variation[]>([]);
+  const [originalVariationIds, setOriginalVariationIds] = useState<string[]>([]);
 
   // Embalagens
   const [embalagens, setEmbalagens] = useState<any[]>([]);
@@ -44,6 +47,8 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
     setNome(''); setSku(''); setPreco('0.00'); setUnidade('un'); setCategoria(''); setImgUrl(''); setQntd('');
     setHasVariations(false); setVariations([]);
     setSelectedEmbalagemId('');
+    setNomeVariacao('');
+    setOriginalVariationIds([]);
   }
 
   const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0 }]);
@@ -70,8 +75,8 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
       if (isNaN(Number(preco))) { toast({ title: 'Preço inválido' }); return; }
     }
 
-    setSaving(true);
-    try {
+  setSaving(true);
+  try {
       // Insert product
       // If product has variations, make product-level sku/preco defaults so DB constraints are satisfied
       const autoSku = (str: string) =>
@@ -91,31 +96,61 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
 
       console.log('Produto a ser inserido:', prodInsert);
 
-      const { data: prodData, error: prodErr } = await supabase
-        .from('produtos')
-        .insert(prodInsert)
-        .select('id')
-        .single();
+      // If product prop exists, perform update; otherwise insert
+      let produtoId: string;
+      if (product && (product as any).id) {
+        produtoId = (product as any).id;
+        const { error: updErr } = await supabase.from('produtos').update(prodInsert).eq('id', produtoId);
+        if (updErr) throw updErr;
 
-      if (prodErr) throw prodErr;
+        // Sync variations: delete removed, update existing, insert new
+        const currentIds = variations.map(v => v.id).filter(Boolean) as string[];
+        const toDelete = originalVariationIds.filter(id => !currentIds.includes(id));
+        if (toDelete.length > 0) {
+          const { error: delErr } = await supabase.from('variacoes_produto').delete().in('id', toDelete);
+          if (delErr) throw delErr;
+        }
 
-      const produtoId = prodData.id as string;
+        const existing = variations.filter(v => v.id);
+        for (const v of existing) {
+          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0 }).eq('id', v.id);
+          if (vUpdErr) throw vUpdErr;
+        }
 
-      if (hasVariations && variations.length > 0) {
-        const toInsert = variations.map(v => ({
-          produto_id: produtoId,
-          nome: v.nome,
-          sku: v.sku,
-          valor: Number(v.valor),
-          img_url: v.img_url || null,
-          qntd: v.qntd ?? 0,
-        }));
+        const news = variations.filter(v => !v.id).map(v => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0 }));
+        if (news.length > 0) {
+          const { error: insErr } = await supabase.from('variacoes_produto').insert(news);
+          if (insErr) throw insErr;
+        }
 
-        const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
-        if (varErr) throw varErr;
+        toast({ title: 'Produto atualizado', description: `Produto ${nome} atualizado com sucesso` });
+      } else {
+        const { data: prodData, error: prodErr } = await supabase
+          .from('produtos')
+          .insert(prodInsert)
+          .select('id')
+          .single();
+
+        if (prodErr) throw prodErr;
+
+        produtoId = prodData.id as string;
+
+        if (hasVariations && variations.length > 0) {
+          const toInsert = variations.map(v => ({
+            produto_id: produtoId,
+            nome: v.nome,
+            sku: v.sku,
+            valor: Number(v.valor),
+            img_url: v.img_url || null,
+            qntd: v.qntd ?? 0,
+          }));
+
+          const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
+          if (varErr) throw varErr;
+        }
+
+        toast({ title: 'Produto criado', description: `Produto ${nome} criado com sucesso` });
       }
-
-      toast({ title: 'Produto criado', description: `Produto ${nome} criado com sucesso` });
       reset();
       onClose();
     } catch (err: any) {
@@ -160,6 +195,30 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
     }
   }
 
+  // initialize when editing a product
+  useEffect(() => {
+    if (!open) return;
+    if (product) {
+      const p: any = product;
+      setNome(p.nome || '');
+      setSku(p.sku || '');
+      setPreco(String(p.preco ?? '0.00'));
+      setUnidade(p.unidade || 'un');
+      setCategoria(p.categoria || '');
+      setImgUrl(p.imagemUrl || '');
+      setQntd(p.qntd ?? '');
+      const hasVar = Boolean((product as any).variacoes && (product as any).variacoes.length > 0);
+      setHasVariations(hasVar);
+      setNomeVariacao((product as any).nomeVariacao || '');
+      setSelectedEmbalagemId((product as any).embalgens_id || '');
+      const mapped = (p.variacoes || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: String(v.valor ?? '0.00'), img_url: v.img_url || '', qntd: v.qntd ?? 0 }));
+      setVariations(mapped);
+      setOriginalVariationIds(mapped.map((v: any) => v.id).filter(Boolean));
+    } else {
+      reset();
+    }
+  }, [open, product]);
+
   if (!open) return null;
 
   return (
@@ -168,8 +227,8 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
 
       <Card className="w-full max-w-3xl z-50 max-h-[90vh] overflow-auto">
         <CardHeader>
-          <CardTitle>Cadastrar Produto</CardTitle>
-        </CardHeader>
+            <CardTitle>{product && product.id ? 'Editar Produto' : 'Cadastrar Produto'}</CardTitle>
+          </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
@@ -236,33 +295,52 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
                 <div className="font-medium">Variações</div>
                 <Button size="sm" onClick={addVariation}>Adicionar Variação</Button>
               </div>
-
               {variations.map((v, idx) => (
                 <div key={idx} className="border rounded p-3">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <div>
-                      <Label>Nome</Label>
-                      <Input value={v.nome} onChange={(e)=>updateVariation(idx, { nome: e.target.value })} />
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                        <div>
+                          <Label>Nome</Label>
+                          <Input value={v.nome} onChange={(e)=>updateVariation(idx, { nome: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label>SKU</Label>
+                          <Input value={v.sku} onChange={(e)=>updateVariation(idx, { sku: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label>Valor</Label>
+                          <Input value={v.valor} onChange={(e)=>updateVariation(idx, { valor: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label>Quantidade</Label>
+                          <Input type="number" value={v.qntd as any} onChange={(e)=>updateVariation(idx, { qntd: Number(e.target.value) })} />
+                        </div>
+                        <div>
+                          <Label>Imagem URL</Label>
+                          <Input value={v.img_url} onChange={(e)=>updateVariation(idx, { img_url: e.target.value })} />
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <Label>SKU</Label>
-                      <Input value={v.sku} onChange={(e)=>updateVariation(idx, { sku: e.target.value })} />
+                    <div className="ml-4 flex flex-col gap-2">
+                      <Button variant="outline" size="sm" onClick={() => { /* inline edit already available */ }}>{v.id ? 'Editar' : 'Editar'}</Button>
+                      <Button variant="destructive" size="sm" onClick={() => {
+                        (async () => {
+                          try {
+                            if (v.id) {
+                              const { error } = await supabase.from('variacoes_produto').delete().eq('id', v.id);
+                              if (error) throw error;
+                              setOriginalVariationIds(prev => prev.filter(id => id !== v.id));
+                            }
+                            removeVariation(idx);
+                            toast({ title: 'Variação removida' });
+                          } catch (err: any) {
+                            console.error('Erro ao remover variação:', err);
+                            toast({ title: 'Erro ao remover variação', description: err?.message || String(err) });
+                          }
+                        })();
+                      }}>Excluir</Button>
                     </div>
-                    <div>
-                      <Label>Valor</Label>
-                      <Input value={v.valor} onChange={(e)=>updateVariation(idx, { valor: e.target.value })} />
-                    </div>
-                    <div>
-                      <Label>Quantidade</Label>
-                      <Input type="number" value={v.qntd as any} onChange={(e)=>updateVariation(idx, { qntd: Number(e.target.value) })} />
-                    </div>
-                    <div>
-                      <Label>Imagem URL</Label>
-                      <Input value={v.img_url} onChange={(e)=>updateVariation(idx, { img_url: e.target.value })} />
-                    </div>
-                  </div>
-                  <div className="flex justify-end mt-2">
-                    <Button variant="destructive" size="sm" onClick={()=>removeVariation(idx)}>Remover</Button>
                   </div>
                 </div>
               ))}
@@ -271,7 +349,7 @@ export default function ProductForm({ open, onClose }: { open: boolean; onClose:
 
           <div className="flex justify-end gap-2 mt-6">
             <Button variant="outline" onClick={()=> { reset(); onClose(); }}>Cancelar</Button>
-            <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Salvando...' : 'Cadastrar'}</Button>
+            <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Salvando...' : (product && product.id ? 'Atualizar' : 'Cadastrar')}</Button>
           </div>
         </CardContent>
       </Card>
