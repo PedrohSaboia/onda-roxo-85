@@ -63,6 +63,7 @@ export function Estoque() {
 
   const handleModalClose = () => {
     setShowNewProduct(false);
+    setEditingProduct(null);
     // refetch produtos after modal close
     (async () => {
       setLoading(true);
@@ -100,7 +101,7 @@ export function Estoque() {
             {filteredProdutos.length} produtos cadastrados
           </p>
         </div>
-  <Button className="bg-purple-600 hover:bg-purple-700" onClick={()=>setShowNewProduct(true)}>
+  <Button className="bg-purple-600 hover:bg-purple-700" onClick={()=>{ setEditingProduct(null); setShowNewProduct(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Produto
         </Button>

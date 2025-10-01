@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { Trash } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -227,8 +228,33 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
       <Card className="w-full max-w-3xl z-50 max-h-[90vh] overflow-auto">
         <CardHeader>
-            <CardTitle>{product && product.id ? 'Editar Produto' : 'Cadastrar Produto'}</CardTitle>
-          </CardHeader>
+          <div className="w-full flex items-center">
+            <CardTitle className="flex-1 text-center">{product && product.id ? 'Editar Produto' : 'Cadastrar Produto'}</CardTitle>
+            {product && (product as any).id && (
+              <div className="ml-auto">
+                <Button variant="ghost" className="text-red-600" onClick={async () => {
+                const ok = confirm(`Deseja realmente excluir o produto "${(product as any).nome}" e todas as variações? Esta ação não pode ser desfeita.`);
+                if (!ok) return;
+                try {
+                  // delete variations first
+                  const { error: delVarErr } = await supabase.from('variacoes_produto').delete().eq('produto_id', (product as any).id);
+                  if (delVarErr) throw delVarErr;
+                  const { error: delProdErr } = await supabase.from('produtos').delete().eq('id', (product as any).id);
+                  if (delProdErr) throw delProdErr;
+                  toast({ title: 'Produto excluído', description: `Produto ${(product as any).nome} e variações foram removidos.` });
+                  onClose();
+                  reset();
+                } catch (err: any) {
+                  console.error('Erro ao excluir produto:', err);
+                  toast({ title: 'Erro ao excluir', description: err?.message || String(err) });
+                }
+              }}>
+                <Trash className="h-5 w-5" />
+                </Button>
+              </div>
+            )}
+          </div>
+        </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
