@@ -763,6 +763,9 @@ export default function Pedido() {
         onSelect={handleSelectCotacao}
         cotacoes={cotacoes}
         loading={calculandoFrete}
+        remetente={selectedRemetente}
+        cliente={pedido?.cliente}
+        embalagem={selectedEmbalagem}
       />
     </div>
   );

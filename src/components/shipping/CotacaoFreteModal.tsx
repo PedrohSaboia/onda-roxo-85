@@ -1,6 +1,9 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 
 type CotacaoFrete = {
   service_id: number;
@@ -17,9 +20,100 @@ type CotacaoFreteModalProps = {
   onSelect: (cotacao: CotacaoFrete) => void;
   cotacoes: CotacaoFrete[];
   loading?: boolean;
+  remetente?: any;
+  cliente?: any;
+  embalagem?: any;
 };
 
-export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading }: CotacaoFreteModalProps) {
+export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading, remetente, cliente, embalagem }: CotacaoFreteModalProps) {
+  const [sendingToCart, setSendingToCart] = useState<number | null>(null);
+  const { toast } = useToast();
+
+  const handleSelectCotacao = async (cotacao: CotacaoFrete) => {
+    setSendingToCart(cotacao.service_id);
+    
+    try {
+      // Preparar payload para adicionar ao carrinho
+      const payload = {
+        from: {
+          name: remetente?.nome || '',
+          phone: remetente?.contato || remetente?.telefone || '',
+          email: remetente?.email || 'contato@empresa.com',
+          document: remetente?.cpf || remetente?.document || '',
+          state_register: remetente?.inscricao_estadual || remetente?.state_register || '',
+          address: remetente?.endereco || remetente?.address || '',
+          number: remetente?.numero || remetente?.number || '',
+          complement: remetente?.complemento || remetente?.complement || '',
+          district: remetente?.bairro || remetente?.district || '',
+          city: remetente?.cidade || remetente?.city || '',
+          state_abbr: remetente?.estado || remetente?.state_abbr || '',
+          country_id: remetente?.country_id || 'BR',
+          postal_code: (remetente?.cep || remetente?.postal_code || '').replace(/\D/g, '')
+        },
+        to: {
+          name: cliente?.nome || cliente?.name || '',
+          phone: cliente?.telefone || cliente?.contato || cliente?.phone || '',
+          email: cliente?.email || 'cliente@email.com',
+          document: cliente?.cpf || cliente?.document || '',
+          address: cliente?.endereco || cliente?.address || '',
+          number: cliente?.numero || cliente?.number || '',
+          complement: cliente?.complemento || cliente?.complement || '',
+          district: cliente?.bairro || cliente?.district || '',
+          city: cliente?.cidade || cliente?.city || '',
+          state_abbr: cliente?.estado || cliente?.state_abbr || '',
+          country_id: cliente?.country_id || 'BR',
+          postal_code: (cliente?.cep || cliente?.postal_code || '').replace(/\D/g, '')
+        },
+        options: {
+          insurance_value: 1,
+          receipt: false,
+          own_hand: false,
+          reverse: false,
+          non_commercial: true
+        },
+        service: cotacao.service_id,
+        volumes: [{
+          height: embalagem?.altura || 5,
+          width: embalagem?.largura || 20,
+          length: embalagem?.comprimento || 20,
+          weight: embalagem?.peso || 1
+        }]
+      };
+
+      console.log('Enviando para carrinho Melhor Envio:', payload);
+
+      // Chamar edge function para adicionar ao carrinho
+      const { data: carrinhoResp, error: carrinhoError } = await supabase.functions.invoke('adic-carrinho-melhorenvio', {
+        body: payload,
+        headers: {
+          Authorization: `Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsbHlwa2N0dmNrZWFjemplc2h0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4MzYwOTgsImV4cCI6MjA3NDQxMjA5OH0.Gc4WWo0YBE3eiB85lYh_1IjheXdFzPD7KwgcLiVV70s`
+        }
+      });
+
+      if (carrinhoError) {
+        throw new Error(carrinhoError.message || 'Erro ao adicionar ao carrinho');
+      }
+
+      console.log('Resposta do carrinho:', carrinhoResp);
+      
+      toast({ 
+        title: 'Sucesso', 
+        description: 'Frete adicionado ao carrinho do Melhor Envio' 
+      });
+
+      // Continuar com a lógica original
+      onSelect(cotacao);
+    } catch (err) {
+      console.error('Erro ao adicionar ao carrinho:', err);
+      toast({ 
+        title: 'Erro', 
+        description: err instanceof Error ? err.message : 'Não foi possível adicionar ao carrinho',
+        variant: 'destructive'
+      });
+    } finally {
+      setSendingToCart(null);
+    }
+  };
   if (loading) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
@@ -66,10 +160,18 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
                     </div>
 
                     <Button 
-                      onClick={() => onSelect(cotacao)}
+                      onClick={() => handleSelectCotacao(cotacao)}
                       className="bg-purple-700 hover:bg-purple-800"
+                      disabled={sendingToCart === cotacao.service_id}
                     >
-                      Selecionar
+                      {sendingToCart === cotacao.service_id ? (
+                        <>
+                          <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                          Enviando...
+                        </>
+                      ) : (
+                        'Selecionar'
+                      )}
                     </Button>
                   </div>
                 </CardContent>
