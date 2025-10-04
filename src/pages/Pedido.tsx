@@ -71,6 +71,8 @@ export default function Pedido() {
     endereco: string;
     cidade: string;
     estado: string;
+    contato?: string;
+    email?: string;
   };
 
   type CotacaoFrete = {
@@ -270,9 +272,15 @@ export default function Pedido() {
     setCalculandoFrete(true);
     setCotacaoModal(true);
 
+    console.log('Dados do remetente sendo enviados:', selectedRemetente);
+
     try {
       const payload = {
-        origem: { postal_code: selectedRemetente.cep.replace(/\D/g,'') },
+        origem: { 
+          postal_code: selectedRemetente.cep.replace(/\D/g,''),
+          contact: selectedRemetente.contato || selectedRemetente.nome,
+          email: selectedRemetente.email || 'contato@empresa.com'
+        },
         destino: { postal_code: cepLimpo },
         pacote: [{
           weight: selectedEmbalagem.peso,
