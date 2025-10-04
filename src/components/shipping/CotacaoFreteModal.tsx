@@ -12,6 +12,7 @@ type CotacaoFrete = {
   prazo: string;
   preco: number;
   raw_response: any;
+  melhorEnvioId?: string;
 };
 
 type CotacaoFreteModalProps = {
@@ -23,10 +24,9 @@ type CotacaoFreteModalProps = {
   remetente?: any;
   cliente?: any;
   embalagem?: any;
-  pedidoId?: string;
 };
 
-export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading, remetente, cliente, embalagem, pedidoId }: CotacaoFreteModalProps) {
+export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading, remetente, cliente, embalagem }: CotacaoFreteModalProps) {
   const [sendingToCart, setSendingToCart] = useState<number | null>(null);
   const { toast } = useToast();
 
@@ -100,31 +100,13 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
       // Extrair o ID retornado pelo Melhor Envio
       const melhorEnvioId = carrinhoResp?.id;
       
-      if (melhorEnvioId && pedidoId) {
-        // Atualizar pedido com id_melhor_envio e carrinho_me
-        const { error: updateError } = await supabase
-          .from('pedidos')
-          .update({
-            id_melhor_envio: melhorEnvioId,
-            carrinho_me: true
-          } as any)
-          .eq('id', pedidoId);
-
-        if (updateError) {
-          console.error('Erro ao atualizar pedido com id_melhor_envio:', updateError);
-          throw new Error('Erro ao salvar ID do Melhor Envio no pedido');
-        }
-
-        console.log('Pedido atualizado com id_melhor_envio:', melhorEnvioId);
-      }
-      
       toast({ 
         title: 'Sucesso', 
         description: 'Frete adicionado ao carrinho do Melhor Envio' 
       });
 
-      // Continuar com a lógica original
-      onSelect(cotacao);
+      // Passar o melhorEnvioId junto com a cotação
+      onSelect({ ...cotacao, melhorEnvioId });
     } catch (err) {
       console.error('Erro ao adicionar ao carrinho:', err);
       toast({ 

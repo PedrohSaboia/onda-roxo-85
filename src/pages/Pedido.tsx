@@ -82,6 +82,7 @@ export default function Pedido() {
     prazo: string;
     preco: number;
     raw_response: any;
+    melhorEnvioId?: string;
   };
 
   useEffect(() => {
@@ -337,18 +338,26 @@ export default function Pedido() {
 
   const handleSelectCotacao = async (cotacao: CotacaoFrete) => {
     try {
+      const updateData: any = {
+        frete_melhor_envio: {
+          transportadora: cotacao.transportadora,
+          modalidade: cotacao.modalidade,
+          prazo: cotacao.prazo,
+          preco: cotacao.preco,
+          service_id: cotacao.service_id,
+          raw_response: cotacao.raw_response
+        }
+      };
+
+      // Se vier o melhorEnvioId, adicionar ao update
+      if (cotacao.melhorEnvioId) {
+        updateData.id_melhor_envio = cotacao.melhorEnvioId;
+        updateData.carrinho_me = true;
+      }
+
       const { error } = await supabase
         .from('pedidos')
-        .update({
-          frete_melhor_envio: {
-            transportadora: cotacao.transportadora,
-            modalidade: cotacao.modalidade,
-            prazo: cotacao.prazo,
-            preco: cotacao.preco,
-            service_id: cotacao.service_id,
-            raw_response: cotacao.raw_response
-          }
-        })
+        .update(updateData)
         .eq('id', id);
       
       if (error) throw error;
@@ -766,7 +775,6 @@ export default function Pedido() {
         remetente={selectedRemetente}
         cliente={pedido?.cliente}
         embalagem={selectedEmbalagem}
-        pedidoId={id}
       />
     </div>
   );
