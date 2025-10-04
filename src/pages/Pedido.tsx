@@ -766,6 +766,7 @@ export default function Pedido() {
         remetente={selectedRemetente}
         cliente={pedido?.cliente}
         embalagem={selectedEmbalagem}
+        pedidoId={id}
       />
     </div>
   );
