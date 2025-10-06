@@ -668,28 +668,74 @@ export default function Pedido() {
 
               {/* Botões de ação */}
               <div className="flex justify-center gap-3">
-                <Button
-                  onClick={handleCalcularFrete}
-                  disabled={calculandoFrete}
-                  className="bg-amber-500 hover:bg-amber-600"
-                >
-                  {calculandoFrete ? (
-                    <>
-                      <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
-                      Calculando...
-                    </>
-                  ) : (
-                    '📦 Calcular Frete'
-                  )}
-                </Button>
-                
-                <Button
-                  onClick={handleEnviarMaisBarato}
-                  disabled={calculandoFrete}
-                  className="bg-purple-700 hover:bg-purple-800"
-                >
-                  {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
-                </Button>
+                { (pedido?.carrinho_me === true) ? (
+                  // Mostra botões de imprimir / cancelar etiqueta quando já foi enviado ao carrinho ME
+                  <>
+                    <Button
+                      onClick={() => {
+                        // Abrir impressão em nova aba — usar id_melhor_envio ou etiqueta existente
+                        const labelUrl = pedido?.etiqueta?.url || (`/etiqueta/imprimir/${pedido?.id_melhor_envio || ''}`);
+                        window.open(labelUrl, '_blank');
+                      }}
+                      className="border-2 border-sky-400 text-sky-700 bg-white hover:bg-sky-50"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 00-1 1v6a1 1 0 001 1h2v3a1 1 0 001 1h8a1 1 0 001-1v-3h2a1 1 0 001-1V7a1 1 0 00-1-1h-2V3a1 1 0 00-1-1H6zM8 5h4v3H8V5z" />
+                        </svg>
+                        Imprimir Etiqueta
+                      </span>
+                    </Button>
+
+                    <Button
+                      onClick={async () => {
+                        // Cancelar etiqueta: limpar id_melhor_envio e carrinho_me no pedido
+                        try {
+                          const { error } = await supabase
+                            .from('pedidos')
+                            .update({ id_melhor_envio: null, carrinho_me: false } as any)
+                            .eq('id', id);
+
+                          if (error) throw error;
+                          toast({ title: 'Sucesso', description: 'Etiqueta cancelada' });
+                          navigate(0);
+                        } catch (err) {
+                          console.error('Erro ao cancelar etiqueta:', err);
+                          toast({ title: 'Erro', description: 'Não foi possível cancelar a etiqueta', variant: 'destructive' });
+                        }
+                      }}
+                      className="bg-red-600 hover:bg-red-700 text-white"
+                    >
+                      Cancelar etiqueta
+                    </Button>
+                  </>
+                ) : (
+                  // Botões originais para calcular e enviar mais barato
+                  <>
+                    <Button
+                      onClick={handleCalcularFrete}
+                      disabled={calculandoFrete}
+                      className="bg-amber-500 hover:bg-amber-600"
+                    >
+                      {calculandoFrete ? (
+                        <>
+                          <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                          Calculando...
+                        </>
+                      ) : (
+                        '📦 Calcular Frete'
+                      )}
+                    </Button>
+                    
+                    <Button
+                      onClick={handleEnviarMaisBarato}
+                      disabled={calculandoFrete}
+                      className="bg-purple-700 hover:bg-purple-800"
+                    >
+                      {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
+                    </Button>
+                  </>
+                ) }
               </div>
             </CardContent>
           </Card>
