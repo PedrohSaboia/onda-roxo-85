@@ -25,9 +25,11 @@ type CotacaoFreteModalProps = {
   cliente?: any;
   embalagem?: any;
   insuranceValue?: number;
+  productName?: string;
+  orderProducts?: Array<{ name: string; quantity: number; unitary_value: number }>;
 };
 
-export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading, remetente, cliente, embalagem, insuranceValue }: CotacaoFreteModalProps) {
+export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading, remetente, cliente, embalagem, insuranceValue, productName, orderProducts }: CotacaoFreteModalProps) {
   const [sendingToCart, setSendingToCart] = useState<number | null>(null);
   const { toast } = useToast();
 
@@ -73,6 +75,18 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
           reverse: false,
           non_commercial: true
         },
+        // products array requested: include dynamic product info (name, quantity, unitary_value)
+        products: (orderProducts && orderProducts.length) ? orderProducts.map(p => ({
+          name: p.name,
+          quantity: String(p.quantity),
+          unitary_value: String(Number(p.unitary_value).toFixed(2))
+        })) : [
+          {
+            name: productName || (cliente?.nome || 'Produto'),
+            quantity: '1',
+            unitary_value: String((insuranceValue ?? 1).toFixed(2))
+          }
+        ],
         service: cotacao.service_id,
         volumes: [{
           height: embalagem?.altura || 5,

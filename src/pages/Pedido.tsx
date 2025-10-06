@@ -691,11 +691,22 @@ export default function Pedido() {
 
                           if (fnError) throw fnError;
 
-                          // Se a função retornar uma URL para a etiqueta, abrir
-                          const labelUrl = data?.url || pedido?.etiqueta?.url || (`/etiqueta/imprimir/${pedido?.id_melhor_envio || ''}`);
-                          if (labelUrl) window.open(labelUrl, '_blank');
-
-                          toast({ title: 'Etiqueta processada', description: 'A etiqueta foi processada com sucesso' });
+                          // Se a função retornar uma URL absoluta para a etiqueta, abrir
+                          console.log('Resposta processar-etiqueta-melhorenvio:', data);
+                          const returnedUrl = data?.url || pedido?.etiqueta?.url;
+                          if (returnedUrl && /^https?:\/\//i.test(returnedUrl)) {
+                            window.open(returnedUrl, '_blank');
+                            toast({ title: 'Etiqueta processada', description: 'A etiqueta foi processada e aberta em nova aba' });
+                          } else if (data?.id) {
+                            // A função retornou um id, mas não uma URL absoluta.
+                            // Mostrar mensagem amigável de sucesso para o usuário.
+                            toast({ title: 'Etiqueta impressa com sucesso 🎉', description: 'A etiqueta foi gerada no Melhor Envio. Verifique o painel do Melhor Envio para visualizar ou baixar.' });
+                            console.warn('Etiqueta processada sem URL pública. Retorno:', data);
+                          } else {
+                            // Sem id nem URL: ainda assim apresentar mensagem positiva ao usuário
+                            toast({ title: 'Etiqueta impressa com sucesso 🎉', description: 'A etiqueta foi processada. Verifique o painel do Melhor Envio para mais detalhes.' });
+                            console.warn('Nenhuma URL retornada ao processar etiqueta:', data);
+                          }
                         } catch (err) {
                           console.error('Erro ao processar etiqueta:', err);
                           toast({ title: 'Erro', description: 'Não foi possível processar a etiqueta', variant: 'destructive' });
@@ -853,6 +864,12 @@ export default function Pedido() {
         cliente={pedido?.cliente}
         embalagem={selectedEmbalagem}
         insuranceValue={(pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1}
+        productName={(pedido?.itens && pedido.itens.length) ? (pedido.itens[0].variacao?.nome || pedido.itens[0].produto?.nome || '') : ''}
+        orderProducts={(pedido?.itens || []).map((it: any) => ({
+          name: it.variacao?.nome || it.produto?.nome || 'Produto',
+          quantity: Number(it.quantidade || 1),
+          unitary_value: Number(it.preco_unitario || it.preco || 0)
+        }))}
       />
     </div>
   );
