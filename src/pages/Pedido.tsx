@@ -41,6 +41,7 @@ export default function Pedido() {
   const [calculandoFrete, setCalculandoFrete] = useState(false);
   const [cotacaoModal, setCotacaoModal] = useState(false);
   const [cotacoes, setCotacoes] = useState<CotacaoFrete[]>([]);
+  const [processingLabel, setProcessingLabel] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<Record<number, string> | null>(null);
   
@@ -270,12 +271,15 @@ export default function Pedido() {
       return;
     }
 
-    setCalculandoFrete(true);
-    setCotacaoModal(true);
+  setCalculandoFrete(true);
+  setCotacaoModal(true);
 
     console.log('Dados do remetente sendo enviados:', selectedRemetente);
 
     try {
+      // calcular valor dos itens como seguro
+      const itemsValue = (pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0);
+
       const payload = {
         origem: { 
           postal_code: selectedRemetente.cep.replace(/\D/g,''),
@@ -285,7 +289,7 @@ export default function Pedido() {
         destino: { postal_code: cepLimpo },
         pacote: [{
           weight: selectedEmbalagem.peso,
-          insurance_value: 1,
+          insurance_value: itemsValue || 1,
           length: selectedEmbalagem.comprimento,
           height: selectedEmbalagem.altura,
           width: selectedEmbalagem.largura,
@@ -672,17 +676,44 @@ export default function Pedido() {
                   // Mostra botões de imprimir / cancelar etiqueta quando já foi enviado ao carrinho ME
                   <>
                     <Button
-                      onClick={() => {
-                        // Abrir impressão em nova aba — usar id_melhor_envio ou etiqueta existente
-                        const labelUrl = pedido?.etiqueta?.url || (`/etiqueta/imprimir/${pedido?.id_melhor_envio || ''}`);
-                        window.open(labelUrl, '_blank');
+                      onClick={async () => {
+                        if (!pedido) return;
+                        setProcessingLabel(true);
+                        try {
+                          const payload = {
+                            pedidoId: pedido.id,
+                            id_melhor_envio: pedido.id_melhor_envio
+                          };
+
+                          const { data, error: fnError } = await supabase.functions.invoke('processar-etiqueta-melhorenvio', {
+                            body: payload
+                          });
+
+                          if (fnError) throw fnError;
+
+                          // Se a função retornar uma URL para a etiqueta, abrir
+                          const labelUrl = data?.url || pedido?.etiqueta?.url || (`/etiqueta/imprimir/${pedido?.id_melhor_envio || ''}`);
+                          if (labelUrl) window.open(labelUrl, '_blank');
+
+                          toast({ title: 'Etiqueta processada', description: 'A etiqueta foi processada com sucesso' });
+                        } catch (err) {
+                          console.error('Erro ao processar etiqueta:', err);
+                          toast({ title: 'Erro', description: 'Não foi possível processar a etiqueta', variant: 'destructive' });
+                        } finally {
+                          setProcessingLabel(false);
+                        }
                       }}
+                      disabled={processingLabel}
                       className="border-2 border-sky-400 text-sky-700 bg-white hover:bg-sky-50"
                     >
                       <span className="inline-flex items-center gap-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 00-1 1v6a1 1 0 001 1h2v3a1 1 0 001 1h8a1 1 0 001-1v-3h2a1 1 0 001-1V7a1 1 0 00-1-1h-2V3a1 1 0 00-1-1H6zM8 5h4v3H8V5z" />
-                        </svg>
+                        {processingLabel ? (
+                          <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 00-1 1v6a1 1 0 001 1h2v3a1 1 0 001 1h8a1 1 0 001-1v-3h2a1 1 0 001-1V7a1 1 0 00-1-1h-2V3a1 1 0 00-1-1H6zM8 5h4v3H8V5z" />
+                          </svg>
+                        )}
                         Imprimir Etiqueta
                       </span>
                     </Button>
@@ -821,6 +852,7 @@ export default function Pedido() {
         remetente={selectedRemetente}
         cliente={pedido?.cliente}
         embalagem={selectedEmbalagem}
+        insuranceValue={(pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1}
       />
     </div>
   );

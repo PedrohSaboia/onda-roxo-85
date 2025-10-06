@@ -24,9 +24,10 @@ type CotacaoFreteModalProps = {
   remetente?: any;
   cliente?: any;
   embalagem?: any;
+  insuranceValue?: number;
 };
 
-export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading, remetente, cliente, embalagem }: CotacaoFreteModalProps) {
+export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, loading, remetente, cliente, embalagem, insuranceValue }: CotacaoFreteModalProps) {
   const [sendingToCart, setSendingToCart] = useState<number | null>(null);
   const { toast } = useToast();
 
@@ -66,7 +67,7 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
           postal_code: (cliente?.cep || cliente?.postal_code || '').replace(/\D/g, '')
         },
         options: {
-          insurance_value: 1,
+          insurance_value: insuranceValue ?? 1,
           receipt: false,
           own_hand: false,
           reverse: false,
@@ -77,7 +78,8 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
           height: embalagem?.altura || 5,
           width: embalagem?.largura || 20,
           length: embalagem?.comprimento || 20,
-          weight: embalagem?.peso || 1
+          weight: embalagem?.peso || 1,
+          insurance_value: insuranceValue ?? 1
         }]
       };
 
