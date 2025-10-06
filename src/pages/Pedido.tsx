@@ -38,6 +38,8 @@ export default function Pedido() {
   const [etiquetas, setEtiquetas] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
   const [etiquetaText, setEtiquetaText] = useState('');
+  const [linkEtiqueta, setLinkEtiqueta] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
   const [calculandoFrete, setCalculandoFrete] = useState(false);
   const [cotacaoModal, setCotacaoModal] = useState(false);
   const [cotacoes, setCotacoes] = useState<CotacaoFrete[]>([]);
@@ -196,8 +198,10 @@ export default function Pedido() {
           itens
         });
 
-  // init etiqueta input
+    // init etiqueta input
   setEtiquetaText(etiquetaRow?.nome || '');
+    // init link etiqueta input from pedido row (link_etiqueta is the field on pedidos)
+    setLinkEtiqueta((pedidoRow as any)?.link_etiqueta ?? (pedidoRow as any)?.link_formulario ?? '');
 
         setStatuses((statusesData || []).map((s: any) => ({ id: s.id, nome: s.nome, corHex: s.cor_hex })));
         setUsuarios(usuariosData || []);
@@ -224,8 +228,9 @@ export default function Pedido() {
           status_id: pedido.status?.id || null,
           responsavel_id: pedido.responsavel?.id || null,
           observacoes: pedido.observacoes || null,
+          link_etiqueta: linkEtiqueta || null,
           atualizado_em: new Date().toISOString(),
-        })
+        } as any)
         .eq('id', pedido.id);
 
       if (error) throw error;
@@ -238,6 +243,27 @@ export default function Pedido() {
       toast({ title: 'Erro', description: err.message || String(err), variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveLinkEtiqueta = async () => {
+    if (!id) return;
+    setSavingLink(true);
+    try {
+      const { error } = await supabase
+        .from('pedidos')
+        .update({ link_etiqueta: linkEtiqueta || null } as any)
+        .eq('id', id);
+
+      if (error) throw error;
+      toast({ title: 'Link salvo', description: 'Link da etiqueta salvo com sucesso' });
+      // refresh to show updated value if needed
+      navigate(0);
+    } catch (err) {
+      console.error('Erro ao salvar link_etiqueta:', err);
+      toast({ title: 'Erro', description: 'Não foi possível salvar o link da etiqueta', variant: 'destructive' });
+    } finally {
+      setSavingLink(false);
     }
   };
 
@@ -805,16 +831,21 @@ export default function Pedido() {
             <Card>
               <CardHeader>
                 <CardTitle>
-                  Link do formulário
+                  Link Etiqueta de envio
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="text-sm text-muted-foreground mb-2">
-                  Use este link para acessar o formulário
+                  Use este link para acessar a etiqueta
                 </div>
                 <Input 
-                  value={pedido?.cliente?.link_formulario || ''} 
-                  readOnly
+                  type="text"
+                  value={linkEtiqueta}
+                  onChange={(e) => setLinkEtiqueta(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { saveLinkEtiqueta(); } }}
+                  readOnly={false}
+                  disabled={savingLink}
+                  aria-readonly={false}
                 />
               </CardContent>
             </Card>
