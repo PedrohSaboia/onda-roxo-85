@@ -4,7 +4,7 @@ import { AppHeader } from '@/components/layout/AppHeader';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { mockProdutos, mockStatus } from '@/data/mockData';
+import { mockStatus } from '@/data/mockData';
 import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 
@@ -20,20 +20,32 @@ export default function NovoPedido() {
   const [plataformasError, setPlataformasError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<any[]>([]);
+  const [produtosList, setProdutosList] = useState<any[]>([]);
+  const [loadingProdutos, setLoadingProdutos] = useState(false);
+  const [produtosError, setProdutosError] = useState<string | null>(null);
+  const [variationSelections, setVariationSelections] = useState<Record<string, string>>({});
+  const [brindeSelections, setBrindeSelections] = useState<Record<string, boolean>>({});
 
-  const produtos = mockProdutos.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
+  const produtos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
 
-  const addToCart = (produto: any) => {
+  const addToCart = (produto: any, variacaoId?: string, brinde?: boolean) => {
+    const variacoes = produto.variacoes || [];
+    const variacao = variacaoId ? variacoes.find((v: any) => v.id === variacaoId) : variacoes[0];
+    const itemId = variacao ? `${produto.id}:${variacao.id}` : produto.id;
+    const name = variacao ? `${produto.nome} ${variacao.nome ? `- ${variacao.nome}` : ''}` : produto.nome;
+    const unitary = variacao ? Number(variacao.valor || produto.preco) : Number(produto.preco || 0);
+
     setCart((prev) => {
-      const existing = prev.find((i) => i.id === produto.id);
-      if (existing) return prev.map((i) => (i.id === produto.id ? { ...i, quantidade: i.quantidade + 1 } : i));
-      return [...prev, { ...produto, quantidade: 1 }];
+      // Use `id` and `preco` fields expected by the UI
+      const existing = prev.find((i) => i.id === itemId && !!i.brinde === !!brinde);
+      if (existing) return prev.map((i) => i.id === itemId ? { ...i, quantidade: i.quantidade + 1 } : i);
+      return [...prev, { id: itemId, produtoId: produto.id, nome: name, quantidade: 1, preco: unitary, imagemUrl: variacao?.img_url || produto.imagemUrl || produto.img_url, brinde: !!brinde }];
     });
   };
 
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id));
 
-  const total = cart.reduce((s, it) => s + it.preco * it.quantidade, 0);
+  const total = cart.reduce((s, it) => s + (Number(it.preco || it.unitary_value || 0) * Number(it.quantidade || 0)), 0);
 
   useEffect(() => {
     let mounted = true;
@@ -55,6 +67,58 @@ export default function NovoPedido() {
     };
 
     loadPlataformas();
+    return () => { mounted = false };
+  }, []);
+
+  // load produtos and variations
+  useEffect(() => {
+    let mounted = true;
+    const loadProdutos = async () => {
+      setLoadingProdutos(true);
+      setProdutosError(null);
+      try {
+        const { data, error } = await supabase
+          .from('produtos')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)')
+          .order('criado_em', { ascending: false });
+
+        if (error) throw error;
+        if (!mounted) return;
+
+        const mapped = (data || []).map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          sku: p.sku,
+          preco: Number(p.preco || 0),
+          unidade: p.unidade || 'un',
+          categoria: p.categoria || '',
+          imagemUrl: p.img_url || undefined,
+          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+          nomeVariacao: p.nome_variacao || null,
+          qntd: p.qntd ?? 0,
+          criadoEm: p.criado_em,
+          atualizadoEm: p.atualizado_em,
+        }));
+
+        setProdutosList(mapped);
+        // set default variation selections
+        const defaults: Record<string, string> = {};
+        const brindeDefaults: Record<string, boolean> = {};
+        mapped.forEach((pr) => {
+          if (pr.variacoes && pr.variacoes.length) defaults[pr.id] = pr.variacoes[0].id;
+          brindeDefaults[pr.id] = false;
+        });
+        setVariationSelections(defaults);
+        setBrindeSelections(brindeDefaults);
+      } catch (err: any) {
+        console.error('Erro ao carregar produtos:', err);
+        setProdutosError(err?.message || String(err));
+      } finally {
+        setLoadingProdutos(false);
+      }
+    };
+
+    loadProdutos();
     return () => { mounted = false };
   }, []);
 
@@ -138,17 +202,37 @@ export default function NovoPedido() {
             </div>
 
             <div className="space-y-4">
-              {produtos.map((p) => (
+              {loadingProdutos && <div className="text-sm text-muted-foreground">Carregando produtos...</div>}
+              {produtosError && <div className="text-sm text-destructive">Erro: {produtosError}</div>}
+              {!loadingProdutos && !produtosError && produtos.map((p) => (
                 <div key={p.id} className="flex items-center gap-4">
                   <img src={p.imagemUrl} alt={p.nome} className="w-12 h-12 rounded" />
                   <div className="flex-1">
                     <div className="font-medium text-purple-700">{p.nome}</div>
                     <div className="text-sm text-muted-foreground">R$ {p.preco.toFixed(2)}</div>
                   </div>
+
+                  <div className="w-48">
+                    {p.variacoes && p.variacoes.length > 0 ? (
+                      <select className="w-full border rounded p-2" value={variationSelections[p.id] || ''} onChange={(e) => setVariationSelections((s) => ({ ...s, [p.id]: e.target.value }))}>
+                        {p.variacoes.map((v: any) => (
+                          <option key={v.id} value={v.id}>{v.nome} - R$ {Number(v.valor).toFixed(2)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">Sem variações</div>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm">
+                      <input type="checkbox" checked={brindeSelections[p.id] || false} onChange={(e) => setBrindeSelections((s) => ({ ...s, [p.id]: e.target.checked }))} />
+                      <span className="ml-2">Brinde</span>
+                    </label>
+                  </div>
+
                   <div>
-                    <Button onClick={() => addToCart(p)} className="bg-purple-600 text-white">
-                      +
-                    </Button>
+                    <Button onClick={() => addToCart(p, variationSelections[p.id], brindeSelections[p.id])} className="bg-purple-600 text-white">+</Button>
                   </div>
                 </div>
               ))}
