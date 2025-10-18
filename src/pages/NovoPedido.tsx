@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { mockProdutos, mockPlataformas, mockStatus } from '@/data/mockData';
+import { mockProdutos, mockStatus } from '@/data/mockData';
+import { supabase } from '@/integrations/supabase/client';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 
 export default function NovoPedido() {
@@ -12,8 +13,11 @@ export default function NovoPedido() {
   const [idExterno, setIdExterno] = useState('');
   const [nome, setNome] = useState('');
   const [contato, setContato] = useState('');
-  const [plataforma, setPlataforma] = useState(mockPlataformas[0]?.id || '');
+  const [plataforma, setPlataforma] = useState('');
   const [status, setStatus] = useState(mockStatus[0]?.id || '');
+  const [plataformas, setPlataformas] = useState<any[]>([]);
+  const [loadingPlataformas, setLoadingPlataformas] = useState(false);
+  const [plataformasError, setPlataformasError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [cart, setCart] = useState<any[]>([]);
 
@@ -30,6 +34,29 @@ export default function NovoPedido() {
   const removeFromCart = (id: string) => setCart((prev) => prev.filter((i) => i.id !== id));
 
   const total = cart.reduce((s, it) => s + it.preco * it.quantidade, 0);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadPlataformas = async () => {
+      setLoadingPlataformas(true);
+      setPlataformasError(null);
+      try {
+        const { data, error } = await supabase.from('plataformas').select('*').order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        setPlataformas(data || []);
+        if (!plataforma && data && data.length) setPlataforma(data[0].id);
+      } catch (err: any) {
+        console.error('Erro ao carregar plataformas:', err);
+        setPlataformasError(err?.message || String(err));
+      } finally {
+        setLoadingPlataformas(false);
+      }
+    };
+
+    loadPlataformas();
+    return () => { mounted = false };
+  }, []);
 
   return (
     <>
@@ -69,11 +96,17 @@ export default function NovoPedido() {
               <div>
                 <label className="text-sm">Plataforma de venda</label>
                 <select className="w-full border rounded p-2" value={plataforma} onChange={(e) => setPlataforma(e.target.value)}>
-                  {mockPlataformas.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.nome}
-                    </option>
-                  ))}
+                  {loadingPlataformas ? (
+                    <option>Carregando...</option>
+                  ) : plataformasError ? (
+                    <option>Erro ao carregar</option>
+                  ) : (
+                    plataformas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nome}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
