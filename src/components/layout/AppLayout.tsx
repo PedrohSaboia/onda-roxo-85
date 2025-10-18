@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { AppHeader } from './AppHeader';
-import { AppNavigation } from './AppNavigation';
 import { Dashboard } from '@/pages/Dashboard';
 import { Comercial } from '@/pages/Comercial';
 import { Producao } from '@/pages/Producao';
@@ -49,11 +48,7 @@ export function AppLayout() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader />
-      <AppNavigation 
-        activeModule={activeModule} 
-        onModuleChange={setActiveModule} 
-      />
+      <AppHeader activeModule={activeModule} onModuleChange={setActiveModule} />
       <main className="min-h-[calc(100vh-8rem)]">
         {renderContent()}
       </main>

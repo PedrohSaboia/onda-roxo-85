@@ -7,9 +7,11 @@ import { useAuth } from '@/hooks/useAuth';
 
 interface AppHeaderProps {
   onMenuClick?: () => void;
+  activeModule?: string;
+  onModuleChange?: (moduleId: string) => void;
 }
 
-export function AppHeader({ onMenuClick }: AppHeaderProps) {
+export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHeaderProps) {
   const { user, signOut } = useAuth();
 
   const handleLogout = async () => {
@@ -28,8 +30,17 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
 
+  const navigationItems = [
+    { id: 'home', label: 'Home' },
+    { id: 'comercial', label: 'Comercial' },
+    { id: 'producao', label: 'Produção' },
+    { id: 'logistica', label: 'Logística' },
+    { id: 'estoque', label: 'Estoque' },
+    { id: 'configuracoes', label: 'Configurações' },
+  ];
+
   return (
-    <header className="h-16 bg-gradient-to-r from-purple-600 to-purple-800 border-b border-purple-500/20 px-4 flex items-center justify-between shadow-lg">
+    <header className="h-16 bg-gradient-to-r from-purple-600 to-purple-800 border-b border-purple-500/20 px-4 flex items-center shadow-lg">
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -39,7 +50,7 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
         >
           <Menu className="h-5 w-5" />
         </Button>
-        
+
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-lg">T</span>
@@ -48,17 +59,36 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
         </div>
       </div>
 
-      <div className="flex-1 max-w-md mx-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 h-4 w-4" />
-          <Input
-            placeholder="Buscar pedidos..."
-            className="bg-white/10 border-white/20 text-white placeholder:text-white/60 pl-10 focus:bg-white/20 focus:border-white/40 transition-colors"
-          />
+      {/* Centered navigation */}
+      <nav className="flex-1 flex justify-center">
+        <div className="flex items-center gap-6">
+          {navigationItems.map((item) => {
+            const isActive = activeModule === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => onModuleChange?.(item.id)}
+                className={`text-sm font-medium py-2 px-3 rounded-md transition-colors ${isActive ? 'text-white bg-white/10' : 'text-white/80 hover:bg-white/5'}`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </div>
-      </div>
+      </nav>
 
-      <div className="flex items-center gap-3">
+      {/* Right area: search + icons */}
+      <div className="flex items-center gap-3 ml-auto">
+        <div className="w-64">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 h-4 w-4" />
+            <Input
+              placeholder="Buscar pedidos..."
+              className="bg-white/10 border-white/20 text-white placeholder:text-white/60 pl-10 focus:bg-white/20 focus:border-white/40 transition-colors"
+            />
+          </div>
+        </div>
+
         <Button
           variant="ghost"
           size="sm"
