@@ -9,6 +9,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Pedido from "./pages/Pedido";
+import NovoPedido from "./pages/NovoPedido";
 
 const queryClient = new QueryClient();
 
@@ -24,6 +25,11 @@ const App = () => (
             <Route path="/pedido/:id" element={
               <ProtectedRoute>
                 <Pedido />
+              </ProtectedRoute>
+            } />
+            <Route path="/novo-pedido" element={
+              <ProtectedRoute>
+                <NovoPedido />
               </ProtectedRoute>
             } />
             <Route path="/" element={

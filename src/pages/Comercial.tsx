@@ -171,7 +171,7 @@ export function Comercial() {
             {filteredPedidos.length} pedidos encontrados
           </p>
         </div>
-        <Button className="bg-purple-600 hover:bg-purple-700">
+        <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => navigate('/novo-pedido')}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Pedido
         </Button>
