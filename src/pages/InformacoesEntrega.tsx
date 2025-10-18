@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from '@/integrations/supabase/client';
-import axios from "axios";
+// use fetch instead of axios to avoid adding a dependency
 import { useToast } from '@/hooks/use-toast';
 
 type Cliente = {
@@ -61,9 +61,8 @@ export default function InformacoesEntrega() {
 
     try {
       setBuscandoCep(true);
-      const { data } = await axios.get(
-        `https://viacep.com.br/ws/${cliente.cep.replace(/\D/g, "")}/json/`
-      );
+      const resp = await fetch(`https://viacep.com.br/ws/${cliente.cep.replace(/\D/g, "")}/json/`);
+      const data = await resp.json();
 
       if ((data as any).erro) {
         toast({ title: 'Erro', description: 'CEP não encontrado.', variant: 'destructive' });
