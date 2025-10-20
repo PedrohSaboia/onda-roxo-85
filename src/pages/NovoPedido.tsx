@@ -33,6 +33,7 @@ export default function NovoPedido() {
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
   const produtos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
 
@@ -109,6 +110,18 @@ export default function NovoPedido() {
     setSaving(true);
     try {
       // insert pedido
+      const now = new Date();
+      let criadoEm: string;
+      if (selectedDate) {
+        // selectedDate is YYYY-MM-DD from input[type=date]
+        const [y, m, d] = selectedDate.split('-').map((v) => Number(v));
+        // create a new Date with today's time but date from selectedDate
+        const withTime = new Date(now);
+        withTime.setFullYear(y, (m || 1) - 1, d || 1);
+        criadoEm = withTime.toISOString();
+      } else {
+        criadoEm = now.toISOString();
+      }
       const pedidoPayload: any = {
         id_externo: idExterno || null,
         cliente_nome: nome || null,
@@ -117,7 +130,7 @@ export default function NovoPedido() {
         status_id: status || null,
         responsavel_id: user?.id || null,
         valor_total: total,
-        criado_em: new Date().toISOString()
+        criado_em: criadoEm
       };
 
       const { data: pedidoData, error: pedidoError } = await supabase.from('pedidos').insert(pedidoPayload).select('id').single();
@@ -215,6 +228,15 @@ export default function NovoPedido() {
             </div>
 
           <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 border rounded-lg px-3 py-2">
+              <input
+                type="date"
+                className="border-none outline-none"
+                value={selectedDate || ''}
+                onChange={(e) => setSelectedDate(e.target.value || null)}
+              />
+              <button type="button" className="bg-purple-700 text-white px-3 py-1 rounded-md" onClick={() => setSelectedDate(new Date().toISOString().slice(0,10))}>Hoje</button>
+            </div>
             <Button variant="outline" onClick={() => navigate('/?module=comercial')}>Cancelar</Button>
             <Button className="bg-purple-700 text-white" onClick={async () => await handleCreatePedido()} disabled={saving}>{saving ? 'Criando...' : '+ Criar Pedido'}</Button>
           </div>
