@@ -498,47 +498,31 @@ export default function Pedido() {
                 <div className="text-sm">{formatAddress(pedido?.cliente)}</div>
                 <div className="mt-2 text-sm text-muted-foreground">Prazo: 0 dias</div>
                 <div className="text-sm text-muted-foreground">Data prevista: {pedido?.data_prevista || '—'}</div>
-                {/* Link da etiqueta: colocado abaixo das informações de entrega (local marcado pelo usuário) */}
-                <div className="mt-4">
-                  <div className="text-sm text-muted-foreground">Link Etiqueta de envio</div>
-                  <div className="text-sm text-muted-foreground mb-2">Use este link para acessar a etiqueta</div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <Input
-                        type="text"
-                        value={linkEtiqueta}
-                        onChange={(e) => setLinkEtiqueta(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { saveLinkEtiqueta(); } }}
-                        readOnly={false}
-                        disabled={savingLink}
-                        aria-readonly={false}
-                      />
-                    </div> 
-                    <div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={async () => {
-                          const clientId = pedido?.cliente?.id || (pedido as any)?.cliente_id || null;
-                          if (!clientId) {
-                            toast({ title: 'Erro', description: 'Cliente sem ID para gerar link', variant: 'destructive' });
-                            return;
-                          }
-                          const url = `${window.location.origin}/informacoes-entrega/${clientId}`;
-                          try {
-                            await navigator.clipboard.writeText(url);
-                            toast({ title: 'Link copiado', description: 'Rota de informações de entrega copiada para a área de transferência' });
-                          } catch (err) {
-                            console.error('Erro ao copiar link:', err);
-                            toast({ title: 'Erro', description: 'Não foi possível copiar o link', variant: 'destructive' });
-                          }
-                        }}
-                        className="inline-flex items-center gap-2"
-                      >
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
+                {/* Link do formulário de entrega: botão de copiar antes do texto, sem input auxiliar */}
+                <div className="mt-4 flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      const clientId = pedido?.cliente?.id || (pedido as any)?.cliente_id || null;
+                      if (!clientId) {
+                        toast({ title: 'Erro', description: 'Cliente sem ID para gerar link', variant: 'destructive' });
+                        return;
+                      }
+                      const url = `${window.location.origin}/informacoes-entrega/${clientId}`;
+                      try {
+                        await navigator.clipboard.writeText(url);
+                        toast({ title: 'Link copiado', description: 'Rota de informações de entrega copiada para a área de transferência' });
+                      } catch (err) {
+                        console.error('Erro ao copiar link:', err);
+                        toast({ title: 'Erro', description: 'Não foi possível copiar o link', variant: 'destructive' });
+                      }
+                    }}
+                    className="inline-flex items-center gap-2"
+                  >
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                  <div className="text-sm text-muted-foreground">Link formulário de entrega</div>
                 </div>
               </div>
             </div>
