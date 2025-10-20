@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/hooks/useAuth';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { mockStatus } from '@/data/mockData';
+// statuses will be loaded from the database
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
 
 export default function NovoPedido() {
@@ -14,7 +16,10 @@ export default function NovoPedido() {
   const [nome, setNome] = useState('');
   const [contato, setContato] = useState('');
   const [plataforma, setPlataforma] = useState('');
-  const [status, setStatus] = useState(mockStatus[0]?.id || '');
+  const [status, setStatus] = useState('');
+  const [statuses, setStatuses] = useState<any[]>([]);
+  const [loadingStatuses, setLoadingStatuses] = useState(false);
+  const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
   const [plataformas, setPlataformas] = useState<any[]>([]);
   const [loadingPlataformas, setLoadingPlataformas] = useState(false);
   const [plataformasError, setPlataformasError] = useState<string | null>(null);
@@ -25,6 +30,9 @@ export default function NovoPedido() {
   const [produtosError, setProdutosError] = useState<string | null>(null);
   const [variationSelections, setVariationSelections] = useState<Record<string, string>>({});
   const [brindeSelections, setBrindeSelections] = useState<Record<string, boolean>>({});
+  const [saving, setSaving] = useState(false);
+  const { toast } = useToast();
+  const { user } = useAuth();
 
   const produtos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
 
@@ -67,8 +75,81 @@ export default function NovoPedido() {
     };
 
     loadPlataformas();
+    // load statuses
+    (async () => {
+      setLoadingStatuses(true);
+      try {
+        const { data, error } = await supabase.from('status').select('*').order('ordem', { ascending: true });
+        if (error) throw error;
+        if (!mounted) return;
+        setStatuses(data || []);
+        // default to COMERCIAL if present, otherwise first
+        const hasComercial = (data || []).some((s: any) => s.id === COMERCIAL_STATUS_ID);
+        if (hasComercial) setStatus(COMERCIAL_STATUS_ID);
+        else if (!status && data && data.length) setStatus(data[0].id);
+      } catch (err: any) {
+        console.error('Erro ao carregar status:', err);
+      } finally {
+        setLoadingStatuses(false);
+      }
+    })();
     return () => { mounted = false };
   }, []);
+
+  const handleCreatePedido = async () => {
+    if (!plataforma) {
+      toast({ title: 'Erro', description: 'Selecione uma plataforma', variant: 'destructive' });
+      return;
+    }
+    if (!cart.length) {
+      toast({ title: 'Erro', description: 'Adicione ao menos um item ao carrinho', variant: 'destructive' });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // insert pedido
+      const pedidoPayload: any = {
+        id_externo: idExterno || null,
+        cliente_nome: nome || null,
+        contato: contato || null,
+        plataforma_id: plataforma,
+        status_id: status || null,
+        responsavel_id: user?.id || null,
+        valor_total: total,
+        criado_em: new Date().toISOString()
+      };
+
+      const { data: pedidoData, error: pedidoError } = await supabase.from('pedidos').insert(pedidoPayload).select('id').single();
+      if (pedidoError) throw pedidoError;
+
+      const pedidoId = (pedidoData as any).id;
+
+      // prepare itens_pedido
+      const itens = cart.map((it) => {
+        const [produtoId, variacaoId] = String(it.id).split(':');
+        return {
+          pedido_id: pedidoId,
+          produto_id: it.produtoId || produtoId,
+          variacao_id: variacaoId || null,
+          quantidade: it.quantidade || 1,
+          preco_unitario: it.preco || 0,
+          criado_em: new Date().toISOString()
+        };
+      });
+
+      const { error: itensError } = await supabase.from('itens_pedido').insert(itens as any);
+      if (itensError) throw itensError;
+
+      toast({ title: 'Pedido criado', description: 'Pedido e itens salvos com sucesso' });
+      navigate(`/pedido/${pedidoId}`);
+    } catch (err: any) {
+      console.error('Erro ao criar pedido:', err);
+      toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // load produtos and variations
   useEffect(() => {
@@ -135,7 +216,7 @@ export default function NovoPedido() {
 
           <div className="flex items-center gap-3">
             <Button variant="outline" onClick={() => navigate('/?module=comercial')}>Cancelar</Button>
-            <Button className="bg-purple-700 text-white">+ Criar Pedido</Button>
+            <Button className="bg-purple-700 text-white" onClick={async () => await handleCreatePedido()} disabled={saving}>{saving ? 'Criando...' : '+ Criar Pedido'}</Button>
           </div>
         </div>
 
@@ -184,11 +265,13 @@ export default function NovoPedido() {
               <div>
                 <label className="text-sm">Status Almofada</label>
                 <select className="w-full border rounded p-2" value={status} onChange={(e) => setStatus(e.target.value)}>
-                  {mockStatus.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nome}
-                    </option>
-                  ))}
+                  {loadingStatuses ? (
+                    <option>Carregando...</option>
+                  ) : (
+                    statuses.map((s) => (
+                      <option key={s.id} value={s.id}>{s.nome}</option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>
