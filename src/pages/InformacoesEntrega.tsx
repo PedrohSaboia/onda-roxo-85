@@ -218,8 +218,8 @@ export default function InformacoesEntrega() {
         toast({ title: 'Erro', description: 'Não foi possível salvar os dados', variant: 'destructive' });
       } else {
         toast({ title: 'Sucesso', description: 'Dados salvos com sucesso' });
-        // go back to the order page if present
-        navigate(-1);
+        // show confirmation step
+        setStep(3);
       }
     } finally {
       setSalvando(false);
@@ -258,7 +258,7 @@ export default function InformacoesEntrega() {
           </button>
         </div>
 
-        {step === 1 && (
+  {step === 1 && (
           <div>
             <label className="block text-sm font-medium text-gray-700">Nome completo *</label>
             <input className="w-full p-3 border rounded-md mb-1" value={cliente.nome || ''} onChange={(e) => updateField('nome', e.target.value)} />
@@ -294,7 +294,7 @@ export default function InformacoesEntrega() {
           </div>
         )}
 
-        {step === 2 && (
+  {step === 2 && (
           <div>
             <h3 className="font-semibold mb-3">Entrega</h3>
             <label className="block text-sm font-medium text-gray-700">Digite seu CEP *</label>
@@ -340,6 +340,19 @@ export default function InformacoesEntrega() {
             ) : (
               <div className="text-sm text-gray-500">Digite o CEP e clique em Buscar CEP para preencher o restante do endereço.</div>
             )}
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="text-center py-8">
+            <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 className="mt-4 text-lg font-semibold">Formulário enviado com sucesso</h3>
+            <p className="text-sm text-muted-foreground mt-2">Obrigado — seus dados foram salvos.</p>
+            <div className="mt-6 flex justify-center">
+              <button onClick={() => navigate(-1)} className="bg-purple-700 text-white px-6 py-3 rounded-md">Voltar</button>
+            </div>
           </div>
         )}
       </div>
