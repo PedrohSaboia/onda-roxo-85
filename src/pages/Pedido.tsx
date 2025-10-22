@@ -66,6 +66,7 @@ export default function Pedido() {
   const [variationSelectionsModal, setVariationSelectionsModal] = useState<Record<string, string>>({});
   const [brindeSelectionsModal, setBrindeSelectionsModal] = useState<Record<string, boolean>>({});
   const [modalCart, setModalCart] = useState<any[]>([]);
+  const [savingModal, setSavingModal] = useState(false);
 
   // Load produtos for modal when opened
   useEffect(() => {
@@ -1035,11 +1036,58 @@ export default function Pedido() {
 
               <div className="mt-6 flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setAddProductsVisible(false)}>Cancelar</Button>
-                <Button className="bg-purple-700 text-white" onClick={() => {
-                  // For now, just merge modalCart into pedido UI cart by adding itens_pedido via local navigation/refresh placeholder
-                  // We'll not persist yet — just close modal
-                  setAddProductsVisible(false);
-                  toast({ title: 'Produtos adicionados ao carrinho (local)', description: `${modalCart.length} itens adicionados` });
+                <Button className="bg-purple-700 text-white" onClick={async () => {
+                  // persist modalCart into itens_pedido for current pedido
+                  if (!pedido) {
+                    toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
+                    return;
+                  }
+                  if (!modalCart.length) {
+                    setAddProductsVisible(false);
+                    return;
+                  }
+                  setSavingModal(true);
+                  try {
+                    // load existing items for this pedido to merge quantities
+                    const { data: existingItems, error: existingError } = await supabase.from('itens_pedido').select('*').eq('pedido_id', pedido.id);
+                    if (existingError) throw existingError;
+
+                    // Build arrays of inserts and updates
+                    const inserts: any[] = [];
+                    const updates: any[] = [];
+
+                    modalCart.forEach((it) => {
+                      const [produtoId, variacaoId] = String(it.id).split(':');
+                      // try find existing item matching produto_id + variacao_id
+                      const match = (existingItems || []).find((e: any) => String(e.produto_id) === String(it.produtoId || produtoId) && String(e.variacao_id || '') === String(variacaoId || ''));
+                      if (match) {
+                        updates.push({ id: match.id, quantidade: (Number(match.quantidade || 0) + Number(it.quantidade || 1)), preco_unitario: it.preco || match.preco_unitario });
+                      } else {
+                        inserts.push({ pedido_id: pedido.id, produto_id: it.produtoId || produtoId, variacao_id: variacaoId || null, quantidade: it.quantidade || 1, preco_unitario: it.preco || 0, criado_em: new Date().toISOString() });
+                      }
+                    });
+
+                    // perform updates (one by one) and bulk insert
+                    for (const u of updates) {
+                      const { error: upErr } = await supabase.from('itens_pedido').update({ quantidade: u.quantidade, preco_unitario: u.preco_unitario } as any).eq('id', u.id);
+                      if (upErr) throw upErr;
+                    }
+
+                    if (inserts.length) {
+                      const { error: insErr } = await supabase.from('itens_pedido').insert(inserts as any);
+                      if (insErr) throw insErr;
+                    }
+
+                    toast({ title: 'Itens adicionados', description: 'Produtos adicionados ao pedido com sucesso' });
+                    setAddProductsVisible(false);
+                    // refresh the page to reflect changes
+                    navigate(0);
+                  } catch (err: any) {
+                    console.error('Erro ao persistir itens do modal:', err);
+                    toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                  } finally {
+                    setSavingModal(false);
+                  }
                 }}>Próxima etapa</Button>
               </div>
             </div>
