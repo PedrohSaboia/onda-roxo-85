@@ -57,6 +57,70 @@ export default function Pedido() {
 
   const { toast } = useToast();
 
+  // Modal: adicionar produtos
+  const [addProductsVisible, setAddProductsVisible] = useState(false);
+  const [produtosListModal, setProdutosListModal] = useState<any[]>([]);
+  const [loadingProdutosModal, setLoadingProdutosModal] = useState(false);
+  const [produtosErrorModal, setProdutosErrorModal] = useState<string | null>(null);
+  const [searchModal, setSearchModal] = useState('');
+  const [variationSelectionsModal, setVariationSelectionsModal] = useState<Record<string, string>>({});
+  const [brindeSelectionsModal, setBrindeSelectionsModal] = useState<Record<string, boolean>>({});
+  const [modalCart, setModalCart] = useState<any[]>([]);
+
+  // Load produtos for modal when opened
+  useEffect(() => {
+    if (!addProductsVisible) return;
+    let mounted = true;
+    const loadProdutosModal = async () => {
+      setLoadingProdutosModal(true);
+      setProdutosErrorModal(null);
+      try {
+        const { data, error } = await supabase
+          .from('produtos')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)')
+          .order('criado_em', { ascending: false });
+
+        if (error) throw error;
+        if (!mounted) return;
+
+        const mapped = (data || []).map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+          sku: p.sku,
+          preco: Number(p.preco || 0),
+          unidade: p.unidade || 'un',
+          categoria: p.categoria || '',
+          imagemUrl: p.img_url || undefined,
+          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+          nomeVariacao: p.nome_variacao || null,
+          qntd: p.qntd ?? 0,
+          criadoEm: p.criado_em,
+          atualizadoEm: p.atualizado_em,
+        }));
+
+        setProdutosListModal(mapped);
+
+        // set default selections for variations and brinde
+        const defaults: Record<string, string> = {};
+        const brindeDefaults: Record<string, boolean> = {};
+        mapped.forEach((pr) => {
+          if (pr.variacoes && pr.variacoes.length) defaults[pr.id] = pr.variacoes[0].id;
+          brindeDefaults[pr.id] = false;
+        });
+        setVariationSelectionsModal(defaults);
+        setBrindeSelectionsModal(brindeDefaults);
+      } catch (err: any) {
+        console.error('Erro ao carregar produtos para modal:', err);
+        setProdutosErrorModal(err?.message || String(err));
+      } finally {
+        setLoadingProdutosModal(false);
+      }
+    };
+
+    loadProdutosModal();
+    return () => { mounted = false };
+  }, [addProductsVisible]);
+
   // Tipos
   type Embalagem = {
     id: string;
@@ -564,7 +628,7 @@ export default function Pedido() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Produtos</CardTitle>
-                <Button className="bg-purple-700 text-white">Adicionar Produto</Button>
+                <Button className="bg-purple-700 text-white" onClick={() => setAddProductsVisible(true)}>Adicionar Produto</Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -890,6 +954,96 @@ export default function Pedido() {
       <Dialog open={embalagensVisible} onOpenChange={setEmbalagensVisible}>
         <DialogContent className="max-w-4xl">
           <EmbalagensManager />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Adicionar Produtos (copiado do NovoPedido UI pattern) */}
+      <Dialog open={addProductsVisible} onOpenChange={setAddProductsVisible}>
+        <DialogContent className="max-w-6xl w-full">
+          <div className="grid grid-cols-2 gap-6">
+            <div>
+              <Input placeholder="Buscar produto" value={searchModal} onChange={(e) => setSearchModal(e.target.value)} />
+              <div className="space-y-4 mt-4">
+                {loadingProdutosModal && <div className="text-sm text-muted-foreground">Carregando produtos...</div>}
+                {produtosErrorModal && <div className="text-sm text-destructive">Erro: {produtosErrorModal}</div>}
+                {!loadingProdutosModal && !produtosErrorModal && produtosListModal.filter(p => p.nome.toLowerCase().includes(searchModal.toLowerCase())).map((p) => (
+                  <div key={p.id} className="flex items-center gap-4">
+                    <img src={p.imagemUrl} alt={p.nome} className="w-12 h-12 rounded" />
+                    <div className="flex-1">
+                      <div className="font-medium text-purple-700">{p.nome}</div>
+                      <div className="text-sm text-muted-foreground">R$ {Number(p.preco || 0).toFixed(2)}</div>
+                    </div>
+
+                    <div className="w-48">
+                      {p.variacoes && p.variacoes.length > 0 ? (
+                        <select className="w-full border rounded p-2" value={variationSelectionsModal[p.id] || ''} onChange={(e) => setVariationSelectionsModal((s) => ({ ...s, [p.id]: e.target.value }))}>
+                          {p.variacoes.map((v: any) => (
+                            <option key={v.id} value={v.id}>{v.nome} - R$ {Number(v.valor).toFixed(2)}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">Sem variações</div>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <label className="text-sm">
+                        <input type="checkbox" checked={brindeSelectionsModal[p.id] || false} onChange={(e) => setBrindeSelectionsModal((s) => ({ ...s, [p.id]: e.target.checked }))} />
+                        <span className="ml-2">Brinde</span>
+                      </label>
+                    </div>
+
+                    <div>
+                      <Button className="bg-purple-700 text-white" onClick={() => {
+                        // add to modal cart
+                        const variacaoId = variationSelectionsModal[p.id] || (p.variacoes && p.variacoes[0]?.id) || null;
+                        const quantidade = 1;
+                        const unitario = variacaoId ? Number((p.variacoes || []).find((v: any) => v.id === variacaoId)?.valor || p.preco || 0) : Number(p.preco || 0);
+                        const itemId = variacaoId ? `${p.id}:${variacaoId}` : p.id;
+                        setModalCart(prev => {
+                          const existing = prev.find(i => i.id === itemId && !!i.brinde === !!brindeSelectionsModal[p.id]);
+                          if (existing) return prev.map(i => i.id === itemId ? { ...i, quantidade: i.quantidade + 1 } : i);
+                          return [...prev, { id: itemId, produtoId: p.id, nome: p.nome, quantidade, preco: unitario, imagemUrl: p.imagemUrl, brinde: !!brindeSelectionsModal[p.id] }];
+                        });
+                      }}>+</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="text-lg font-semibold">ITENS DO CARRINHO</div>
+              <div className="text-sm text-muted-foreground mb-4">{modalCart.length} R$ {modalCart.reduce((s, it) => s + (Number(it.preco || 0) * Number(it.quantidade || 1)), 0).toFixed(2)}</div>
+              <div className="space-y-3">
+                {modalCart.map((item, idx) => (
+                  <div key={item.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <img src={item.imagemUrl} className="w-10 h-10 rounded" />
+                      <div>
+                        <div className="font-medium">{item.nome}</div>
+                        <div className="text-sm text-muted-foreground">R$ {Number(item.preco || 0).toFixed(2)}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-sm">{item.quantidade}</div>
+                      <Button variant="ghost" onClick={() => setModalCart(prev => prev.filter((_, i) => i !== idx))}>Remover</Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-6 flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setAddProductsVisible(false)}>Cancelar</Button>
+                <Button className="bg-purple-700 text-white" onClick={() => {
+                  // For now, just merge modalCart into pedido UI cart by adding itens_pedido via local navigation/refresh placeholder
+                  // We'll not persist yet — just close modal
+                  setAddProductsVisible(false);
+                  toast({ title: 'Produtos adicionados ao carrinho (local)', description: `${modalCart.length} itens adicionados` });
+                }}>Próxima etapa</Button>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
