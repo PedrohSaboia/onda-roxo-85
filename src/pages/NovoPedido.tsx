@@ -34,6 +34,33 @@ export default function NovoPedido() {
   const { toast } = useToast();
   const { user } = useAuth();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  // currency strings for inputs (pt-BR), store as strings to allow comma typing
+  const [valorInvestidoStr, setValorInvestidoStr] = useState<string>('0,00');
+  const [freteVendaStr, setFreteVendaStr] = useState<string>('0,00');
+
+  const parsePtBR = (v: string) => {
+    if (!v) return 0;
+    const cleaned = String(v).trim().replace(/\./g, '').replace(/,/g, '.');
+    const n = Number(cleaned);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const formatPtBR = (n: number) => {
+    return Number(n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
+
+  const normalizeAndFormatCurrencyInput = (raw: string) => {
+    // keep only digits
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return '0,00';
+    // cents are last 2 digits
+    const cents = digits.slice(-2).padStart(2, '0');
+    const intPart = digits.slice(0, -2) || '0';
+    // format integer part with thousand separators
+    const intFormatted = Number(intPart).toLocaleString('pt-BR');
+    return `${intFormatted},${cents}`;
+  };
+  
 
   const produtos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
 
@@ -129,7 +156,10 @@ export default function NovoPedido() {
         plataforma_id: plataforma,
         status_id: status || null,
         responsavel_id: user?.id || null,
+        // valor_total column (sum of cart items)
         valor_total: total,
+        // frete_venda column (parsed from pt-BR input)
+        frete_venda: parsePtBR(freteVendaStr),
         criado_em: criadoEm
       };
 
@@ -259,6 +289,38 @@ export default function NovoPedido() {
                 <label className="text-sm">Contato</label>
                 <Input value={contato} onChange={(e) => setContato(e.target.value)} />
               </div>
+
+              {/* Currency inputs similar to Editar Pedido (pt-BR) - placed as three columns to match other inputs */}
+              <div>
+                <label className="text-sm">Total investido</label>
+                <Input
+                  className="w-full"
+                  value={valorInvestidoStr}
+                  onChange={(e) => setValorInvestidoStr(normalizeAndFormatCurrencyInput(e.target.value))}
+                  onBlur={() => setValorInvestidoStr(formatPtBR(parsePtBR(valorInvestidoStr)))}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm">Frete: Venda</label>
+                <Input
+                  className="w-full"
+                  value={freteVendaStr}
+                  onChange={(e) => setFreteVendaStr(normalizeAndFormatCurrencyInput(e.target.value))}
+                  onBlur={() => setFreteVendaStr(formatPtBR(parsePtBR(freteVendaStr)))}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm">Valor sem frete</label>
+                <Input
+                  className="w-full"
+                  value={formatPtBR(Math.max(0, parsePtBR(valorInvestidoStr) - parsePtBR(freteVendaStr)))}
+                  readOnly
+                />
+              </div>
+
+              
 
               <div>
                 <label className="text-sm">Plataforma de venda</label>
