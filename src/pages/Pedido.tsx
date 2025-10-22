@@ -562,7 +562,10 @@ export default function Pedido() {
         <TabsContent value="resumo">
           <Card>
             <CardHeader>
-              <CardTitle>Produtos</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Produtos</CardTitle>
+                <Button className="bg-purple-700 text-white">Adicionar Produto</Button>
+              </div>
             </CardHeader>
             <CardContent>
               <Table>
