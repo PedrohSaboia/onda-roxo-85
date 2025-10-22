@@ -13,6 +13,7 @@ import CotacaoFreteModal from '@/components/shipping/CotacaoFreteModal';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import EditSelectModal from '@/components/modals/EditSelectModal';
 
 function formatAddress(cliente: any) {
   if (!cliente) return '-';
@@ -35,7 +36,12 @@ export default function Pedido() {
   const [loading, setLoading] = useState(false);
   const [statuses, setStatuses] = useState<any[]>([]);
   const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [plataformas, setPlataformas] = useState<any[]>([]);
   const [etiquetas, setEtiquetas] = useState<any[]>([]);
+  const [editFieldOpen, setEditFieldOpen] = useState(false);
+  const [editFieldKey, setEditFieldKey] = useState<'status' | 'plataforma' | 'responsavel' | 'etiqueta' | null>(null);
+  const [editOptions, setEditOptions] = useState<{ id: string; nome: string }[]>([]);
+  const [editValue, setEditValue] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [etiquetaText, setEtiquetaText] = useState('');
   const [linkEtiqueta, setLinkEtiqueta] = useState('');
@@ -205,12 +211,13 @@ export default function Pedido() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [{ data: pedidoData, error: pedidoError }, { data: statusesData, error: statusesError }, { data: usuariosData, error: usuariosError }, { data: etiquetasData, error: etiquetasError }] = await Promise.all([
+        const [{ data: pedidoData, error: pedidoError }, { data: plataformasData, error: plataformasError }, { data: statusesData, error: statusesError }, { data: usuariosData, error: usuariosError }, { data: etiquetasData, error: etiquetasError }] = await Promise.all([
           supabase
             .from('pedidos')
             .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, produto:produtos(id,nome,sku,img_url,preco), variacao:variacoes_produto(id,nome,sku,img_url,valor))`)
             .eq('id', id)
             .single(),
+          supabase.from('plataformas').select('*').order('nome'),
           supabase.from('status').select('*').order('ordem', { ascending: true }),
           supabase.from('usuarios').select('*'),
           supabase.from('tipos_etiqueta').select('*').order('ordem', { ascending: true }),
@@ -268,9 +275,10 @@ export default function Pedido() {
     // init link etiqueta input from pedido row (link_etiqueta is the field on pedidos)
     setLinkEtiqueta((pedidoRow as any)?.link_etiqueta ?? (pedidoRow as any)?.link_formulario ?? '');
 
-        setStatuses((statusesData || []).map((s: any) => ({ id: s.id, nome: s.nome, corHex: s.cor_hex })));
-        setUsuarios(usuariosData || []);
-        setEtiquetas((etiquetasData || []).map((t: any) => ({ id: t.id, nome: t.nome, corHex: t.cor_hex })));
+  setPlataformas(plataformasData || []);
+  setStatuses((statusesData || []).map((s: any) => ({ id: s.id, nome: s.nome, corHex: s.cor_hex })));
+  setUsuarios(usuariosData || []);
+  setEtiquetas((etiquetasData || []).map((t: any) => ({ id: t.id, nome: t.nome, corHex: t.cor_hex })));
       } catch (err: any) {
         console.error('Erro ao buscar pedido', err);
         toast({ title: 'Erro', description: err.message || String(err), variant: 'destructive' });
@@ -679,19 +687,51 @@ export default function Pedido() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Status</div>
-                  <div className="font-medium">{pedido?.status?.nome || '—'}</div>
+                  <div className="font-medium flex items-center gap-3">
+                    {pedido?.status?.nome || '—'}
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditOptions(statuses.map(s => ({ id: s.id, nome: s.nome })));
+                      setEditValue(pedido?.status?.id || null);
+                      setEditFieldKey('status');
+                      setEditFieldOpen(true);
+                    }}>Editar</Button>
+                  </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Plataforma</div>
-                  <div className="font-medium">{pedido?.plataforma?.nome || '—'}</div>
+                  <div className="font-medium flex items-center gap-3">
+                    {pedido?.plataforma?.nome || '—'}
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditOptions(plataformas.map(p => ({ id: p.id, nome: p.nome })));
+                      setEditValue(pedido?.plataforma?.id || null);
+                      setEditFieldKey('plataforma');
+                      setEditFieldOpen(true);
+                    }}>Editar</Button>
+                  </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Etiqueta</div>
-                  <div className="font-medium">{pedido?.etiqueta?.nome || '—'}</div>
+                  <div className="font-medium flex items-center gap-3">
+                    {pedido?.etiqueta?.nome || '—'}
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditOptions(etiquetas.map(e => ({ id: e.id, nome: e.nome })));
+                      setEditValue(pedido?.etiqueta?.id || null);
+                      setEditFieldKey('etiqueta');
+                      setEditFieldOpen(true);
+                    }}>Editar</Button>
+                  </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Responsável</div>
-                  <div className="font-medium">{pedido?.responsavel?.nome || '—'}</div>
+                  <div className="font-medium flex items-center gap-3">
+                    {pedido?.responsavel?.nome || '—'}
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditOptions(usuarios.map(u => ({ id: u.id, nome: u.nome })));
+                      setEditValue(pedido?.responsavel?.id || null);
+                      setEditFieldKey('responsavel');
+                      setEditFieldOpen(true);
+                    }}>Editar</Button>
+                  </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Urgente</div>
@@ -1094,6 +1134,38 @@ export default function Pedido() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Reusable edit modal for single-field dropdowns */}
+      <EditSelectModal
+        open={editFieldOpen}
+        onOpenChange={(open) => setEditFieldOpen(open)}
+        title={editFieldKey === 'status' ? 'Atualizar Status' : editFieldKey === 'plataforma' ? 'Atualizar Plataforma' : editFieldKey === 'responsavel' ? 'Atualizar Responsável' : 'Atualizar Etiqueta'}
+        options={editOptions}
+        value={editValue}
+        onSave={async (selectedId) => {
+          if (!pedido) {
+            toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
+            return;
+          }
+          try {
+            const updateData: any = { atualizado_em: new Date().toISOString() };
+            if (editFieldKey === 'status') updateData.status_id = selectedId || null;
+            if (editFieldKey === 'plataforma') updateData.plataforma_id = selectedId || null;
+            if (editFieldKey === 'responsavel') updateData.responsavel_id = selectedId || null;
+            if (editFieldKey === 'etiqueta') updateData.etiqueta_envio_id = selectedId || null;
+
+            const { error } = await supabase.from('pedidos').update(updateData).eq('id', pedido.id);
+            if (error) throw error;
+
+            toast({ title: 'Atualizado', description: 'Campo atualizado com sucesso' });
+            setEditFieldOpen(false);
+            navigate(0);
+          } catch (err: any) {
+            console.error('Erro ao atualizar campo do pedido:', err);
+            toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+          }
+        }}
+      />
 
       {/* Modal de cotações */}
       <CotacaoFreteModal
