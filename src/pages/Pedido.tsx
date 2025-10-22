@@ -515,9 +515,20 @@ export default function Pedido() {
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
-          <p className="text-sm text-muted-foreground">em {pedido?.criado_em ? new Date(pedido.criado_em).toLocaleString('pt-BR') : '—'}</p>
+        <div className="flex items-center gap-4">
+          {/* Avatar of responsible user */}
+          {pedido?.responsavel?.img_url ? (
+            <img src={pedido.responsavel.img_url} alt={pedido?.responsavel?.nome || 'Responsável'} className="w-12 h-12 rounded-full object-cover" />
+          ) : (
+            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-700">
+              {pedido?.responsavel?.nome ? pedido.responsavel.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('') : '—'}
+            </div>
+          )}
+
+          <div>
+            <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
+            <p className="text-sm text-muted-foreground">em {pedido?.criado_em ? new Date(pedido.criado_em).toLocaleString('pt-BR') : '—'}</p>
+          </div>
         </div>
         <div className="flex items-center gap-3">
           <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
