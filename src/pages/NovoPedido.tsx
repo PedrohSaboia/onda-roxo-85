@@ -61,6 +61,33 @@ export default function NovoPedido() {
     return `${intFormatted},${cents}`;
   };
   
+  // Phone/Contato formatting (pt-BR)
+  const formatPhonePtBR = (digitsOrRaw: string) => {
+    if (!digitsOrRaw) return '';
+    const digits = String(digitsOrRaw).replace(/\D/g, '');
+    if (!digits) return '';
+    // limit to 11 digits (DDD + 9) maximum
+    const d = digits.slice(0, 11);
+    const ddd = d.slice(0, 2);
+    const rest = d.slice(2);
+    if (!rest) return `(${ddd}) `;
+    if (rest.length <= 4) return `(${ddd}) ${rest}`;
+    if (rest.length <= 8) {
+      const part1 = rest.slice(0, rest.length - 4);
+      const part2 = rest.slice(-4);
+      return `(${ddd}) ${part1}-${part2}`;
+    }
+    // mobile 9-digit
+    const part1 = rest.slice(0, 5);
+    const part2 = rest.slice(5, 9);
+    return `(${ddd}) ${part1}-${part2}`;
+  };
+
+  const normalizePhoneInput = (raw: string) => {
+    const digits = String(raw || '').replace(/\D/g, '').slice(0, 11);
+    return formatPhonePtBR(digits);
+  };
+  
 
   const produtos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
 
@@ -152,7 +179,8 @@ export default function NovoPedido() {
       const pedidoPayload: any = {
         id_externo: idExterno || null,
         cliente_nome: nome || null,
-        contato: contato || null,
+        // send only digits for contato to the backend
+        contato: contato ? String(contato).replace(/\D/g, '') : null,
         plataforma_id: plataforma,
         status_id: status || null,
         responsavel_id: user?.id || null,
@@ -287,7 +315,11 @@ export default function NovoPedido() {
 
               <div>
                 <label className="text-sm">Contato</label>
-                <Input value={contato} onChange={(e) => setContato(e.target.value)} />
+                <Input
+                  value={contato}
+                  onChange={(e) => setContato(normalizePhoneInput(e.target.value))}
+                  onBlur={() => setContato(formatPhonePtBR(contato))}
+                />
               </div>
 
               {/* Currency inputs similar to Editar Pedido (pt-BR) - placed as three columns to match other inputs */}
