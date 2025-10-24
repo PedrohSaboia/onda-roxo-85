@@ -75,6 +75,21 @@ export default function Pedido() {
   const [modalCart, setModalCart] = useState<any[]>([]);
   const [savingModal, setSavingModal] = useState(false);
   const [clientEditOpen, setClientEditOpen] = useState(false);
+  // Wizard for adding sale details when confirming modal cart
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [wizardStep, setWizardStep] = useState(1);
+  const [wizardDate, setWizardDate] = useState<string>(new Date().toISOString().slice(0,10));
+  const [wizardPayment, setWizardPayment] = useState<string>('Pix');
+  const [wizardValueStr, setWizardValueStr] = useState<string>('');
+  const [wizardSaving, setWizardSaving] = useState(false);
+
+  const formatCurrencyBR = (n: number) => n.toFixed(2).replace('.', ',');
+  const parseCurrencyBR = (s: string) => {
+    if (!s) return 0;
+    const cleaned = String(s).replace(/R\$|\s/g, '').replace(/\./g, '').replace(/,/g, '.');
+    const v = Number(cleaned);
+    return isNaN(v) ? 0 : v;
+  };
 
   // Load produtos for modal when opened
   useEffect(() => {
@@ -1094,8 +1109,8 @@ export default function Pedido() {
 
               <div className="mt-6 flex justify-end gap-3">
                 <Button variant="outline" onClick={() => setAddProductsVisible(false)}>Cancelar</Button>
-                <Button className="bg-purple-700 text-white" onClick={async () => {
-                  // persist modalCart into itens_pedido for current pedido
+                <Button className="bg-purple-700 text-white" onClick={() => {
+                  // Open the wizard (date/payment/value) before persisting
                   if (!pedido) {
                     toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
                     return;
@@ -1104,52 +1119,136 @@ export default function Pedido() {
                     setAddProductsVisible(false);
                     return;
                   }
-                  setSavingModal(true);
-                  try {
-                    // load existing items for this pedido to merge quantities
-                    const { data: existingItems, error: existingError } = await supabase.from('itens_pedido').select('*').eq('pedido_id', pedido.id);
-                    if (existingError) throw existingError;
-
-                    // Build arrays of inserts and updates
-                    const inserts: any[] = [];
-                    const updates: any[] = [];
-
-                    modalCart.forEach((it) => {
-                      const [produtoId, variacaoId] = String(it.id).split(':');
-                      // try find existing item matching produto_id + variacao_id
-                      const match = (existingItems || []).find((e: any) => String(e.produto_id) === String(it.produtoId || produtoId) && String(e.variacao_id || '') === String(variacaoId || ''));
-                      if (match) {
-                        updates.push({ id: match.id, quantidade: (Number(match.quantidade || 0) + Number(it.quantidade || 1)), preco_unitario: it.preco || match.preco_unitario });
-                      } else {
-                        inserts.push({ pedido_id: pedido.id, produto_id: it.produtoId || produtoId, variacao_id: variacaoId || null, quantidade: it.quantidade || 1, preco_unitario: it.preco || 0, criado_em: new Date().toISOString() });
-                      }
-                    });
-
-                    // perform updates (one by one) and bulk insert
-                    for (const u of updates) {
-                      const { error: upErr } = await supabase.from('itens_pedido').update({ quantidade: u.quantidade, preco_unitario: u.preco_unitario } as any).eq('id', u.id);
-                      if (upErr) throw upErr;
-                    }
-
-                    if (inserts.length) {
-                      const { error: insErr } = await supabase.from('itens_pedido').insert(inserts as any);
-                      if (insErr) throw insErr;
-                    }
-
-                    toast({ title: 'Itens adicionados', description: 'Produtos adicionados ao pedido com sucesso' });
-                    setAddProductsVisible(false);
-                    // refresh the page to reflect changes
-                    navigate(0);
-                  } catch (err: any) {
-                    console.error('Erro ao persistir itens do modal:', err);
-                    toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
-                  } finally {
-                    setSavingModal(false);
-                  }
+                  // default value is current modal cart total
+                  const total = modalCart.reduce((s, it) => s + (Number(it.preco || 0) * Number(it.quantidade || 1)), 0);
+                  setWizardValueStr(formatCurrencyBR(total));
+                  setWizardDate(new Date().toISOString().slice(0,10));
+                  setWizardPayment('Pix');
+                  setWizardStep(1);
+                  setAddProductsVisible(false);
+                  setWizardOpen(true);
                 }}>Próxima etapa</Button>
               </div>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Wizard: Data -> Forma de Pagamento -> Valor */}
+      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{wizardStep === 1 ? 'Selecionar Data' : wizardStep === 2 ? 'Selecionar Forma de Pagamento' : 'Definir Valor'}</DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4">
+            {/* simple step indicator */}
+            <div className="flex items-center justify-between mb-4">
+              <div className={`flex-1 text-center ${wizardStep >= 1 ? 'font-semibold text-purple-700' : 'text-gray-400'}`}>Data</div>
+              <div className={`flex-1 text-center ${wizardStep >= 2 ? 'font-semibold text-purple-700' : 'text-gray-400'}`}>Forma. Pag</div>
+              <div className={`flex-1 text-center ${wizardStep >= 3 ? 'font-semibold text-purple-700' : 'text-gray-400'}`}>Valor</div>
+            </div>
+
+            {wizardStep === 1 && (
+              <div className="text-center">
+                <input type="date" className="mx-auto p-2 border rounded" value={wizardDate} onChange={(e) => setWizardDate(e.target.value)} />
+                <div className="mt-4 text-sm text-muted-foreground">Você selecionou {wizardDate.split('-').reverse().join('/')}</div>
+              </div>
+            )}
+
+            {wizardStep === 2 && (
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-4">
+                  {['Pix','Boleto','Cartão','Outro'].map((m) => (
+                    <button key={m} onClick={() => setWizardPayment(m)} className={`px-4 py-2 rounded ${wizardPayment === m ? 'ring-2 ring-purple-500 bg-white' : 'bg-gray-100'}`}>
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 text-sm">Você selecionou <strong>{wizardPayment}</strong></div>
+              </div>
+            )}
+
+            {wizardStep === 3 && (
+              <div>
+                <label className="block text-sm text-muted-foreground">Valor da venda</label>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
+                  <Input value={wizardValueStr} onChange={(e) => setWizardValueStr(e.target.value)} />
+                </div>
+                <label className="flex items-center gap-2 mt-3"><input type="checkbox" /> Pagamento não integral</label>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <div className="flex justify-between w-full">
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => {
+                  // Cancel wizard and reopen addProducts modal for editing
+                  setWizardOpen(false);
+                  setAddProductsVisible(true);
+                }}>Cancelar</Button>
+                {wizardStep > 1 && <Button variant="ghost" onClick={() => setWizardStep(w => Math.max(1, w-1))}>Voltar</Button>}
+              </div>
+              <div>
+                {wizardStep < 3 ? (
+                  <Button className="bg-purple-700 text-white" onClick={() => setWizardStep(s => s + 1)}>Próxima etapa</Button>
+                ) : (
+                  <Button className="bg-purple-700 text-white" onClick={async () => {
+                    // finalize: persist itens_pedido and add value to pedido.valor_total
+                    if (!pedido) return;
+                    const providedValue = parseCurrencyBR(wizardValueStr);
+                    setWizardSaving(true);
+                    try {
+                      // load existing items for this pedido to merge quantities
+                      const { data: existingItems, error: existingError } = await supabase.from('itens_pedido').select('*').eq('pedido_id', pedido.id);
+                      if (existingError) throw existingError;
+
+                      const inserts: any[] = [];
+                      const updates: any[] = [];
+
+                      modalCart.forEach((it) => {
+                        const [produtoId, variacaoId] = String(it.id).split(':');
+                        const match = (existingItems || []).find((e: any) => String(e.produto_id) === String(it.produtoId || produtoId) && String(e.variacao_id || '') === String(variacaoId || ''));
+                        if (match) {
+                          updates.push({ id: match.id, quantidade: (Number(match.quantidade || 0) + Number(it.quantidade || 1)), preco_unitario: it.preco || match.preco_unitario });
+                        } else {
+                          inserts.push({ pedido_id: pedido.id, produto_id: it.produtoId || produtoId, variacao_id: variacaoId || null, quantidade: it.quantidade || 1, preco_unitario: it.preco || 0, criado_em: new Date().toISOString() });
+                        }
+                      });
+
+                      for (const u of updates) {
+                        const { error: upErr } = await supabase.from('itens_pedido').update({ quantidade: u.quantidade, preco_unitario: u.preco_unitario } as any).eq('id', u.id);
+                        if (upErr) throw upErr;
+                      }
+
+                      if (inserts.length) {
+                        const { error: insErr } = await supabase.from('itens_pedido').insert(inserts as any);
+                        if (insErr) throw insErr;
+                      }
+
+                      // update pedido valor_total (add providedValue)
+                      const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
+                      const newTotal = Number((currentTotal + providedValue).toFixed(2));
+                      const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
+                      if (updErr) throw updErr;
+
+                      toast({ title: 'Itens adicionados', description: 'Produtos adicionados e valor atualizado no pedido' });
+                      setWizardOpen(false);
+                      // refresh page
+                      navigate(0);
+                    } catch (err: any) {
+                      console.error('Erro ao persistir itens do modal (wizard):', err);
+                      toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                    } finally {
+                      setWizardSaving(false);
+                    }
+                  }}>Adicionar ({modalCart.length})</Button>
+                )}
+              </div>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
