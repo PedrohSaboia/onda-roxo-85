@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy } from 'lucide-react';
+import { Trash, Copy, Edit } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import EmbalagensManager from '@/components/shipping/EmbalagensManager';
@@ -14,6 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import EditSelectModal from '@/components/modals/EditSelectModal';
+import ClientEditModal from '@/components/modals/ClientEditModal';
 
 function formatAddress(cliente: any) {
   if (!cliente) return '-';
@@ -27,7 +28,7 @@ function formatAddress(cliente: any) {
   if (cityParts.length) parts.push(cityParts.join(' / '));
   if (cliente.cep) parts.push(`CEP: ${cliente.cep}`);
   return parts.join(' • ');
-}
+} 
 
 export default function Pedido() {
   const { id } = useParams();
@@ -73,6 +74,7 @@ export default function Pedido() {
   const [brindeSelectionsModal, setBrindeSelectionsModal] = useState<Record<string, boolean>>({});
   const [modalCart, setModalCart] = useState<any[]>([]);
   const [savingModal, setSavingModal] = useState(false);
+  const [clientEditOpen, setClientEditOpen] = useState(false);
 
   // Load produtos for modal when opened
   useEffect(() => {
@@ -551,11 +553,16 @@ export default function Pedido() {
             <div className="flex-1 flex gap-8 items-start h-full">
               <div className="flex-1">
                 <div className="text-sm text-muted-foreground">CLIENTE</div>
-                <div className="font-medium text-lg">
-                  {pedido?.cliente ? (
-                    <a className="text-blue-600 hover:underline">{pedido.cliente.nome}</a>
-                  ) : '—'}
-                </div>
+                  <div className="font-medium text-lg flex items-center gap-2">
+                    {pedido?.cliente ? (
+                      <>
+                        <a className="text-blue-600 hover:underline">{pedido.cliente.nome}</a>
+                        <button onClick={() => setClientEditOpen(true)} className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100">
+                          <Edit className="h-4 w-4 text-gray-600" />
+                        </button>
+                      </>
+                    ) : '—'}
+                  </div>
                 <div className="text-sm text-muted-foreground">{pedido?.cliente?.email}</div>
                 <div className="mt-2 text-sm">{pedido?.cliente?.telefone && (<span className="text-blue-600">{pedido.cliente.telefone}</span>)}</div>
                 <div className="mt-2 text-sm text-muted-foreground">
@@ -698,50 +705,66 @@ export default function Pedido() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Status</div>
-                  <div className="font-medium flex items-center gap-3">
-                    {pedido?.status?.nome || '—'}
-                    <Button variant="ghost" size="sm" onClick={() => {
-                      setEditOptions(statuses.map(s => ({ id: s.id, nome: s.nome })));
-                      setEditValue(pedido?.status?.id || null);
-                      setEditFieldKey('status');
-                      setEditFieldOpen(true);
-                    }}>Editar</Button>
+                  <div className="font-medium">
+                    <button
+                      className="text-left hover:underline"
+                      onClick={() => {
+                        setEditOptions(statuses.map(s => ({ id: s.id, nome: s.nome })));
+                        setEditValue(pedido?.status?.id || null);
+                        setEditFieldKey('status');
+                        setEditFieldOpen(true);
+                      }}
+                    >
+                      {pedido?.status?.nome || '—'}
+                    </button>
                   </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Plataforma</div>
-                  <div className="font-medium flex items-center gap-3">
-                    {pedido?.plataforma?.nome || '—'}
-                    <Button variant="ghost" size="sm" onClick={() => {
-                      setEditOptions(plataformas.map(p => ({ id: p.id, nome: p.nome })));
-                      setEditValue(pedido?.plataforma?.id || null);
-                      setEditFieldKey('plataforma');
-                      setEditFieldOpen(true);
-                    }}>Editar</Button>
+                  <div className="font-medium">
+                    <button
+                      className="text-left hover:underline"
+                      onClick={() => {
+                        setEditOptions(plataformas.map(p => ({ id: p.id, nome: p.nome })));
+                        setEditValue(pedido?.plataforma?.id || null);
+                        setEditFieldKey('plataforma');
+                        setEditFieldOpen(true);
+                      }}
+                    >
+                      {pedido?.plataforma?.nome || '—'}
+                    </button>
                   </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Etiqueta</div>
-                  <div className="font-medium flex items-center gap-3">
-                    {pedido?.etiqueta?.nome || '—'}
-                    <Button variant="ghost" size="sm" onClick={() => {
-                      setEditOptions(etiquetas.map(e => ({ id: e.id, nome: e.nome })));
-                      setEditValue(pedido?.etiqueta?.id || null);
-                      setEditFieldKey('etiqueta');
-                      setEditFieldOpen(true);
-                    }}>Editar</Button>
+                  <div className="font-medium">
+                    <button
+                      className="text-left hover:underline"
+                      onClick={() => {
+                        setEditOptions(etiquetas.map(e => ({ id: e.id, nome: e.nome })));
+                        setEditValue(pedido?.etiqueta?.id || null);
+                        setEditFieldKey('etiqueta');
+                        setEditFieldOpen(true);
+                      }}
+                    >
+                      {pedido?.etiqueta?.nome || '—'}
+                    </button>
                   </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Responsável</div>
-                  <div className="font-medium flex items-center gap-3">
-                    {pedido?.responsavel?.nome || '—'}
-                    <Button variant="ghost" size="sm" onClick={() => {
-                      setEditOptions(usuarios.map(u => ({ id: u.id, nome: u.nome })));
-                      setEditValue(pedido?.responsavel?.id || null);
-                      setEditFieldKey('responsavel');
-                      setEditFieldOpen(true);
-                    }}>Editar</Button>
+                  <div className="font-medium">
+                    <button
+                      className="text-left hover:underline"
+                      onClick={() => {
+                        setEditOptions(usuarios.map(u => ({ id: u.id, nome: u.nome })));
+                        setEditValue(pedido?.responsavel?.id || null);
+                        setEditFieldKey('responsavel');
+                        setEditFieldOpen(true);
+                      }}
+                    >
+                      {pedido?.responsavel?.nome || '—'}
+                    </button>
                   </div>
                 </div>
                 <div>
@@ -1177,6 +1200,9 @@ export default function Pedido() {
           }
         }}
       />
+
+  {/* Client edit modal (pencil icon) */}
+  <ClientEditModal open={clientEditOpen} onOpenChange={setClientEditOpen} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} onSaved={() => navigate(0)} />
 
       {/* Modal de cotações */}
       <CotacaoFreteModal
