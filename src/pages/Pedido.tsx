@@ -978,23 +978,7 @@ export default function Pedido() {
 
           {/* Cards de gerenciamento */}
           <div className="grid grid-cols-2 gap-6 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  Etiqueta
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-sm text-muted-foreground mb-2">
-                  Status atual: {pedido?.etiqueta?.nome || 'Não liberado'}
-                </div>
-                <Input 
-                  placeholder="Etiqueta de envio" 
-                  value={etiquetaText} 
-                  onChange={(e) => setEtiquetaText(e.target.value)} 
-                />
-              </CardContent>
-            </Card>
+           
 
             {/* Link Etiqueta moved to the top delivery info card as requested */}
           </div>
