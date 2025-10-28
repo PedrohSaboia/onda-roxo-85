@@ -100,6 +100,7 @@ export interface Pedido {
   itens: ItemPedido[];
   responsavel?: Usuario;
   plataforma?: Plataforma;
+  transportadora?: { id?: string; nome?: string; imagemUrl?: string; raw?: any };
   status?: Status;
   criadoEm: string;
   atualizadoEm: string;

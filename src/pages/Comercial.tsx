@@ -64,6 +64,8 @@ export function Comercial() {
           const usuarioRow = pick(row.usuarios);
           const statusRow = pick(row.status);
           const etiquetaRow = pick(row.tipos_etiqueta);
+          // frete_melhor_envio may be saved as JSON on pedidos
+          const freteMe = (row as any).frete_melhor_envio || null;
 
           const normalizeEtiqueta = (nome?: string) => {
             if (!nome) return 'NAO_LIBERADO' as const;
@@ -108,6 +110,14 @@ export function Comercial() {
                   atualizadoEm: '',
                 }
               : undefined,
+            transportadora: freteMe ? (() => {
+              // prefer nested raw_response.company.picture per sample payload; fallback to company fields
+              const raw = (freteMe.raw_response || freteMe.raw || freteMe);
+              const company = raw?.company || freteMe.company || null;
+              const nome = freteMe.transportadora || company?.name || raw?.company?.name || undefined;
+              const imagem = company?.picture || company?.logo || company?.icon || undefined;
+              return { id: undefined, nome, imagemUrl: imagem, raw };
+            })() : undefined,
             status: statusRow
               ? {
                   id: statusRow.id,
@@ -210,6 +220,7 @@ export function Comercial() {
                 <TableHead>Data</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Plataforma</TableHead>
+                <TableHead>Transportadora</TableHead>
                 <TableHead>Responsável</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Etiqueta</TableHead>
@@ -279,6 +290,24 @@ export function Comercial() {
                         {pedido.plataforma?.nome}
                       </div>
                   </TableCell>
+
+                  <TableCell>
+                    <div className="flex items-center">
+                      {pedido.transportadora?.imagemUrl ? (
+                        <div className="w-10 h-8 overflow-hidden flex items-center justify-center">
+                          <img
+                            src={pedido.transportadora.imagemUrl}
+                            alt={pedido.transportadora.nome || 'Transportadora'}
+                            loading="lazy"
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                      ) : (
+                        <div className="text-sm text-muted-foreground">—</div>
+                      )}
+                    </div>
+                  </TableCell>
+
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <Avatar className="h-6 w-6">
