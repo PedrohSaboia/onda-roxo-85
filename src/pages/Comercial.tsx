@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Search, Filter, Eye, Edit, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { Pedido } from '@/types';
+import ComercialSidebar from '@/components/layout/ComercialSidebar';
 
 const etiquetaLabels = {
   NAO_LIBERADO: 'Não Liberado',
@@ -173,19 +174,22 @@ export function Comercial() {
   const pageSizeOptions = [10, 20, 30, 50];
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Pedidos</h1>
-          <p className="text-muted-foreground">
-            {filteredPedidos.length} pedidos encontrados
-          </p>
-        </div>
-        <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => navigate('/novo-pedido')}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Pedido
-        </Button>
-      </div>
+    <div className="flex items-start gap-6">
+      <ComercialSidebar />
+
+      <div className="flex-1 p-6 space-y-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold">Pedidos</h1>
+              <p className="text-muted-foreground">
+                {filteredPedidos.length} pedidos encontrados
+              </p>
+            </div>
+            <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => navigate('/novo-pedido')}>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Pedido
+            </Button>
+          </div>
 
       {/* Filtros e busca */}
       <Card>
@@ -397,7 +401,8 @@ export function Comercial() {
             <Button size="sm" variant="outline" onClick={handleNext} disabled={page >= totalPages}>Próximo</Button>
           </div>
         </div>
-      </Card>
+  </Card>
+  </div>
     </div>
   );
 }
