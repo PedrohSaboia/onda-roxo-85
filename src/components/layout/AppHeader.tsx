@@ -40,7 +40,10 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
   ];
 
   return (
-    <header className="h-16 bg-gradient-to-r from-purple-600 to-purple-800 border-b border-purple-500/20 px-4 flex items-center shadow-lg">
+    <header
+      className="h-16 border-b px-4 flex items-center shadow-lg"
+      style={{ background: 'var(--gradient-primary)', borderBottomColor: 'rgba(0,0,0,0.06)' }}
+    >
       <div className="flex items-center gap-4">
         <Button
           variant="ghost"
@@ -52,10 +55,16 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
         </Button>
 
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-white/20 rounded-lg flex items-center justify-center">
-            <span className="text-white font-bold text-lg">T</span>
+          <div className="flex items-center">
+            {/* logo image - place your uploaded logo in public/zeelux-logo.png (or .svg). The image should have transparent background. */}
+            <img
+              src="/zeelux-logo.png"
+              alt="zeelux"
+              className="h-10 object-contain"
+              style={{ maxWidth: 200 }}
+              onError={(e:any) => { e.currentTarget.src = '/placeholder.svg'; }}
+            />
           </div>
-          <h1 className="text-xl font-bold text-white">ZEELUX</h1>
         </div>
       </div>
 
