@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -33,6 +33,9 @@ function formatAddress(cliente: any) {
 export default function Pedido() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const readonly = params.get('readonly') === '1' || params.get('readonly') === 'true';
   const [pedido, setPedido] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [statuses, setStatuses] = useState<any[]>([]);
@@ -552,7 +555,7 @@ export default function Pedido() {
           <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
             {pedido?.status?.nome}
           </Badge>
-          {pedido && (
+          {!readonly && pedido && (
             <>
               <Button variant="ghost" className="text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
                 <Trash className="h-5 w-5" />
@@ -569,12 +572,14 @@ export default function Pedido() {
               <div className="flex-1">
                 <div className="text-sm text-muted-foreground">CLIENTE</div>
                   <div className="font-medium text-lg flex items-center gap-2">
-                    {pedido?.cliente ? (
+                        {pedido?.cliente ? (
                       <>
                         <a className="text-blue-600 hover:underline">{pedido.cliente.nome}</a>
-                        <button onClick={() => setClientEditOpen(true)} className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100">
-                          <Edit className="h-4 w-4 text-gray-600" />
-                        </button>
+                        {!readonly && (
+                          <button onClick={() => setClientEditOpen(true)} className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100">
+                            <Edit className="h-4 w-4 text-gray-600" />
+                          </button>
+                        )}
                       </>
                     ) : '—'}
                   </div>
@@ -670,7 +675,7 @@ export default function Pedido() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Produtos</CardTitle>
-                <Button className="bg-purple-700 text-white" onClick={() => setAddProductsVisible(true)}>Adicionar Produto</Button>
+                <Button className="bg-purple-700 text-white" onClick={() => { if (!readonly) setAddProductsVisible(true); }} disabled={readonly}>Adicionar Produto</Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -723,7 +728,9 @@ export default function Pedido() {
                   <div className="font-medium">
                     <button
                       className="text-left hover:underline"
+                      disabled={readonly}
                       onClick={() => {
+                        if (readonly) return;
                         setEditOptions(statuses.map(s => ({ id: s.id, nome: s.nome })));
                         setEditValue(pedido?.status?.id || null);
                         setEditFieldKey('status');
@@ -739,7 +746,9 @@ export default function Pedido() {
                   <div className="font-medium">
                     <button
                       className="text-left hover:underline"
+                      disabled={readonly}
                       onClick={() => {
+                        if (readonly) return;
                         setEditOptions(plataformas.map(p => ({ id: p.id, nome: p.nome })));
                         setEditValue(pedido?.plataforma?.id || null);
                         setEditFieldKey('plataforma');
@@ -755,7 +764,9 @@ export default function Pedido() {
                   <div className="font-medium">
                     <button
                       className="text-left hover:underline"
+                      disabled={readonly}
                       onClick={() => {
+                        if (readonly) return;
                         setEditOptions(etiquetas.map(e => ({ id: e.id, nome: e.nome })));
                         setEditValue(pedido?.etiqueta?.id || null);
                         setEditFieldKey('etiqueta');
@@ -771,7 +782,9 @@ export default function Pedido() {
                   <div className="font-medium">
                     <button
                       className="text-left hover:underline"
+                      disabled={readonly}
                       onClick={() => {
+                        if (readonly) return;
                         setEditOptions(usuarios.map(u => ({ id: u.id, nome: u.nome })));
                         setEditValue(pedido?.responsavel?.id || null);
                         setEditFieldKey('responsavel');
@@ -792,9 +805,11 @@ export default function Pedido() {
                 </div>
               </div>
 
-              <div className="flex gap-3 justify-end">
-                <Button onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
-              </div>
+              {!readonly && (
+                <div className="flex gap-3 justify-end">
+                  <Button onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -835,6 +850,7 @@ export default function Pedido() {
                           onChange={(e) => setSelectedRemetente(
                             remetentes.find(r => r.id === e.target.value) || null
                           )}
+                          disabled={readonly}
                         >
                           {remetentes.map(r => (
                             <option key={r.id} value={r.id}>{r.nome}</option>
@@ -843,7 +859,8 @@ export default function Pedido() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setRemetentesVisible(true)}
+                          onClick={() => { if (!readonly) setRemetentesVisible(true); }}
+                          disabled={readonly}
                         >
                           Gerenciar
                         </Button>
@@ -859,6 +876,7 @@ export default function Pedido() {
                           onChange={(e) => setSelectedEmbalagem(
                             embalagens.find(em => em.id === e.target.value) || null
                           )}
+                          disabled={readonly}
                         >
                           {embalagens.map(em => (
                             <option key={em.id} value={em.id}>
@@ -869,7 +887,8 @@ export default function Pedido() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => setEmbalagensVisible(true)}
+                          onClick={() => { if (!readonly) setEmbalagensVisible(true); }}
+                          disabled={readonly}
                         >
                           Gerenciar
                         </Button>
@@ -886,6 +905,7 @@ export default function Pedido() {
                   <>
                     <Button
                       onClick={async () => {
+                        if (readonly) return;
                         if (!pedido) return;
                         setProcessingLabel(true);
                         try {
@@ -923,7 +943,7 @@ export default function Pedido() {
                           setProcessingLabel(false);
                         }
                       }}
-                      disabled={processingLabel}
+                      disabled={processingLabel || readonly}
                       className="border-2 border-sky-400 text-sky-700 bg-white hover:bg-sky-50"
                     >
                       <span className="inline-flex items-center gap-2">
@@ -940,6 +960,7 @@ export default function Pedido() {
 
                     <Button
                       onClick={async () => {
+                        if (readonly) return;
                         // Cancelar etiqueta: limpar id_melhor_envio e carrinho_me no pedido
                         try {
                           const { error } = await supabase
@@ -956,6 +977,7 @@ export default function Pedido() {
                         }
                       }}
                       className="bg-red-600 hover:bg-red-700 text-white"
+                      disabled={readonly}
                     >
                       Cancelar etiqueta
                     </Button>
@@ -964,8 +986,8 @@ export default function Pedido() {
                   // Botões originais para calcular e enviar mais barato
                   <>
                     <Button
-                      onClick={handleCalcularFrete}
-                      disabled={calculandoFrete}
+                      onClick={() => { if (!readonly) handleCalcularFrete(); }}
+                      disabled={calculandoFrete || readonly}
                       className="bg-amber-500 hover:bg-amber-600"
                     >
                       {calculandoFrete ? (
@@ -979,8 +1001,8 @@ export default function Pedido() {
                     </Button>
                     
                     <Button
-                      onClick={handleEnviarMaisBarato}
-                      disabled={calculandoFrete}
+                      onClick={() => { if (!readonly) handleEnviarMaisBarato(); }}
+                      disabled={calculandoFrete || readonly}
                       className="bg-purple-700 hover:bg-purple-800"
                     >
                       {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
@@ -1001,13 +1023,13 @@ export default function Pedido() {
       </Tabs>
 
       {/* Modais de gerenciamento */}
-      <Dialog open={remetentesVisible} onOpenChange={setRemetentesVisible}>
+  <Dialog open={remetentesVisible} onOpenChange={(open) => { if (!readonly) setRemetentesVisible(open); }}>
         <DialogContent className="max-w-4xl">
           <RemetentesManager />
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+  <Dialog open={deleteConfirmOpen} onOpenChange={(open) => { if (!readonly) setDeleteConfirmOpen(open); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Excluir Pedido</DialogTitle>
@@ -1025,14 +1047,14 @@ export default function Pedido() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={embalagensVisible} onOpenChange={setEmbalagensVisible}>
+  <Dialog open={embalagensVisible} onOpenChange={(open) => { if (!readonly) setEmbalagensVisible(open); }}>
         <DialogContent className="max-w-4xl">
           <EmbalagensManager />
         </DialogContent>
       </Dialog>
 
       {/* Modal de Adicionar Produtos (copiado do NovoPedido UI pattern) */}
-      <Dialog open={addProductsVisible} onOpenChange={setAddProductsVisible}>
+  <Dialog open={addProductsVisible} onOpenChange={(open) => { if (!readonly) setAddProductsVisible(open); }}>
         <DialogContent className="max-w-6xl w-full">
           <div className="grid grid-cols-2 gap-6">
             <div>
@@ -1255,11 +1277,15 @@ export default function Pedido() {
       {/* Reusable edit modal for single-field dropdowns */}
       <EditSelectModal
         open={editFieldOpen}
-        onOpenChange={(open) => setEditFieldOpen(open)}
+        onOpenChange={(open) => { if (!readonly) setEditFieldOpen(open); }}
         title={editFieldKey === 'status' ? 'Atualizar Status' : editFieldKey === 'plataforma' ? 'Atualizar Plataforma' : editFieldKey === 'responsavel' ? 'Atualizar Responsável' : 'Atualizar Etiqueta'}
         options={editOptions}
         value={editValue}
         onSave={async (selectedId) => {
+          if (readonly) {
+            toast({ title: 'Somente leitura', description: 'Este pedido é somente leitura e não pode ser alterado.' });
+            return;
+          }
           if (!pedido) {
             toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
             return;
@@ -1285,7 +1311,7 @@ export default function Pedido() {
       />
 
   {/* Client edit modal (pencil icon) */}
-  <ClientEditModal open={clientEditOpen} onOpenChange={setClientEditOpen} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} onSaved={() => navigate(0)} />
+  <ClientEditModal open={clientEditOpen} onOpenChange={(open) => { if (!readonly) setClientEditOpen(open); }} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} onSaved={() => navigate(0)} />
 
       {/* Modal de cotações */}
       <CotacaoFreteModal

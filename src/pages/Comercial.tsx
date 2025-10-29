@@ -26,6 +26,8 @@ const etiquetaColors = {
 
 export function Comercial() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const view = new URLSearchParams(location.search).get('view') || 'pedidos';
   const [searchTerm, setSearchTerm] = useState('');
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(false);
@@ -45,14 +47,23 @@ export function Comercial() {
         const from = (page - 1) * pageSize;
         const to = page * pageSize - 1;
 
-        const { data, error: supaError, count } = await supabase
+        // If the ComercialSidebar requested a specific view (ex: enviados), apply extra filters
+        const view = new URLSearchParams(location.search).get('view') || 'pedidos';
+
+        const query = supabase
           .from('pedidos')
           .select(
             `*, plataformas(id,nome,cor,img_url), usuarios(id,nome,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem,criado_em,atualizado_em)`,
             { count: 'exact' }
           )
-          .order('criado_em', { ascending: false })
-          .range(from, to);
+          .order('criado_em', { ascending: false });
+
+        // when on the "enviados" view, only fetch pedidos with the Enviado status id
+        if (view === 'enviados') {
+          query.eq('status_id', 'fa6b38ba-1d67-4bc3-821e-ab089d641a25');
+        }
+
+        const { data, error: supaError, count } = await query.range(from, to);
 
         if (supaError) throw supaError;
 
@@ -157,7 +168,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize]);
+  }, [page, pageSize, view]);
 
   const filteredPedidos = pedidos.filter(pedido =>
     pedido.idExterno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -180,7 +191,7 @@ export function Comercial() {
       <div className="flex-1 p-6 space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold">Pedidos</h1>
+              <h1 className="text-2xl font-bold">{view === 'enviados' ? 'Pedidos Enviados' : 'Pedidos'}</h1>
               <p className="text-muted-foreground">
                 {filteredPedidos.length} pedidos encontrados
               </p>
@@ -248,7 +259,7 @@ export function Comercial() {
               )}
 
               {filteredPedidos.map((pedido) => (
-                <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => navigate(`/pedido/${pedido.id}`)}>
+                <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => navigate(`/pedido/${pedido.id}${view === 'enviados' ? '?readonly=1' : ''}`)}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       {pedido.urgente && (
