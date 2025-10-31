@@ -16,11 +16,20 @@ export function ComercialSidebar() {
   const view = params.get('view') || 'pedidos'
 
   const handleClick = (id: string) => {
-    // keep module=comercial while switching view
+    // Special-case: open the dedicated Leads page
+    if (id === 'leads') {
+      navigate('/leads');
+      return;
+    }
+
+    // keep module=comercial while switching view for other items
     const next = new URLSearchParams(location.search)
     next.set('module', 'comercial')
     next.set('view', id)
-    navigate({ pathname: location.pathname, search: next.toString() })
+    // If we're currently on a dedicated route like /leads, navigate back to the Comercial root
+    // so the Comercial page will receive the query params and render the requested view.
+    const targetPath = location.pathname === '/leads' ? '/' : location.pathname;
+    navigate({ pathname: targetPath, search: next.toString() })
   }
 
   // Sidebar begins below header because it's rendered inside the page's main area
@@ -33,7 +42,13 @@ export function ComercialSidebar() {
           <ul className="px-3 py-3 space-y-2">{/* options directly in menu (no surrounding card) */}
             {items.map((it) => {
               const Icon = it.icon
-              const isActive = view === it.id && currentModule === 'comercial'
+              // When on the dedicated /leads route, only mark the 'leads' item active.
+              let isActive = false;
+              if (location.pathname === '/leads') {
+                isActive = it.id === 'leads';
+              } else {
+                isActive = view === it.id && currentModule === 'comercial';
+              }
               return (
                 <li key={it.id}>
                   <button
