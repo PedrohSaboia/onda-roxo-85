@@ -34,6 +34,10 @@ export default function Leads() {
   const [search, setSearch] = useState('');
   const [productsMap, setProductsMap] = useState<Record<string, any>>({});
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [total, setTotal] = useState<number>(0);
+  const pageSizeOptions = [10, 20, 30, 50];
   const { toast } = useToast();
 
   useEffect(() => {
@@ -41,7 +45,14 @@ export default function Leads() {
     const load = async () => {
       setLoading(true);
       try {
-        const { data: leadsData, error: leadsError } = await (supabase as any).from('leads').select('*').order('created_at', { ascending: false });
+        const from = (page - 1) * pageSize;
+        const to = page * pageSize - 1;
+
+        const { data: leadsData, error: leadsError, count } = await (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact' })
+          .order('created_at', { ascending: false })
+          .range(from, to);
         if (leadsError) throw leadsError;
 
         // collect product ids and user ids to fetch related names
@@ -65,6 +76,7 @@ export default function Leads() {
         setProductsMap(pMap);
         setUsersMap(uMap);
         setLeads(leadsData || []);
+        setTotal(count || 0);
       } catch (err: any) {
         console.error('Erro ao carregar leads:', err);
         toast({ title: 'Erro', description: 'Não foi possível carregar leads', variant: 'destructive' });
@@ -75,7 +87,7 @@ export default function Leads() {
 
     load();
     return () => { mounted = false };
-  }, []);
+  }, [page, pageSize]);
 
     const updateStatus = async (leadId: string, newStatus: number) => {
     try {
@@ -97,6 +109,10 @@ export default function Leads() {
   });
 
   const clearSearch = () => setSearch('');
+
+  const totalPages = Math.max(1, Math.ceil((total || leads.length) / pageSize));
+  const handlePrev = () => setPage(p => Math.max(1, p - 1));
+  const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
 
   const renderTypeIcon = (lead: LeadRow) => {
     const t = (lead.tipo_pessoa || lead.tag_utm || '').toString().toLowerCase();
@@ -174,6 +190,33 @@ export default function Leads() {
                   </TableBody>
                 </Table>
               </CardContent>
+              <div className="flex items-center justify-between p-4 border-t">
+                <div className="flex items-center gap-4">
+                  <div className="text-sm text-muted-foreground">
+                    Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total || filtered.length)}</strong> de <strong>{total || filtered.length}</strong>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm text-muted-foreground">Mostrar</label>
+                    <select
+                      value={pageSize}
+                      onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                      className="border rounded px-2 py-1"
+                    >
+                      {pageSizeOptions.map(opt => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </select>
+                    <span className="text-sm text-muted-foreground">/ página</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={handlePrev} disabled={page <= 1}>Anterior</Button>
+                  <div className="text-sm">{page} / {totalPages}</div>
+                  <Button size="sm" variant="outline" onClick={handleNext} disabled={page >= totalPages}>Próximo</Button>
+                </div>
+              </div>
             </Card>
           </div>
         </div>
