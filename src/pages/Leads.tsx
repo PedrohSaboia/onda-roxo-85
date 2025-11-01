@@ -101,7 +101,27 @@ export default function Leads() {
     }
   };
 
-  const filtered = leads.filter(l => {
+    const copyContact = async (contato?: string | null) => {
+      if (!contato) return;
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(contato);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = contato;
+          document.body.appendChild(ta);
+          ta.select();
+          (document as any).execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        toast({ title: 'Copiado', description: `Contato ${contato} copiado para a área de transferência.` });
+      } catch (err: any) {
+        console.error('Erro ao copiar contato:', err);
+        toast({ title: 'Erro', description: 'Não foi possível copiar o contato', variant: 'destructive' });
+      }
+    };
+
+    const filtered = leads.filter(l => {
     if (!search) return true;
     const q = search.toLowerCase();
     const prodName = l.produto_id ? (productsMap[l.produto_id]?.nome || '') : '';
@@ -167,7 +187,18 @@ export default function Leads() {
                       <TableRow key={lead.id}>
                         <TableCell>{renderTypeIcon(lead)}</TableCell>
                         <TableCell className="font-medium text-purple-700">{lead.nome || '—'}</TableCell>
-                        <TableCell className="text-green-700">{lead.contato || '—'}</TableCell>
+                        <TableCell>
+                          {lead.contato ? (
+                            <button
+                              className="text-green-700 hover:underline"
+                              onClick={() => copyContact(lead.contato)}
+                              title="Copiar contato"
+                              aria-label={`Copiar contato ${lead.contato}`}
+                            >
+                              {lead.contato}
+                            </button>
+                          ) : '—'}
+                        </TableCell>
                         <TableCell>R$ {Number(lead.valor_total || 0).toFixed(2)}</TableCell>
                         <TableCell>{lead.produto_id ? (productsMap[lead.produto_id]?.nome || '—') : '—'}</TableCell>
                         <TableCell>{lead.responsavel ? (usersMap[lead.responsavel]?.nome || '—') : '—'}</TableCell>
