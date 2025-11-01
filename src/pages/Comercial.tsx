@@ -35,6 +35,11 @@ export function Comercial() {
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [total, setTotal] = useState<number>(0);
+  const [totalExcludingEnviados, setTotalExcludingEnviados] = useState<number>(0);
+  const [showFilters, setShowFilters] = useState(false);
+  // filter: when true, only show pedidos where pedido_liberado = FALSE
+  const initialLiberadoParam = new URLSearchParams(location.search).get('pedido_liberado');
+  const [filterNotLiberado, setFilterNotLiberado] = useState<boolean>(initialLiberadoParam === 'false');
 
   useEffect(() => {
     let mounted = true;
@@ -61,6 +66,12 @@ export function Comercial() {
         // when on the "enviados" view, only fetch pedidos with the Enviado status id
         if (view === 'enviados') {
           query.eq('status_id', 'fa6b38ba-1d67-4bc3-821e-ab089d641a25');
+        }
+
+        // apply pedido_liberado = FALSE filter when requested
+        if (filterNotLiberado) {
+          // only include pedidos where pedido_liberado is false or null/false
+          query.eq('pedido_liberado', false);
         }
 
         const { data, error: supaError, count } = await query.range(from, to);
@@ -168,7 +179,25 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view]);
+  }, [page, pageSize, view, filterNotLiberado]);
+
+  // fetch total count excluding 'Enviado' status
+  useEffect(() => {
+    let mounted = true;
+    const ENVIADO_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
+    const loadTotal = async () => {
+      try {
+        const { count, error } = await supabase.from('pedidos').select('id', { count: 'exact' }).neq('status_id', ENVIADO_ID).limit(1);
+        if (error) throw error;
+        if (!mounted) return;
+        setTotalExcludingEnviados(count || 0);
+      } catch (err) {
+        console.error('Erro ao buscar total excluindo enviados:', err);
+      }
+    };
+    loadTotal();
+    return () => { mounted = false };
+  }, [/* run on mount and when relevant filters change in future */]);
 
   const filteredPedidos = pedidos.filter(pedido =>
     pedido.idExterno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -193,7 +222,11 @@ export function Comercial() {
             <div>
               <h1 className="text-2xl font-bold">{view === 'enviados' ? 'Pedidos Enviados' : 'Pedidos'}</h1>
               <p className="text-muted-foreground">
-                {filteredPedidos.length} pedidos encontrados
+                {view === 'enviados'
+                  ? `${filteredPedidos.length} pedidos encontrados`
+                  : filterNotLiberado
+                    ? `${total} pedidos encontrados`
+                    : `${totalExcludingEnviados} pedidos encontrados`}
               </p>
             </div>
             <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => navigate('/novo-pedido')}>
@@ -215,12 +248,43 @@ export function Comercial() {
                 className="pl-10"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                Filtrar
-              </Button>
-            </div>
+              <div className="flex items-center gap-2 relative">
+                <div>
+                  <Button variant="outline" size="sm" onClick={() => setShowFilters(s => !s)}>
+                    <Filter className="h-4 w-4 mr-2" />
+                    Filtrar
+                  </Button>
+                  {showFilters && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-20 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium">Filtros</div>
+                        <button className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
+                      </div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <input id="filter-not-liberado" type="checkbox" checked={filterNotLiberado} onChange={(e) => setFilterNotLiberado(e.target.checked)} />
+                        <label htmlFor="filter-not-liberado" className="text-sm">Somente pedidos não liberados</label>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button variant="outline" size="sm" onClick={() => {
+                          // clear filter
+                          setFilterNotLiberado(false);
+                          const next = new URLSearchParams(location.search);
+                          next.delete('pedido_liberado');
+                          navigate({ pathname: location.pathname, search: next.toString() });
+                          setShowFilters(false);
+                        }}>Limpar</Button>
+                        <Button size="sm" onClick={() => {
+                          // apply filter via query param so it's shareable
+                          const next = new URLSearchParams(location.search);
+                          if (filterNotLiberado) next.set('pedido_liberado', 'false'); else next.delete('pedido_liberado');
+                          navigate({ pathname: location.pathname, search: next.toString() });
+                          setShowFilters(false);
+                        }}>Aplicar</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
           </div>
         </CardHeader>
       </Card>
