@@ -70,8 +70,9 @@ export function Comercial() {
 
         // apply pedido_liberado = FALSE filter when requested
         if (filterNotLiberado) {
-          // only include pedidos where pedido_liberado is false or null/false
-          query.eq('pedido_liberado', false);
+          // only include pedidos where pedido_liberado is false
+          // cast to any to avoid TypeScript deep-instantiation error from the Postgrest query typings
+          (query as any).eq('pedido_liberado', false);
         }
 
         const { data, error: supaError, count } = await query.range(from, to);
