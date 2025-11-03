@@ -56,6 +56,7 @@ export default function Pedido() {
   const [cotacoes, setCotacoes] = useState<CotacaoFrete[]>([]);
   const [processingLabel, setProcessingLabel] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [liberando, setLiberando] = useState(false);
   const [paymentMethods, setPaymentMethods] = useState<Record<number, string> | null>(null);
   
   // Estados para gerenciar embalagem/remetente selecionados
@@ -640,6 +641,39 @@ export default function Pedido() {
           <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
             {pedido?.status?.nome}
           </Badge>
+          {/* Liberar Pedido button: visible only when pedido_liberado is falsy */}
+          {!readonly && pedido && !pedido?.pedido_liberado && (
+            <Button
+              onClick={async () => {
+                if (!pedido) return;
+                try {
+                  setLiberando(true);
+                  const { error } = await supabase
+                    .from('pedidos')
+                    .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() } as any)
+                    .eq('id', pedido.id);
+                  if (error) throw error;
+                  // update local state so button disappears
+                  setPedido((p: any) => ({ ...p, pedido_liberado: true }));
+                  toast({ title: 'Pedido liberado', description: 'Pedido liberado com sucesso' });
+                } catch (err: any) {
+                  console.error('Erro ao liberar pedido:', err);
+                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                } finally {
+                  setLiberando(false);
+                }
+              }}
+              className="inline-flex items-center gap-2"
+              style={{ backgroundColor: '#00C853', color: '#fff' }}
+            >
+              {liberando ? (
+                <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
+              ) : (
+                <span>🔓</span>
+              )}
+              <span>Liberar Pedido</span>
+            </Button>
+          )}
           {!readonly && pedido && (
             <>
               <Button variant="ghost" className="text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
