@@ -297,13 +297,13 @@ export function Comercial() {
             <TableHeader>
               <TableRow>
                 <TableHead>ID do Pedido</TableHead>
-                <TableHead>Data</TableHead>
+                <TableHead className="text-center">Data</TableHead>
                 <TableHead>Cliente</TableHead>
-                <TableHead>Plataforma</TableHead>
-                <TableHead>Transportadora</TableHead>
-                <TableHead>Responsável</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Etiqueta</TableHead>
+                <TableHead className="text-center">Plataforma</TableHead>
+                <TableHead className="text-center">Transportadora</TableHead>
+                <TableHead className="text-center">Responsável</TableHead>
+                <TableHead className="text-center">Status</TableHead>
+                <TableHead className="text-center">Etiqueta</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -338,7 +338,7 @@ export function Comercial() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     {new Date(pedido.criadoEm).toLocaleDateString('pt-BR')}
                   </TableCell>
                   <TableCell>
@@ -357,8 +357,8 @@ export function Comercial() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell>
-                      <div className="flex items-center gap-2">
+                  <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-2">
                         {pedido.plataforma?.imagemUrl ? (
                           <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-6 h-6 rounded" />
                         ) : (
@@ -371,8 +371,8 @@ export function Comercial() {
                       </div>
                   </TableCell>
 
-                  <TableCell>
-                    <div className="flex items-center">
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center">
                       {pedido.transportadora?.imagemUrl ? (
                         <div className="w-10 h-8 overflow-hidden flex items-center justify-center">
                           <img
@@ -389,7 +389,7 @@ export function Comercial() {
                   </TableCell>
 
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 justify-center">
                       <Avatar className="h-6 w-6">
                         <AvatarImage src={pedido.responsavel?.avatar} />
                         <AvatarFallback className="text-xs">
@@ -400,24 +400,28 @@ export function Comercial() {
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge 
-                      variant="outline"
-                      style={{ 
-                        backgroundColor: `${pedido.status?.corHex}15`,
-                        borderColor: pedido.status?.corHex,
-                        color: pedido.status?.corHex
-                      }}
-                    >
-                      {pedido.status?.nome}
-                    </Badge>
+                    <div className="flex items-center justify-center">
+                      <Badge 
+                        variant="outline"
+                          style={{ 
+                            backgroundColor: `${pedido.status?.corHex}15`,
+                            borderColor: pedido.status?.corHex,
+                            color: pedido.status?.corHex
+                          }}
+                         >
+                        {pedido.status?.nome}
+                      </Badge>
+                    </div>
                   </TableCell>
-                  <TableCell>
-                    <Badge 
-                      variant="outline" 
-                      className={etiquetaColors[pedido.etiquetaEnvio]}
-                    >
-                      {etiquetaLabels[pedido.etiquetaEnvio]}
-                    </Badge>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center">
+                      <Badge 
+                        variant="outline" 
+                        className={etiquetaColors[pedido.etiquetaEnvio]}
+                      >
+                        {etiquetaLabels[pedido.etiquetaEnvio]}
+                      </Badge>
+                    </div>
                   </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>
