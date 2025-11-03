@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AppHeader } from '@/components/layout/AppHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Trash, Copy, Edit } from 'lucide-react';
@@ -615,7 +616,9 @@ export default function Pedido() {
   if (!id) return <div className="p-6">Pedido inválido</div>;
 
   return (
-    <div className="p-6 space-y-6">
+    <>
+      <AppHeader activeModule="comercial" onModuleChange={(m) => navigate('/?module=' + m)} />
+      <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           {/* Avatar of responsible user */}
@@ -1414,5 +1417,6 @@ export default function Pedido() {
         }))}
       />
     </div>
+    </>
   );
 }
