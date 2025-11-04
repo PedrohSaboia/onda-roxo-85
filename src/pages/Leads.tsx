@@ -5,10 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { AppHeader } from '@/components/layout/AppHeader';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
-import { Check, X } from 'lucide-react';
+import { Check, X, Pencil, SquarePlus } from 'lucide-react';
 
 type LeadRow = {
   id: string;
@@ -37,6 +38,38 @@ export default function Leads() {
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [total, setTotal] = useState<number>(0);
+  const [addOpen, setAddOpen] = useState(false);
+  const [activeLead, setActiveLead] = useState<LeadRow | null>(null);
+  const [addOption, setAddOption] = useState<string | null>(null);
+  const [addValue1, setAddValue1] = useState<string>('');
+  const [addValue2, setAddValue2] = useState<string>('');
+  const [addDate, setAddDate] = useState<string>('');
+  const [transportadoras, setTransportadoras] = useState<Array<{ id: string; nome: string }>>([]);
+  const [loadingTransportadoras, setLoadingTransportadoras] = useState(false);
+
+  // carregar transportadoras quando o modal abrir
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      if (!addOpen) return;
+      setLoadingTransportadoras(true);
+      try {
+        const { data, error } = await (supabase as any).from('transportadoras').select('id,nome');
+        if (error) throw error;
+        if (!mounted) return;
+        const list = (data || []).map((r: any) => ({ id: r.id, nome: r.nome }));
+        setTransportadoras(list);
+        if (list.length && !addOption) setAddOption(list[0].id);
+      } catch (err) {
+        console.error('Erro ao carregar transportadoras:', err);
+        setTransportadoras([]);
+      } finally {
+        if (mounted) setLoadingTransportadoras(false);
+      }
+    };
+    load();
+    return () => { mounted = false };
+  }, [addOpen, addOption]);
   const pageSizeOptions = [10, 20, 30, 50];
   const { toast } = useToast();
 
@@ -91,7 +124,7 @@ export default function Leads() {
 
     const updateStatus = async (leadId: string, newStatus: number) => {
     try {
-      const { error } = await (supabase as any).from('leads').update({ status_lead_id: newStatus, updated_at: new Date().toISOString() }).eq('id', leadId);
+      const { error } = await (supabase as any).from('leads').update({ status_lead_id: newStatus }).eq('id', leadId);
       if (error) throw error;
       setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status_lead_id: newStatus } : l));
       toast({ title: 'Sucesso', description: 'Status atualizado' });
@@ -176,17 +209,48 @@ export default function Leads() {
                       <TableHead>Tipo</TableHead>
                       <TableHead>Nome do Cliente</TableHead>
                       <TableHead>Contato</TableHead>
-                      <TableHead>Valor</TableHead>
+                      <TableHead className="text-center">Valor</TableHead>
                       <TableHead>Produto</TableHead>
-                      <TableHead>Responsável</TableHead>
-                      <TableHead>Ações</TableHead>
+                      <TableHead className="text-center">Responsável</TableHead>
+                      <TableHead className="text-center">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filtered.map((lead) => (
                       <TableRow key={lead.id}>
                         <TableCell>{renderTypeIcon(lead)}</TableCell>
-                        <TableCell className="font-medium text-purple-700">{lead.nome || '—'}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-between">
+                            <div className="font-medium text-purple-700">{lead.nome || '—'}</div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                className="p-1 rounded hover:bg-muted/50"
+                                title="Editar"
+                                aria-label={`Editar ${lead.nome || 'lead'}`}
+                              >
+                                <Pencil className="h-4 w-4 text-muted-foreground" />
+                              </button>
+                              <button
+                                type="button"
+                                className="p-1 rounded hover:bg-muted/50"
+                                title="Novo"
+                                aria-label={`Adicionar novo para ${lead.nome || 'lead'}`}
+                                onClick={() => {
+                                  setActiveLead(lead);
+                                  // default option will be set after transportadoras are carregadas
+                                  setAddOption(null);
+                                  setAddValue1('');
+                                  setAddValue2('');
+                                  setAddDate('');
+                                  setAddOpen(true);
+                                }}
+                              >
+                                <SquarePlus className="h-4 w-4 text-emerald-700" />
+                              </button>
+                            </div>
+                          </div>
+                        </TableCell>
                         <TableCell>
                           {lead.contato ? (
                             <button
@@ -199,27 +263,98 @@ export default function Leads() {
                             </button>
                           ) : '—'}
                         </TableCell>
-                        <TableCell>R$ {Number(lead.valor_total || 0).toFixed(2)}</TableCell>
+                        <TableCell className="text-center">R$ {Number(lead.valor_total || 0).toFixed(2)}</TableCell>
                         <TableCell>{lead.produto_id ? (productsMap[lead.produto_id]?.nome || '—') : '—'}</TableCell>
-                        <TableCell>{lead.responsavel ? (usersMap[lead.responsavel]?.nome || '—') : '—'}</TableCell>
-                        <TableCell>
+                        <TableCell className="text-center">{lead.responsavel ? (usersMap[lead.responsavel]?.nome || '—') : '—'}</TableCell>
+                        <TableCell className="text-center">
                           {lead.status_lead_id === 1 ? (
-                            <div className="flex items-center gap-2">
-                              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => updateStatus(lead.id, 2)} title="Aprovar">
+                            <div className="flex items-center justify-center gap-2">
+                              <Button className="bg-emerald-600 hover:bg-emerald-700" onClick={() => updateStatus(lead.id, 2)} title="Marcar como contatado">
                                 <Check className="h-4 w-4 text-white" />
                               </Button>
-                              <Button className="bg-red-600 hover:bg-red-700" onClick={() => updateStatus(lead.id, 3)} title="Rejeitar">
+                              <Button className="bg-red-600 hover:bg-red-700" onClick={() => updateStatus(lead.id, 3)} title="Marcar como contestado">
                                 <X className="h-4 w-4 text-white" />
                               </Button>
                             </div>
                           ) : (
-                            <div className="text-sm text-muted-foreground">{lead.status_lead_id === 2 ? 'Aprovado' : lead.status_lead_id === 3 ? 'Rejeitado' : '—'}</div>
+                            lead.status_lead_id === 2 ? (
+                              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                                <Check className="h-4 w-4 text-emerald-600" />
+                                <span>Contatado</span>
+                              </div>
+                            ) : lead.status_lead_id === 3 ? (
+                              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                                <X className="h-4 w-4 text-red-600" />
+                                <span>Contestado</span>
+                              </div>
+                            ) : '—'
                           )}
                         </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
                 </Table>
+                {/* Popup para adicionar — usa Dialog reutilizando o padrão do projeto */}
+                <Dialog open={addOpen} onOpenChange={(v) => { setAddOpen(v); if (!v) setActiveLead(null); }}>
+                  <DialogContent className="max-w-md">
+                    <DialogHeader>
+                      <DialogTitle>Criar pedido: {activeLead?.nome || 'lead'}</DialogTitle>
+                    </DialogHeader>
+
+                    <div className="space-y-3 py-2">
+                      <div>
+                        <label className="block text-sm text-muted-foreground">Data</label>
+                        <div className="flex items-center gap-3 border rounded-lg px-3 py-2">
+                          <Input className="border-none outline-none" type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} />
+                          <button type="button" className="bg-purple-700 text-white px-3 py-1 rounded-md" onClick={() => setAddDate(new Date().toISOString().slice(0,10))}>Hoje</button>
+                        </div>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <div className="flex justify-end gap-3 w-full">
+                        <Button variant="outline" onClick={() => setAddOpen(false)}>Cancelar</Button>
+                        <Button className="bg-purple-700 text-white" onClick={async () => {
+                          if (!activeLead) {
+                            toast({ title: 'Erro', description: 'Lead inválido', variant: 'destructive' });
+                            return;
+                          }
+                          try {
+                            const payload: any = {
+                              id_externo: activeLead.nome || activeLead.id,
+                              cliente_nome: activeLead.nome || '',
+                              contato: activeLead.contato || null,
+                              responsavel_id: activeLead.responsavel || null,
+                              plataforma_id: 'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+                              status_id: '3ca23a64-cb1e-480c-8efa-0468ebc18097',
+                              data_prevista: addDate || null,
+                              valor_total: typeof activeLead.valor_total !== 'undefined' ? activeLead.valor_total : null
+                            };
+
+                            const { data: pedidoData, error: pedidoError } = await (supabase as any)
+                              .from('pedidos')
+                              .insert([payload])
+                              .select()
+                              .single();
+
+                            if (pedidoError) throw pedidoError;
+
+                            const pedidoId = (pedidoData as any)?.id;
+
+                            toast({ title: 'Pedido criado', description: `Pedido criado para ${activeLead.nome}` });
+                            setAddOpen(false);
+                            setActiveLead(null);
+
+                            if (pedidoId) navigate(`/pedido/${pedidoId}`);
+                          } catch (err: any) {
+                            console.error('Erro ao criar pedido:', err);
+                            toast({ title: 'Erro', description: 'Não foi possível criar o pedido', variant: 'destructive' });
+                          }
+                        }}>Salvar</Button>
+                      </div>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </CardContent>
               <div className="flex items-center justify-between p-4 border-t">
                 <div className="flex items-center gap-4">
