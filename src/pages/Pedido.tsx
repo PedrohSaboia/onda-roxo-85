@@ -79,6 +79,12 @@ export default function Pedido() {
   const [modalCart, setModalCart] = useState<any[]>([]);
   const [savingModal, setSavingModal] = useState(false);
   const [clientEditOpen, setClientEditOpen] = useState(false);
+  // Remove item modal state
+  const [productToRemove, setProductToRemove] = useState<any | null>(null);
+  const [removeModalOpen, setRemoveModalOpen] = useState(false);
+  const [removeValueStr, setRemoveValueStr] = useState('');
+  const [removingItem, setRemovingItem] = useState(false);
+  const [savingUrgente, setSavingUrgente] = useState(false);
   // Wizard for adding sale details when confirming modal cart
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -803,6 +809,7 @@ export default function Pedido() {
                     <TableHead>Qtd</TableHead>
                     <TableHead>Valor unit.</TableHead>
                     <TableHead>Subtotal</TableHead>
+                    <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -823,6 +830,13 @@ export default function Pedido() {
                       <TableCell>{item.quantidade}</TableCell>
                       <TableCell>R$ {Number(item.preco_unitario || item.produto?.preco || 0).toFixed(2)}</TableCell>
                       <TableCell>R$ {(Number(item.preco_unitario || item.produto?.preco || 0) * item.quantidade).toFixed(2)}</TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; setProductToRemove(item); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
+                            <Trash className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
                   )) : (
                     <TableRow>
@@ -913,7 +927,36 @@ export default function Pedido() {
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Urgente</div>
-                  <div className="font-medium">{pedido?.urgente ? 'Sim' : 'Não'}</div>
+                  <div className="font-medium">
+                    <label className="inline-flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={!!pedido?.urgente}
+                        disabled={readonly || savingUrgente}
+                        onChange={async (e) => {
+                          if (readonly) return;
+                          if (!pedido) return;
+                          const next = !!e.target.checked;
+                          try {
+                            setSavingUrgente(true);
+                            const { error } = await supabase
+                              .from('pedidos')
+                              .update({ urgente: next, atualizado_em: new Date().toISOString() } as any)
+                              .eq('id', pedido.id);
+                            if (error) throw error;
+                            setPedido((p: any) => p ? ({ ...p, urgente: next }) : p);
+                            toast({ title: 'Atualizado', description: `Urgente ${next ? 'ativado' : 'desativado'}` });
+                          } catch (err: any) {
+                            console.error('Erro ao atualizar urgente:', err);
+                            toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                          } finally {
+                            setSavingUrgente(false);
+                          }
+                        }}
+                      />
+                      <span>{pedido?.urgente ? 'Sim' : 'Não'}</span>
+                    </label>
+                  </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">Observações</div>
@@ -1166,6 +1209,59 @@ export default function Pedido() {
   <Dialog open={embalagensVisible} onOpenChange={(open) => { if (!readonly) setEmbalagensVisible(open); }}>
         <DialogContent className="max-w-4xl">
           <EmbalagensManager />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Remover item do pedido (informe valor a ser subtraído) */}
+      <Dialog open={removeModalOpen} onOpenChange={(open) => { if (!readonly) setRemoveModalOpen(open); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remover item</DialogTitle>
+          </DialogHeader>
+          <div className="py-2">
+            <div className="text-sm text-muted-foreground mb-2">Você está removendo:</div>
+            <div className="font-medium mb-4">{productToRemove ? (productToRemove.variacao?.nome || productToRemove.produto?.nome || productToRemove.nome) : '—'}</div>
+
+            <label className="block text-sm text-muted-foreground">Valor a subtrair do pedido</label>
+            <div className="flex items-center gap-2 mt-2">
+              <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
+              <Input value={removeValueStr} onChange={(e) => setRemoveValueStr(e.target.value)} />
+            </div>
+            <div className="text-xs text-muted-foreground mt-2">Informe quanto do valor total deve ser removido ao excluir este item.</div>
+          </div>
+          <DialogFooter>
+            <div className="flex justify-between w-full">
+              <Button variant="outline" onClick={() => { setRemoveModalOpen(false); setProductToRemove(null); }}>Cancelar</Button>
+              <Button className="bg-red-600 text-white" onClick={async () => {
+                if (readonly) return;
+                if (!productToRemove || !pedido) return;
+                setRemovingItem(true);
+                try {
+                  // delete item
+                  const { error: delErr } = await supabase.from('itens_pedido').delete().eq('id', productToRemove.id);
+                  if (delErr) throw delErr;
+
+                  const providedValue = parseCurrencyBR(removeValueStr);
+                  const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
+                  const newTotal = Number(Math.max(0, currentTotal - providedValue).toFixed(2));
+
+                  const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
+                  if (updErr) throw updErr;
+
+                  // update local state
+                  setPedido((p: any) => p ? ({ ...p, itens: (p.itens || []).filter((i: any) => i.id !== productToRemove.id), valor_total: newTotal }) : p);
+                  toast({ title: 'Item removido', description: 'Item removido e valor do pedido atualizado' });
+                  setRemoveModalOpen(false);
+                  setProductToRemove(null);
+                } catch (err: any) {
+                  console.error('Erro ao remover item:', err);
+                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                } finally {
+                  setRemovingItem(false);
+                }
+              }} disabled={removingItem}>{removingItem ? 'Removendo...' : 'Confirmar remoção'}</Button>
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
