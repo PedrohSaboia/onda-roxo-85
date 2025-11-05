@@ -313,6 +313,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
           </div>
         </CardHeader>
         <CardContent>
+          {/* (barcode input removed - moved to Logística page) */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label>Nome</Label>
