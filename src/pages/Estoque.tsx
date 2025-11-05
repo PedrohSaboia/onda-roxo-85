@@ -197,7 +197,7 @@ export function Estoque() {
                 <TableHead>Produto</TableHead>
                 <TableHead>SKU</TableHead>
                 <TableHead>Categoria</TableHead>
-                <TableHead>Unidade</TableHead>
+                <TableHead>Quantidade</TableHead>
                 <TableHead>Preço</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
@@ -248,7 +248,7 @@ export function Estoque() {
                       {produto.categoria}
                     </Badge>
                   </TableCell>
-                  <TableCell>{produto.unidade}</TableCell>
+                  <TableCell>{Number((produto as any).qntd ?? 0)}</TableCell>
                   <TableCell className="font-medium">
                     R$ {produto.preco.toFixed(2)}
                   </TableCell>
