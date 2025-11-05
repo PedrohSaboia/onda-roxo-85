@@ -17,6 +17,7 @@ type Variation = {
   valor: string;
   img_url?: string;
   qntd?: number;
+  codigo_barras_v?: string;
 }
 
 export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
@@ -25,6 +26,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
   const [nome, setNome] = useState('');
   const [sku, setSku] = useState('');
+  const [codigoBarras, setCodigoBarras] = useState('');
   const [preco, setPreco] = useState('0.00');
   const [unidade, setUnidade] = useState('un');
   const [categoria, setCategoria] = useState('');
@@ -46,13 +48,14 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
   const reset = () => {
     setNome(''); setSku(''); setPreco('0.00'); setUnidade('un'); setCategoria(''); setImgUrl(''); setQntd('');
+    setCodigoBarras('');
     setHasVariations(false); setVariations([]);
     setSelectedEmbalagemId('');
     setNomeVariacao('');
     setOriginalVariationIds([]);
   }
 
-  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0 }]);
+  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '' }]);
   const updateVariation = (idx: number, patch: Partial<Variation>) => setVariations(v => v.map((it,i)=> i===idx ? { ...it, ...patch } : it));
   const removeVariation = (idx: number) => setVariations(v => v.filter((_,i)=> i!==idx));
 
@@ -86,6 +89,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
       const prodInsert = {
         nome: nome.trim(),
         sku: (!hasVariations && sku.trim()) ? sku.trim() : (hasVariations ? autoSku(nome) : sku.trim()),
+        // If product has variations, barcode lives on variations table
+        codigo_barras: hasVariations ? null : (codigoBarras || null),
         preco: !hasVariations ? Number(preco) : 0.00,
         unidade: unidade || 'un',
         categoria: categoria || null,
@@ -114,13 +119,14 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
         const existing = variations.filter(v => v.id);
         for (const v of existing) {
-          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0 }).eq('id', v.id);
+          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null }).eq('id', v.id);
           if (vUpdErr) throw vUpdErr;
         }
 
         const news = variations.filter(v => !v.id).map(v => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0 }));
         if (news.length > 0) {
-          const { error: insErr } = await supabase.from('variacoes_produto').insert(news);
+          const newsWithBarcode = news.map((n, i) => ({ ...n, codigo_barras_v: (variations.filter(v => !v.id)[i].codigo_barras_v) || null }));
+          const { error: insErr } = await supabase.from('variacoes_produto').insert(newsWithBarcode);
           if (insErr) throw insErr;
         }
 
@@ -144,6 +150,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             valor: Number(v.valor),
             img_url: v.img_url || null,
             qntd: v.qntd ?? 0,
+            codigo_barras_v: v.codigo_barras_v || null,
           }));
 
           const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
@@ -210,11 +217,61 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
       setQntd(p.qntd ?? '');
       const hasVar = Boolean((product as any).variacoes && (product as any).variacoes.length > 0);
       setHasVariations(hasVar);
+      // If product has variations, barcode should live on variations; clear product-level barcode
+      setCodigoBarras(hasVar ? '' : (p.codigo_barras || p.codigoBarras || ''));
       setNomeVariacao((product as any).nomeVariacao || '');
       setSelectedEmbalagemId((product as any).embalgens_id || '');
-      const mapped = (p.variacoes || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: String(v.valor ?? '0.00'), img_url: v.img_url || '', qntd: v.qntd ?? 0 }));
-      setVariations(mapped);
-      setOriginalVariationIds(mapped.map((v: any) => v.id).filter(Boolean));
+      // Seed variations from passed product object if present
+      const seed = (p.variacoes || []).map((v: any) => ({
+        id: v.id,
+        nome: v.nome,
+        sku: v.sku,
+        valor: String(v.valor ?? '0.00'),
+        img_url: v.img_url || '',
+        qntd: v.qntd ?? 0,
+        codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || ''
+      }));
+      setVariations(seed);
+      setOriginalVariationIds(seed.map((v: any) => v.id).filter(Boolean));
+
+      // Also fetch the latest variations directly from the DB to ensure barcode fields are present
+      (async () => {
+        try {
+          const { data: varData, error: varErr } = await supabase.from('variacoes_produto').select('*').eq('produto_id', p.id);
+          if (!varErr && varData && Array.isArray(varData) && varData.length > 0) {
+            const mappedDb = varData.map((v: any) => ({
+              id: v.id,
+              nome: v.nome,
+              sku: v.sku,
+              valor: String(v.valor ?? '0.00'),
+              img_url: v.img_url || '',
+              qntd: v.qntd ?? 0,
+              codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || ''
+            }));
+            setVariations(mappedDb);
+            setOriginalVariationIds(mappedDb.map((v: any) => v.id).filter(Boolean));
+          }
+        } catch (err: any) {
+          console.error('Erro ao carregar variações do DB:', err);
+        }
+      })();
+
+      // If product has no variations and barcode not present in the passed product object,
+      // fetch the product row to obtain `codigo_barras` (some APIs omit that field in the prop)
+      (async () => {
+        try {
+          if (!hasVar && p.id) {
+            const { data: prodRow, error: prodErr } = await supabase.from('produtos').select('codigo_barras').eq('id', p.id).single();
+            if (!prodErr && prodRow) {
+              const row: any = prodRow as any;
+              const cb = row.codigo_barras || row.codigoBarras || '';
+              setCodigoBarras(cb || '');
+            }
+          }
+        } catch (err: any) {
+          console.error('Erro ao carregar codigo_barras do produto do DB:', err);
+        }
+      })();
     } else {
       reset();
     }
@@ -264,6 +321,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             <div>
               <Label>SKU</Label>
               <Input value={sku} onChange={(e)=>setSku(e.target.value)} />
+            </div>
+            <div>
+              <Label>Código de Barras</Label>
+              <Input value={codigoBarras} onChange={(e)=>setCodigoBarras(e.target.value)} />
             </div>
             <div>
               <Label>Preço</Label>
@@ -341,6 +402,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         <div>
                           <Label>Quantidade</Label>
                           <Input type="number" value={v.qntd as any} onChange={(e)=>updateVariation(idx, { qntd: Number(e.target.value) })} />
+                        </div>
+                        <div>
+                          <Label>Código de Barras</Label>
+                          <Input value={v.codigo_barras_v || ''} onChange={(e)=>updateVariation(idx, { codigo_barras_v: e.target.value })} />
                         </div>
                         <div>
                           <Label>Imagem URL</Label>
