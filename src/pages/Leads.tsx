@@ -18,6 +18,7 @@ type LeadRow = {
   frete_yampi?: number | null;
   tag_utm?: string | null;
   tipo_pessoa?: string | null;
+  tipo_de_lead_id?: number | null;
   nome?: string | null;
   contato?: string | null;
   produto_id?: string | null;
@@ -35,6 +36,7 @@ export default function Leads() {
   const [search, setSearch] = useState('');
   const [productsMap, setProductsMap] = useState<Record<string, any>>({});
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
+  const [tipoDeLeadsMap, setTipoDeLeadsMap] = useState<Record<string, any>>({});
   const [page, setPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
   const [total, setTotal] = useState<number>(0);
@@ -91,23 +93,29 @@ export default function Leads() {
         // collect product ids and user ids to fetch related names
         const productIds = Array.from(new Set((leadsData || []).map((l: any) => l.produto_id).filter(Boolean)));
         const userIds = Array.from(new Set((leadsData || []).map((l: any) => l.responsavel).filter(Boolean)));
+        const tipoIds = Array.from(new Set((leadsData || []).map((l: any) => l.tipo_de_lead_id).filter(Boolean)));
 
-        const [productsResp, usersResp] = await Promise.all([
+        const [productsResp, usersResp, tiposResp] = await Promise.all([
           productIds.length ? supabase.from('produtos').select('id,nome') : Promise.resolve({ data: [] }),
-          userIds.length ? supabase.from('usuarios').select('id,nome,img_url') : Promise.resolve({ data: [] })
+          userIds.length ? supabase.from('usuarios').select('id,nome,img_url') : Promise.resolve({ data: [] }),
+          tipoIds.length ? supabase.from('tipo_de_lead').select('id,nome,img_url') : Promise.resolve({ data: [] })
         ] as const);
 
         const products = (productsResp as any).data || [];
         const users = (usersResp as any).data || [];
+  const tipos = (tiposResp as any).data || [];
 
         const pMap: Record<string, any> = {};
         products.forEach((p: any) => { pMap[p.id] = p; });
         const uMap: Record<string, any> = {};
         users.forEach((u: any) => { uMap[u.id] = u; });
+  const tMap: Record<string, any> = {};
+  tipos.forEach((t: any) => { tMap[String(t.id)] = t; });
 
         if (!mounted) return;
         setProductsMap(pMap);
         setUsersMap(uMap);
+  setTipoDeLeadsMap(tMap);
         setLeads(leadsData || []);
         setTotal(count || 0);
       } catch (err: any) {
@@ -168,11 +176,25 @@ export default function Leads() {
   const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
 
   const renderTypeIcon = (lead: LeadRow) => {
+    // try tipo_de_lead mapping first (prefer image from DB)
+    const tipoKey = String(lead.tipo_de_lead_id ?? '');
+    const tipo = tipoDeLeadsMap[tipoKey];
+    if (tipo && tipo.img_url) {
+      return (
+        <img
+          src={tipo.img_url}
+          alt={tipo.nome || 'tipo'}
+          className="h-6 w-6 rounded object-cover"
+        />
+      );
+    }
+
+    // fallback to previous heuristics using tipo_pessoa/tag_utm
     const t = (lead.tipo_pessoa || lead.tag_utm || '').toString().toLowerCase();
     if (t.includes('whatsapp') || t.includes('wa')) return <span className="text-2xl">🟢</span>;
     if (t.includes('loja') || t.includes('shop')) return <span className="text-2xl">🛒</span>;
     if (t.includes('instagram') || t.includes('ig')) return <span className="text-2xl">📸</span>;
-    // fallback
+    // fallback icon
     return <span className="text-2xl">🔖</span>;
   };
 
@@ -218,7 +240,20 @@ export default function Leads() {
                   <TableBody>
                     {filtered.map((lead) => (
                       <TableRow key={lead.id}>
-                        <TableCell>{renderTypeIcon(lead)}</TableCell>
+                        <TableCell>
+                          {(() => {
+                            const tipo = tipoDeLeadsMap[String(lead.tipo_de_lead_id ?? '')];
+                            if (tipo && tipo.img_url) {
+                              return (
+                                <img
+                                  src={tipo.img_url}
+                                  alt={tipo.nome || 'tipo'}
+                                  className="h-6 w-6 rounded object-cover"
+                                />
+                              );
+                            }
+                          })()}
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-between">
                             <div className="font-medium text-purple-700">{lead.nome || '—'}</div>
@@ -320,12 +355,34 @@ export default function Leads() {
                             return;
                           }
                           try {
+                            // determinar plataforma a partir do tipo do lead (tipo_pessoa ou tag_utm)
+                            let plataformaId = 'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4'; // fallback
+                            try {
+                              const leadType = ((activeLead.tipo_pessoa || activeLead.tag_utm) || '').toString().toLowerCase();
+                              let searchName: string | null = null;
+                              if (leadType.includes('pix')) searchName = 'pix';
+                              else if (leadType.includes('carrinho') || leadType.includes('cart') || leadType.includes('checkout')) searchName = 'carrinho';
+
+                              if (searchName) {
+                                const { data: plats, error: platsError } = await (supabase as any)
+                                  .from('plataformas')
+                                  .select('id,nome')
+                                  .ilike('nome', `%${searchName}%`)
+                                  .limit(1);
+                                if (!platsError && (plats || []).length > 0) {
+                                  plataformaId = plats[0].id;
+                                }
+                              }
+                            } catch (errPlat: any) {
+                              console.error('Erro ao determinar plataforma do lead:', errPlat);
+                            }
+
                             const payload: any = {
                               id_externo: activeLead.nome || activeLead.id,
                               cliente_nome: activeLead.nome || '',
                               contato: activeLead.contato || null,
                               responsavel_id: activeLead.responsavel || null,
-                              plataforma_id: 'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+                              plataforma_id: plataformaId,
                               status_id: '3ca23a64-cb1e-480c-8efa-0468ebc18097',
                               data_prevista: addDate || null,
                               valor_total: typeof activeLead.valor_total !== 'undefined' ? activeLead.valor_total : null
@@ -340,6 +397,31 @@ export default function Leads() {
                             if (pedidoError) throw pedidoError;
 
                             const pedidoId = (pedidoData as any)?.id;
+
+                            // tentar criar cliente vinculado ao pedido recém-criado
+                            if (pedidoId) {
+                              try {
+                                const clientePayload = {
+                                  nome: payload.cliente_nome || payload.id_externo,
+                                  telefone: payload.contato || null,
+                                  email: null,
+                                  pedido_id: pedidoId
+                                };
+
+                                const { error: clienteError } = await (supabase as any)
+                                  .from('clientes')
+                                  .insert([clientePayload]);
+
+                                if (clienteError) {
+                                  // não falhar todo o fluxo apenas por um erro ao criar cliente
+                                  console.error('Erro ao criar cliente:', clienteError);
+                                  toast({ title: 'Atenção', description: 'Pedido criado, mas não foi possível criar o cliente', variant: 'destructive' });
+                                }
+                              } catch (errCliente: any) {
+                                console.error('Erro ao criar cliente:', errCliente);
+                                toast({ title: 'Atenção', description: 'Pedido criado, mas ocorreu um erro ao criar o cliente', variant: 'destructive' });
+                              }
+                            }
 
                             toast({ title: 'Pedido criado', description: `Pedido criado para ${activeLead.nome}` });
                             setAddOpen(false);
