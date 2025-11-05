@@ -37,6 +37,10 @@ export function Comercial() {
   const [total, setTotal] = useState<number>(0);
   const [totalExcludingEnviados, setTotalExcludingEnviados] = useState<number>(0);
   const [showFilters, setShowFilters] = useState(false);
+  const ETIQUETA_FILTER_ID = '0c0ff1fc-1c3b-4eff-9dec-a505d33f3e18';
+  const initialEtiquetaParam = new URLSearchParams(location.search).get('etiqueta_envio_id') || '';
+  const [filterEtiquetaId, setFilterEtiquetaId] = useState<string | ''>(initialEtiquetaParam);
+  const [etiquetaCount, setEtiquetaCount] = useState<number>(0);
   // filter: when true, only show pedidos where pedido_liberado = FALSE
   const initialLiberadoParam = new URLSearchParams(location.search).get('pedido_liberado');
   const [filterNotLiberado, setFilterNotLiberado] = useState<boolean>(initialLiberadoParam === 'false');
@@ -75,7 +79,12 @@ export function Comercial() {
           (query as any).eq('pedido_liberado', false);
         }
 
-        const { data, error: supaError, count } = await query.range(from, to);
+        // apply etiqueta_envio_id filter when requested
+        if (filterEtiquetaId) {
+          (query as any).eq('etiqueta_envio_id', filterEtiquetaId);
+        }
+
+  const { data, error: supaError, count } = await query.range(from, to);
 
         if (supaError) throw supaError;
 
@@ -104,6 +113,7 @@ export function Comercial() {
             idExterno: row.id_externo,
             clienteNome: row.cliente_nome,
             contato: row.contato || '',
+            etiquetaEnvioId: row.etiqueta_envio_id || '',
             responsavelId: row.responsavel_id,
             plataformaId: row.plataforma_id,
             statusId: row.status_id,
@@ -180,7 +190,24 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId]);
+
+  // load count of pedidos with the specific etiqueta id (to show next to filter)
+  useEffect(() => {
+    let mounted = true;
+    const loadEtiquetaCount = async () => {
+      try {
+        const { count, error } = await supabase.from('pedidos').select('id', { count: 'exact' }).eq('etiqueta_envio_id', ETIQUETA_FILTER_ID).limit(1);
+        if (error) throw error;
+        if (!mounted) return;
+        setEtiquetaCount(count || 0);
+      } catch (err) {
+        console.error('Erro ao buscar contagem de etiqueta:', err);
+      }
+    };
+    loadEtiquetaCount();
+    return () => { mounted = false };
+  }, []);
 
   // fetch total count excluding 'Enviado' status
   useEffect(() => {
@@ -265,10 +292,33 @@ export function Comercial() {
             </div>
               <div className="flex items-center gap-2 relative">
                 <div>
-                  <Button variant="outline" size="sm" onClick={() => setShowFilters(s => !s)}>
-                    <Filter className="h-4 w-4 mr-2" />
-                    Filtrar
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={() => setShowFilters(s => !s)}>
+                      <Filter className="h-4 w-4 mr-2" />
+                      Filtrar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={filterEtiquetaId === ETIQUETA_FILTER_ID ? 'outline' : 'ghost'}
+                      onClick={() => {
+                        // toggle etiqueta filter and reset to page 1
+                        const next = new URLSearchParams(location.search);
+                        if (filterEtiquetaId === ETIQUETA_FILTER_ID) {
+                          setFilterEtiquetaId('');
+                          next.delete('etiqueta_envio_id');
+                        } else {
+                          setFilterEtiquetaId(ETIQUETA_FILTER_ID);
+                          next.set('etiqueta_envio_id', ETIQUETA_FILTER_ID);
+                        }
+                        setPage(1);
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      className="ml-2 flex items-center gap-2"
+                    >
+                      <span className="text-sm">Etiqueta Pendente</span>
+                      <span className="inline-block bg-red-50 text-red-700 px-2 py-0.5 rounded text-sm">{etiquetaCount}</span>
+                    </Button>
+                  </div>
                   {showFilters && (
                     <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-20 p-3">
                       <div className="flex items-center justify-between mb-2">
@@ -428,13 +478,25 @@ export function Comercial() {
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                    <div className="flex items-center justify-center">
-                      <Badge 
-                        variant="outline" 
-                        className={etiquetaColors[pedido.etiquetaEnvio]}
-                      >
-                        {etiquetaLabels[pedido.etiquetaEnvio]}
-                      </Badge>
+                    <div className="flex flex-col items-center">
+                      {((pedido as any).etiquetaEnvioId === ETIQUETA_FILTER_ID) && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="mb-1 bg-purple-600 text-white hover:bg-purple-700 px-2 py-0 h-6 rounded text-xs"
+                          onClick={(e) => { e.stopPropagation(); console.log('Envio Rápido clicked for', pedido.id); }}
+                        >
+                          Envio Rápido
+                        </Button>
+                      )}
+                      <div className="flex items-center justify-center">
+                        <Badge 
+                          variant="outline" 
+                          className={etiquetaColors[pedido.etiquetaEnvio]}
+                        >
+                          {etiquetaLabels[pedido.etiquetaEnvio]}
+                        </Badge>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
