@@ -200,12 +200,26 @@ export function Comercial() {
     return () => { mounted = false };
   }, [/* run on mount and when relevant filters change in future */]);
 
-  const filteredPedidos = pedidos.filter(pedido =>
-    pedido.idExterno?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.clienteNome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.plataforma?.nome?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    pedido.responsavel?.nome?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // normalize helper: remove diacritics and lower-case
+  const normalize = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
+  const digitsOnly = (s?: string) => (s || '').replace(/\D/g, '').trim();
+
+  const normalizedSearch = normalize(searchTerm);
+  const normalizedDigits = digitsOnly(searchTerm);
+
+  const filteredPedidos = pedidos.filter(pedido => {
+    const idExterno = normalize(pedido.idExterno);
+    const cliente = normalize(pedido.clienteNome);
+    const contato = digitsOnly(pedido.contato);
+
+    // match by id_externo or cliente_nome (case-insensitive, diacritics-insensitive)
+    if (idExterno.includes(normalizedSearch) || cliente.includes(normalizedSearch)) return true;
+
+    // if user typed digits (or phone with formatting), match contato ignoring formatting
+    if (normalizedDigits.length > 0 && contato.includes(normalizedDigits)) return true;
+
+    return false;
+  });
 
   const totalPages = Math.max(1, Math.ceil((total || filteredPedidos.length) / pageSize));
 
