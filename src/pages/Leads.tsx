@@ -320,12 +320,34 @@ export default function Leads() {
                             return;
                           }
                           try {
+                            // determinar plataforma a partir do tipo do lead (tipo_pessoa ou tag_utm)
+                            let plataformaId = 'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4'; // fallback
+                            try {
+                              const leadType = ((activeLead.tipo_pessoa || activeLead.tag_utm) || '').toString().toLowerCase();
+                              let searchName: string | null = null;
+                              if (leadType.includes('pix')) searchName = 'pix';
+                              else if (leadType.includes('carrinho') || leadType.includes('cart') || leadType.includes('checkout')) searchName = 'carrinho';
+
+                              if (searchName) {
+                                const { data: plats, error: platsError } = await (supabase as any)
+                                  .from('plataformas')
+                                  .select('id,nome')
+                                  .ilike('nome', `%${searchName}%`)
+                                  .limit(1);
+                                if (!platsError && (plats || []).length > 0) {
+                                  plataformaId = plats[0].id;
+                                }
+                              }
+                            } catch (errPlat: any) {
+                              console.error('Erro ao determinar plataforma do lead:', errPlat);
+                            }
+
                             const payload: any = {
                               id_externo: activeLead.nome || activeLead.id,
                               cliente_nome: activeLead.nome || '',
                               contato: activeLead.contato || null,
                               responsavel_id: activeLead.responsavel || null,
-                              plataforma_id: 'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+                              plataforma_id: plataformaId,
                               status_id: '3ca23a64-cb1e-480c-8efa-0468ebc18097',
                               data_prevista: addDate || null,
                               valor_total: typeof activeLead.valor_total !== 'undefined' ? activeLead.valor_total : null
@@ -340,6 +362,31 @@ export default function Leads() {
                             if (pedidoError) throw pedidoError;
 
                             const pedidoId = (pedidoData as any)?.id;
+
+                            // tentar criar cliente vinculado ao pedido recém-criado
+                            if (pedidoId) {
+                              try {
+                                const clientePayload = {
+                                  nome: payload.cliente_nome || payload.id_externo,
+                                  telefone: payload.contato || null,
+                                  email: null,
+                                  pedido_id: pedidoId
+                                };
+
+                                const { error: clienteError } = await (supabase as any)
+                                  .from('clientes')
+                                  .insert([clientePayload]);
+
+                                if (clienteError) {
+                                  // não falhar todo o fluxo apenas por um erro ao criar cliente
+                                  console.error('Erro ao criar cliente:', clienteError);
+                                  toast({ title: 'Atenção', description: 'Pedido criado, mas não foi possível criar o cliente', variant: 'destructive' });
+                                }
+                              } catch (errCliente: any) {
+                                console.error('Erro ao criar cliente:', errCliente);
+                                toast({ title: 'Atenção', description: 'Pedido criado, mas ocorreu um erro ao criar o cliente', variant: 'destructive' });
+                              }
+                            }
 
                             toast({ title: 'Pedido criado', description: `Pedido criado para ${activeLead.nome}` });
                             setAddOpen(false);
