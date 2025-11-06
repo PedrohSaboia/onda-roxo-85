@@ -530,14 +530,83 @@ export function Comercial() {
       <Card>
         <CardHeader>
           <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Buscar pedidos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Buscar pedidos..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+
+              {/* Active filter tags (appear directly below the search input) */}
+              <div className="mt-2">
+                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId) && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    {filterNotLiberado && (
+                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                        <span className="text-sm">Somente não liberados</span>
+                        <button
+                          className="text-gray-500 hover:text-gray-700"
+                          onClick={() => {
+                            setFilterNotLiberado(false);
+                            setPage(1);
+                            const next = new URLSearchParams(location.search);
+                            next.delete('pedido_liberado');
+                            if (!next.get('module')) next.set('module', 'comercial');
+                            navigate({ pathname: location.pathname, search: next.toString() });
+                          }}
+                          aria-label="Remover filtro não liberado"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+
+                    {filterClienteFormNotSent && (
+                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                        <span className="text-sm">Formulário não enviado</span>
+                        <button
+                          className="text-gray-500 hover:text-gray-700"
+                          onClick={() => {
+                            setFilterClienteFormNotSent(false);
+                            setPage(1);
+                            const next = new URLSearchParams(location.search);
+                            next.delete('cliente_formulario_enviado');
+                            if (!next.get('module')) next.set('module', 'comercial');
+                            navigate({ pathname: location.pathname, search: next.toString() });
+                          }}
+                          aria-label="Remover filtro formulário não enviado"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+
+                    {filterEtiquetaId === ETIQUETA_FILTER_ID && (
+                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                        <span className="text-sm">Etiqueta Pendente</span>
+                        <button
+                          className="text-gray-500 hover:text-gray-700"
+                          onClick={() => {
+                            setFilterEtiquetaId('');
+                            setPage(1);
+                            const next = new URLSearchParams(location.search);
+                            next.delete('etiqueta_envio_id');
+                            if (!next.get('module')) next.set('module', 'comercial');
+                            navigate({ pathname: location.pathname, search: next.toString() });
+                          }}
+                          aria-label="Remover filtro etiqueta pendente"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
               <div className="flex items-center gap-2 relative">
                 <div>
@@ -608,11 +677,13 @@ export function Comercial() {
                       </div>
                     </div>
                   )}
+
+                  
+                  </div>
                 </div>
               </div>
-          </div>
-        </CardHeader>
-      </Card>
+                </CardHeader>
+              </Card>
 
       {/* Tabela de pedidos */}
       <Card>
