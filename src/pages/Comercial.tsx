@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
 import { Pedido } from '@/types';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 
@@ -41,6 +42,8 @@ export function Comercial() {
   const initialEtiquetaParam = new URLSearchParams(location.search).get('etiqueta_envio_id') || '';
   const [filterEtiquetaId, setFilterEtiquetaId] = useState<string | ''>(initialEtiquetaParam);
   const [etiquetaCount, setEtiquetaCount] = useState<number>(0);
+  const { toast } = useToast();
+  const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
   // filter: when true, only show pedidos where pedido_liberado = FALSE
   const initialLiberadoParam = new URLSearchParams(location.search).get('pedido_liberado');
   const [filterNotLiberado, setFilterNotLiberado] = useState<boolean>(initialLiberadoParam === 'false');
@@ -247,6 +250,215 @@ export function Comercial() {
 
     return false;
   });
+
+  const handleEnvioRapido = async (pedidoId: string) => {
+    if (!pedidoId) return;
+    setProcessingRapid(prev => ({ ...prev, [pedidoId]: true }));
+    try {
+      // load full pedido with cliente and itens
+      const { data: pedidoRow, error: pedidoError } = await supabase
+        .from('pedidos')
+        .select(`*, clientes(*), itens_pedido(id,quantidade,preco_unitario, produto:produtos(id,nome,sku,preco), variacao:variacoes_produto(id,nome,sku))`)
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoError) throw pedidoError;
+
+      // normalize cliente shape: PostgREST may return arrays for relations
+      const pick = (val: any) => Array.isArray(val) ? val[0] : val;
+      const cliente = pick((pedidoRow as any).clientes) || null;
+
+      // load default remetente and embalagem (use first available)
+      const [{ data: remetentesData, error: remErr }, { data: embalagensData, error: embErr }] = await Promise.all([
+        supabase.from('remetentes').select('*').order('nome'),
+        supabase.from('embalagens').select('*').order('nome')
+      ]);
+      if (remErr) throw remErr;
+      if (embErr) throw embErr;
+
+      const selectedRemetente = (remetentesData && remetentesData[0]) || null;
+      const selectedEmbalagem = (embalagensData && embalagensData[0]) || null;
+
+      const stored = (pedidoRow as any).frete_melhor_envio;
+      let melhorEnvioId: any = null;
+
+      const buildProducts = (pedidoRow?.itens_pedido || []).map((it: any) => ({
+        name: it.variacao?.nome || it.produto?.nome || 'Produto',
+        quantity: String(it.quantidade || 1),
+        unitary_value: String(Number(it.preco_unitario || it.preco || 0).toFixed(2))
+      }));
+
+      if (stored) {
+        // reuse stored payload when available
+  const insuranceValue = (pedidoRow?.itens_pedido || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1;
+        const payload: any = {
+          from: {
+            name: selectedRemetente?.nome || stored.from?.name || '' ,
+            phone: (selectedRemetente as any)?.contato || (selectedRemetente as any)?.telefone || stored.from?.phone || '',
+            email: (selectedRemetente as any)?.email || stored.from?.email || 'contato@empresa.com',
+            document: (selectedRemetente as any)?.cpf || stored.from?.document || '',
+            address: (selectedRemetente as any)?.endereco || stored.from?.address || '',
+            number: (selectedRemetente as any)?.numero || stored.from?.number || '',
+            complement: (selectedRemetente as any)?.complemento || stored.from?.complement || '',
+            district: (selectedRemetente as any)?.bairro || stored.from?.district || '',
+            city: (selectedRemetente as any)?.cidade || stored.from?.city || '',
+            state_abbr: (selectedRemetente as any)?.estado || stored.from?.state_abbr || '',
+            country_id: stored.from?.country_id || 'BR',
+            postal_code: ((selectedRemetente as any)?.cep || stored.from?.postal_code || '').replace(/\D/g, '')
+          },
+          to: {
+            name: cliente?.nome || stored.to?.name || '' ,
+            phone: (cliente as any)?.telefone || (cliente as any)?.contato || stored.to?.phone || '',
+            email: (cliente as any)?.email || stored.to?.email || 'cliente@email.com',
+            document: (cliente as any)?.cpf || stored.to?.document || '',
+            address: (cliente as any)?.endereco || stored.to?.address || '',
+            number: (cliente as any)?.numero || stored.to?.number || '',
+            complement: (cliente as any)?.complemento || stored.to?.complement || '',
+            district: (cliente as any)?.bairro || stored.to?.district || '',
+            city: (cliente as any)?.cidade || stored.to?.city || '',
+            state_abbr: (cliente as any)?.estado || stored.to?.state_abbr || '',
+            country_id: stored.to?.country_id || 'BR',
+            postal_code: (((cliente as any)?.cep) || stored.to?.postal_code || '').replace(/\D/g, '')
+          },
+          options: stored.options || { insurance_value: insuranceValue, receipt: false, own_hand: false, reverse: false, non_commercial: true },
+          products: buildProducts,
+          service: stored.service || stored.service_id || stored.raw_response?.service || stored.raw_response?.service_id,
+          volumes: stored.volumes || (selectedEmbalagem ? [{ height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, length: selectedEmbalagem.comprimento, weight: selectedEmbalagem.peso, insurance_value: insuranceValue }] : [{ height: 5, width: 20, length: 20, weight: 1, insurance_value: insuranceValue }])
+        };
+
+        // send to cart function
+        const { data: carrinhoResp, error: carrinhoError } = await supabase.functions.invoke('adic-carrinho-melhorenvio', { body: payload });
+        if (carrinhoError) throw carrinhoError;
+
+        melhorEnvioId = carrinhoResp?.id || carrinhoResp?.data?.id || carrinhoResp?.shipment?.id;
+
+        const { error: updateErr } = await supabase.from('pedidos').update({ id_melhor_envio: melhorEnvioId || null, carrinho_me: true, atualizado_em: new Date().toISOString() } as any).eq('id', pedidoId);
+        if (updateErr) throw updateErr;
+        toast({ title: 'Sucesso', description: 'Frete enviado ao carrinho do Melhor Envio' });
+      } else {
+        // calculate frete, pick cheapest and send it
+  if (!cliente?.cep) throw new Error('CEP do cliente ausente');
+  const cepLimpo = String((cliente as any).cep).replace(/\D/g, '');
+        if (!/^[0-9]{8}$/.test(cepLimpo)) throw new Error('CEP do cliente inválido');
+
+        if (!selectedRemetente || !selectedEmbalagem) throw new Error('Remetente ou embalagem não configurados');
+
+        // build calc payload
+  const itemsValue = (pedidoRow?.itens_pedido || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0);
+        const calcPayload = {
+          origem: { postal_code: ((selectedRemetente as any)?.cep || '').replace(/\D/g,''), contact: (selectedRemetente as any)?.contato || (selectedRemetente as any)?.nome, email: (selectedRemetente as any)?.email || 'contato@empresa.com' },
+          destino: { postal_code: cepLimpo },
+          pacote: [{ weight: selectedEmbalagem.peso, insurance_value: itemsValue || 1, length: selectedEmbalagem.comprimento, height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, id: '1', quantity: 1 }]
+        };
+
+        const { data: calcResp, error: calcErr } = await supabase.functions.invoke('calculo-frete-melhorenvio', { body: calcPayload });
+        if (calcErr) throw calcErr;
+        const cotacoesValidas = (calcResp?.cotacoes || []).filter((q: any) => !q.error).map((quote: any) => ({ service_id: quote.id, transportadora: quote.company.name, modalidade: quote.name, prazo: `${quote.delivery_time} dias úteis`, preco: Number(quote.price), raw_response: quote }));
+        if (!cotacoesValidas.length) throw new Error('Nenhuma opção de frete disponível');
+        const maisBarato = cotacoesValidas.reduce((prev: any, curr: any) => prev.preco < curr.preco ? prev : curr);
+
+        // build payload to add to cart using cheapest quote
+        const insuranceValue = itemsValue || 1;
+        const payload: any = {
+          from: {
+            name: selectedRemetente?.nome || '',
+            phone: (selectedRemetente as any)?.contato || (selectedRemetente as any)?.telefone || '',
+            email: (selectedRemetente as any)?.email || 'contato@empresa.com',
+            document: (selectedRemetente as any)?.cpf || '',
+            address: (selectedRemetente as any)?.endereco || '',
+            number: (selectedRemetente as any)?.numero || '',
+            complement: (selectedRemetente as any)?.complemento || '',
+            district: (selectedRemetente as any)?.bairro || '',
+            city: (selectedRemetente as any)?.cidade || '',
+            state_abbr: (selectedRemetente as any)?.estado || '',
+            country_id: 'BR',
+            postal_code: ((selectedRemetente as any)?.cep || '').replace(/\D/g, '')
+          },
+          to: {
+            name: cliente?.nome || '',
+            phone: (cliente as any)?.telefone || (cliente as any)?.contato || '',
+            email: (cliente as any)?.email || 'cliente@email.com',
+            document: (cliente as any)?.cpf || '',
+            address: (cliente as any)?.endereco || '',
+            number: (cliente as any)?.numero || '',
+            complement: (cliente as any)?.complemento || '',
+            district: (cliente as any)?.bairro || '',
+            city: (cliente as any)?.cidade || '',
+            state_abbr: (cliente as any)?.estado || '',
+            country_id: 'BR',
+            postal_code: cepLimpo
+          },
+          options: { insurance_value: insuranceValue, receipt: false, own_hand: false, reverse: false, non_commercial: true },
+          products: buildProducts,
+          service: maisBarato.service_id || maisBarato.raw_response?.service_id || maisBarato.raw_response?.service,
+          volumes: selectedEmbalagem ? [{ height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, length: selectedEmbalagem.comprimento, weight: selectedEmbalagem.peso, insurance_value: insuranceValue }] : [{ height: 5, width: 20, length: 20, weight: 1, insurance_value: insuranceValue }]
+        };
+
+        const { data: carrinhoResp, error: carrinhoError } = await supabase.functions.invoke('adic-carrinho-melhorenvio', { body: payload });
+        if (carrinhoError) throw carrinhoError;
+        melhorEnvioId = carrinhoResp?.id || carrinhoResp?.data?.id || carrinhoResp?.shipment?.id;
+
+        const { error: updateErr } = await supabase.from('pedidos').update({ id_melhor_envio: melhorEnvioId || null, carrinho_me: true, frete_melhor_envio: { transportadora: maisBarato.transportadora, modalidade: maisBarato.modalidade, prazo: maisBarato.prazo, preco: maisBarato.preco, service_id: maisBarato.service_id, raw_response: maisBarato.raw_response }, atualizado_em: new Date().toISOString() } as any).eq('id', pedidoId);
+        if (updateErr) throw updateErr;
+        toast({ title: 'Sucesso', description: 'Frete calculado e enviado ao carrinho do Melhor Envio' });
+      }
+
+      // After sending to cart, process label
+      try {
+        const payloadLabel = { pedidoId, id_melhor_envio: melhorEnvioId };
+        console.log('processar-etiqueta-melhorenvio payload:', payloadLabel);
+
+        // first attempt
+        const { data: labelResp, error: labelErr } = await supabase.functions.invoke('processar-etiqueta-melhorenvio', { body: payloadLabel });
+        console.log('processar-etiqueta-melhorenvio response:', { labelResp, labelErr });
+
+        // if the function returned an error or an unexpected response, try once more (transient network issues)
+        let finalResp = labelResp;
+        let finalErr = labelErr;
+        if (finalErr || (!finalResp || (typeof finalResp === 'object' && Object.keys(finalResp).length === 0))) {
+          console.warn('Etiqueta: resposta inicial inválida, tentando novamente...');
+          try {
+            await new Promise(r => setTimeout(r, 800));
+            const retry = await supabase.functions.invoke('processar-etiqueta-melhorenvio', { body: payloadLabel });
+            console.log('processar-etiqueta-melhorenvio retry response:', retry);
+            finalResp = (retry as any).data || finalResp;
+            finalErr = (retry as any).error || finalErr;
+          } catch (retryErr) {
+            console.error('Retry falhou:', retryErr);
+          }
+        }
+
+        if (finalErr) {
+          console.error('Erro da função processar-etiqueta-melhorenvio:', finalErr, finalResp);
+          // show detailed message to user so they can report it
+          const detail = (finalErr && (finalErr.message || finalErr.name)) || JSON.stringify(finalResp || finalErr);
+          toast({ title: 'Erro ao processar etiqueta', description: String(detail).slice(0, 200), variant: 'destructive' });
+        } else {
+          const returnedUrl = finalResp?.url || null;
+          if (returnedUrl && /^https?:\/\//i.test(returnedUrl)) {
+            window.open(returnedUrl, '_blank');
+            toast({ title: 'Etiqueta processada', description: 'A etiqueta foi processada e aberta em nova aba' });
+          } else if (finalResp?.id) {
+            toast({ title: 'Etiqueta processada', description: 'Etiqueta gerada no Melhor Envio. Verifique o painel.' });
+          } else {
+            // If response is unexpected, surface its JSON (truncated)
+            console.warn('Resposta inesperada ao processar etiqueta:', finalResp);
+            toast({ title: 'Etiqueta processada', description: 'Etiqueta processada. Verifique o painel do Melhor Envio.' });
+          }
+        }
+      } catch (err: any) {
+        console.error('Erro ao processar etiqueta após envio ao carrinho:', err);
+        toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+      }
+      // refresh list/count by reloading current route
+      navigate({ pathname: location.pathname, search: location.search });
+    } catch (err: any) {
+      console.error('Erro no Envio Rápido:', err);
+      toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+    } finally {
+      setProcessingRapid(prev => ({ ...prev, [pedidoId]: false }));
+    }
+  };
 
   const totalPages = Math.max(1, Math.ceil((total || filteredPedidos.length) / pageSize));
 
@@ -484,9 +696,9 @@ export function Comercial() {
                           size="sm"
                           variant="ghost"
                           className="mb-1 bg-purple-600 text-white hover:bg-purple-700 px-2 py-0 h-6 rounded text-xs"
-                          onClick={(e) => { e.stopPropagation(); console.log('Envio Rápido clicked for', pedido.id); }}
+                          onClick={(e) => { e.stopPropagation(); handleEnvioRapido(pedido.id); }}
                         >
-                          Envio Rápido
+                          {processingRapid[pedido.id] ? 'Processando...' : 'Envio Rápido'}
                         </Button>
                       )}
                       <div className="flex items-center justify-center">
