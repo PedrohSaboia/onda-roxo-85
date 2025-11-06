@@ -196,6 +196,25 @@ export default function NovoPedido() {
 
       const pedidoId = (pedidoData as any).id;
 
+      // create a cliente record linked to this pedido
+      try {
+        const clientePayload: any = {
+          nome: nome || null,
+          telefone: contato ? String(contato).replace(/\D/g, '') : null,
+          link_formulario: `/${pedidoId}`,
+          pedido_id: pedidoId,
+          criado_em: new Date().toISOString()
+        };
+        const { error: clienteError } = await supabase.from('clientes').insert(clientePayload as any);
+        if (clienteError) {
+          console.error('Erro ao criar cliente vinculado ao pedido:', clienteError);
+          toast({ title: 'Aviso', description: 'Pedido criado, mas falha ao criar cliente vinculado.', variant: 'destructive' });
+        }
+      } catch (cliErr) {
+        console.error('Exceção ao criar cliente:', cliErr);
+        toast({ title: 'Aviso', description: 'Pedido criado, mas ocorreu um erro ao criar cliente.', variant: 'destructive' });
+      }
+
       // prepare itens_pedido
       const itens = cart.map((it) => {
         const [produtoId, variacaoId] = String(it.id).split(':');
