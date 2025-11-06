@@ -226,11 +226,11 @@ export default function InformacoesEntrega() {
     }
   };
 
-  if (loading) return <div className="flex justify-center items-center h-screen"><p>Carregando...</p></div>;
-  if (!cliente) return <div className="flex justify-center items-center h-screen"><p className="text-red-500">Cliente não encontrado</p></div>;
+  if (loading) return <div className="flex justify-center items-center min-h-screen p-4"><p>Carregando...</p></div>;
+  if (!cliente) return <div className="flex justify-center items-center min-h-screen p-4"><p className="text-red-500">Cliente não encontrado</p></div>;
 
   return (
-    <div className="max-w-md mx-auto p-6">
+    <div className="max-w-full sm:max-w-md mx-auto p-4 sm:p-6">
       <h2 className="text-center text-2xl font-bold mb-4">FICHA CADASTRAL</h2>
       <p className="text-center text-sm text-muted-foreground mb-6">Informações necessárias para gerar etiqueta de envios das transportadoras.</p>
 
@@ -241,18 +241,18 @@ export default function InformacoesEntrega() {
         <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>3</div>
       </div>
 
-      <div className="bg-white rounded-xl shadow p-6">
+      <div className="bg-white rounded-xl shadow p-4 sm:p-6">
         {/* Tabbar Pessoa Física / Jurídica */}
-        <div className="flex gap-2 bg-gray-100 rounded-md p-2 mb-4">
+        <div className="flex flex-col sm:flex-row gap-2 bg-gray-100 rounded-md p-2 mb-4">
           <button
             onClick={() => updateField('tipo', 'pf')}
-            className={`flex-1 p-3 rounded ${cliente.tipo === 'pf' ? 'bg-white shadow' : ''}`}
+            className={`w-full sm:flex-1 text-center p-3 rounded ${cliente.tipo === 'pf' ? 'bg-white shadow' : ''}`}
           >
             Pessoa física
           </button>
           <button
             onClick={() => updateField('tipo', 'pj')}
-            className={`flex-1 p-3 rounded ${cliente.tipo === 'pj' ? 'bg-white shadow' : ''}`}
+            className={`w-full sm:flex-1 text-center p-3 rounded ${cliente.tipo === 'pj' ? 'bg-white shadow' : ''}`}
           >
             Pessoa Jurídica
           </button>
@@ -276,7 +276,7 @@ export default function InformacoesEntrega() {
             <input className="w-full p-3 border rounded-md mb-1" value={formatPhone(cliente.telefone || '')} onChange={(e) => updateField('telefone', onlyDigits(e.target.value))} />
             {fieldErrors['telefone'] && <div className="text-sm text-red-600 mb-3">{fieldErrors['telefone']}</div>}
 
-            <div className="flex justify-end">
+            <div className="flex">
               <button
                 type="button"
                 onClick={() => {
@@ -286,7 +286,7 @@ export default function InformacoesEntrega() {
                   }
                   setStep(2);
                 }}
-                className="bg-purple-700 text-white px-6 py-3 rounded-md"
+                className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto"
               >
                 → Continuar
               </button>
@@ -298,9 +298,9 @@ export default function InformacoesEntrega() {
           <div>
             <h3 className="font-semibold mb-3">Entrega</h3>
             <label className="block text-sm font-medium text-gray-700">Digite seu CEP *</label>
-            <div className="flex gap-3 mb-1">
+            <div className="flex flex-col sm:flex-row gap-3 mb-1">
               <input className="flex-1 p-3 border rounded-md" value={formatCEP(cliente.cep || '')} onChange={(e) => updateField('cep', onlyDigits(e.target.value))} />
-              <button type="button" onClick={handleBuscarCep} disabled={buscandoCep} className="bg-green-700 text-white px-6 rounded-md">
+              <button type="button" onClick={handleBuscarCep} disabled={buscandoCep} className="bg-green-700 text-white px-6 rounded-md w-full sm:w-auto">
                 {buscandoCep ? '...' : 'Buscar CEP'}
               </button>
             </div>
@@ -314,7 +314,7 @@ export default function InformacoesEntrega() {
                 <label className="block text-sm font-medium text-gray-700">Endereço *</label>
                 <input className="w-full p-3 border rounded-md mb-3" value={cliente.endereco || ''} onChange={(e) => updateField('endereco', e.target.value)} />
 
-                <div className="flex gap-3 mb-3">
+                <div className="flex flex-col sm:flex-row gap-3 mb-3">
                   <div className="flex-1">
                     <label className="block text-sm font-medium text-gray-700">Número *</label>
                     <input className={`w-full p-3 border rounded-md ${!cliente.numero ? 'border-red-600' : ''}`} value={cliente.numero || ''} onChange={(e) => updateField('numero', e.target.value)} />
@@ -330,9 +330,9 @@ export default function InformacoesEntrega() {
                 <label className="block text-sm font-medium text-gray-700">Complemento <span className="text-sm text-gray-500">(opcional)</span></label>
                 <input className="w-full p-3 border rounded-md mb-4" value={cliente.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
 
-                <div className="flex justify-between">
-                  <button type="button" onClick={() => setStep(1)} className="px-4 py-2 border rounded-md">Voltar</button>
-                  <button type="button" onClick={handleSalvar} disabled={salvando} className="bg-purple-700 text-white px-6 py-3 rounded-md">
+                <div className="flex flex-col sm:flex-row justify-between gap-3">
+                  <button type="button" onClick={() => setStep(1)} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>
+                  <button type="button" onClick={handleSalvar} disabled={salvando} className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto">
                     {salvando ? 'Salvando...' : '→ Continuar'}
                   </button>
                 </div>
@@ -351,7 +351,7 @@ export default function InformacoesEntrega() {
             <h3 className="mt-4 text-lg font-semibold">Formulário enviado com sucesso</h3>
             <p className="text-sm text-muted-foreground mt-2">Obrigado — seus dados foram salvos.</p>
             <div className="mt-6 flex justify-center">
-              <button onClick={() => navigate(-1)} className="bg-purple-700 text-white px-6 py-3 rounded-md">Voltar</button>
+              <button onClick={() => navigate(-1)} className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto">Voltar</button>
             </div>
           </div>
         )}
