@@ -43,6 +43,8 @@ export function Comercial() {
   const PROCESSED_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
   const initialEtiquetaParam = new URLSearchParams(location.search).get('etiqueta_envio_id') || '';
   const [filterEtiquetaId, setFilterEtiquetaId] = useState<string | ''>(initialEtiquetaParam);
+  const initialClienteFormParam = new URLSearchParams(location.search).get('cliente_formulario_enviado');
+  const [filterClienteFormNotSent, setFilterClienteFormNotSent] = useState<boolean>(initialClienteFormParam === 'false');
   const [etiquetaCount, setEtiquetaCount] = useState<number>(0);
   const { toast } = useToast();
   const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
@@ -67,7 +69,7 @@ export function Comercial() {
         const query = supabase
           .from('pedidos')
           .select(
-            `*, plataformas(id,nome,cor,img_url), usuarios(id,nome,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem,criado_em,atualizado_em)`,
+            `*, plataformas(id,nome,cor,img_url), usuarios(id,nome,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem,criado_em,atualizado_em), clientes(id,nome,formulario_enviado)`,
             { count: 'exact' }
           )
           .order('criado_em', { ascending: false });
@@ -102,6 +104,7 @@ export function Comercial() {
           const usuarioRow = pick(row.usuarios);
           const statusRow = pick(row.status);
           const etiquetaRow = pick(row.tipos_etiqueta);
+          const clienteRow = pick(row.clientes);
           // frete_melhor_envio may be saved as JSON on pedidos
           const freteMe = (row as any).frete_melhor_envio || null;
 
@@ -116,8 +119,9 @@ export function Comercial() {
           return {
             id: row.id,
             idExterno: row.id_externo,
-            clienteNome: row.cliente_nome,
+            clienteNome: clienteRow?.nome || row.cliente_nome,
             contato: row.contato || '',
+            formularioEnviado: !!clienteRow?.formulario_enviado,
             etiquetaEnvioId: row.etiqueta_envio_id || '',
             responsavelId: row.responsavel_id,
             plataformaId: row.plataforma_id,
@@ -252,6 +256,9 @@ export function Comercial() {
 
     return false;
   });
+
+  // apply client-formulario filter client-side: only include pedidos whose cliente.formulario_enviado === false
+  const filteredPedidosWithClienteFilter = filterClienteFormNotSent ? filteredPedidos.filter(p => !(p as any).formularioEnviado) : filteredPedidos;
 
   const handleEnvioRapido = async (pedidoId: string) => {
     if (!pedidoId) return;
@@ -490,7 +497,7 @@ export function Comercial() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil((total || filteredPedidos.length) / pageSize));
+  const totalPages = Math.max(1, Math.ceil((total || filteredPedidosWithClienteFilter.length) / pageSize));
 
   const handlePrev = () => setPage(p => Math.max(1, p - 1));
   const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
@@ -507,7 +514,7 @@ export function Comercial() {
               <h1 className="text-2xl font-bold">{view === 'enviados' ? 'Pedidos Enviados' : 'Pedidos'}</h1>
               <p className="text-muted-foreground">
                 {view === 'enviados'
-                  ? `${filteredPedidos.length} pedidos encontrados`
+                  ? `${filteredPedidosWithClienteFilter.length} pedidos encontrados`
                   : filterNotLiberado
                     ? `${total} pedidos encontrados`
                     : `${totalExcludingEnviados} pedidos encontrados`}
@@ -573,19 +580,28 @@ export function Comercial() {
                         <input id="filter-not-liberado" type="checkbox" checked={filterNotLiberado} onChange={(e) => setFilterNotLiberado(e.target.checked)} />
                         <label htmlFor="filter-not-liberado" className="text-sm">Somente pedidos não liberados</label>
                       </div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <input id="filter-cliente-formulario" type="checkbox" checked={filterClienteFormNotSent} onChange={(e) => setFilterClienteFormNotSent(e.target.checked)} />
+                        <label htmlFor="filter-cliente-formulario" className="text-sm">Somente pedidos com formulário não enviado</label>
+                      </div>
                       <div className="flex items-center justify-end gap-2">
                         <Button variant="outline" size="sm" onClick={() => {
-                          // clear filter
+                          // clear filters
                           setFilterNotLiberado(false);
+                          setFilterClienteFormNotSent(false);
                           const next = new URLSearchParams(location.search);
                           next.delete('pedido_liberado');
+                          next.delete('cliente_formulario_enviado');
                           navigate({ pathname: location.pathname, search: next.toString() });
                           setShowFilters(false);
                         }}>Limpar</Button>
                         <Button size="sm" onClick={() => {
-                          // apply filter via query param so it's shareable
+                          // apply filters via query params so they're shareable
                           const next = new URLSearchParams(location.search);
                           if (filterNotLiberado) next.set('pedido_liberado', 'false'); else next.delete('pedido_liberado');
+                          if (filterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
+                          // ensure module param remains
+                          if (!next.get('module')) next.set('module', 'comercial');
                           navigate({ pathname: location.pathname, search: next.toString() });
                           setShowFilters(false);
                         }}>Aplicar</Button>
@@ -631,7 +647,7 @@ export function Comercial() {
                 </TableRow>
               )}
 
-              {filteredPedidos.map((pedido) => (
+              {filteredPedidosWithClienteFilter.map((pedido) => (
                 <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => navigate(`/pedido/${pedido.id}${view === 'enviados' ? '?readonly=1' : ''}`)}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
@@ -777,8 +793,8 @@ export function Comercial() {
         </CardContent>
         <div className="flex items-center justify-between p-4 border-t">
           <div className="flex items-center gap-4">
-            <div className="text-sm text-muted-foreground">
-              Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total || filteredPedidos.length)}</strong> de <strong>{total || filteredPedidos.length}</strong>
+              <div className="text-sm text-muted-foreground">
+              Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total || filteredPedidosWithClienteFilter.length)}</strong> de <strong>{total || filteredPedidosWithClienteFilter.length}</strong>
             </div>
             <div className="flex items-center gap-2">
               <label className="text-sm text-muted-foreground">Mostrar</label>
