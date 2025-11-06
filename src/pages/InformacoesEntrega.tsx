@@ -25,6 +25,7 @@ export default function InformacoesEntrega() {
   const [cliente, setCliente] = useState<Partial<Cliente> | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState(1);
+  const [submitted, setSubmitted] = useState(false);
   const [buscandoCep, setBuscandoCep] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const { toast } = useToast();
@@ -53,6 +54,11 @@ export default function InformacoesEntrega() {
           cidade: data.cidade || '',
           estado: data.estado || '',
         });
+        // if this cliente already submitted the form, show confirmation immediately
+        if ((data as any).formulario_enviado) {
+          setSubmitted(true);
+          setStep(2);
+        }
       }
       setLoading(false);
     };
@@ -209,6 +215,7 @@ export default function InformacoesEntrega() {
         bairro: cliente.bairro,
         cidade: cliente.cidade,
         estado: cliente.estado,
+        formulario_enviado: true,
         atualizado_em: new Date().toISOString()
       };
 
@@ -218,8 +225,9 @@ export default function InformacoesEntrega() {
         toast({ title: 'Erro', description: 'Não foi possível salvar os dados', variant: 'destructive' });
       } else {
         toast({ title: 'Sucesso', description: 'Dados salvos com sucesso' });
-        // show confirmation step
-        setStep(3);
+        // mark as submitted and remain on step 2 to show confirmation
+        setSubmitted(true);
+        setStep(2);
       }
     } finally {
       setSalvando(false);
@@ -234,29 +242,32 @@ export default function InformacoesEntrega() {
       <h2 className="text-center text-2xl font-bold mb-4">FICHA CADASTRAL</h2>
       <p className="text-center text-sm text-muted-foreground mb-6">Informações necessárias para gerar etiqueta de envios das transportadoras.</p>
 
-      {/* Stepper visual (simple) */}
-      <div className="flex items-center justify-center gap-4 mb-6">
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>1</div>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 2 ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>2</div>
-        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 3 ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>3</div>
-      </div>
+          {/* Stepper visual (2 steps) */}
+          {!submitted && (
+            <div className="flex items-center justify-center gap-4 mb-6">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>1</div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${(step >= 2 || submitted) ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>2</div>
+            </div>
+          )}
 
       <div className="bg-white rounded-xl shadow p-4 sm:p-6">
         {/* Tabbar Pessoa Física / Jurídica */}
-        <div className="flex flex-col sm:flex-row gap-2 bg-gray-100 rounded-md p-2 mb-4">
-          <button
-            onClick={() => updateField('tipo', 'pf')}
-            className={`w-full sm:flex-1 text-center p-3 rounded ${cliente.tipo === 'pf' ? 'bg-white shadow' : ''}`}
-          >
-            Pessoa física
-          </button>
-          <button
-            onClick={() => updateField('tipo', 'pj')}
-            className={`w-full sm:flex-1 text-center p-3 rounded ${cliente.tipo === 'pj' ? 'bg-white shadow' : ''}`}
-          >
-            Pessoa Jurídica
-          </button>
-        </div>
+        {!submitted && (
+          <div className="flex flex-col sm:flex-row gap-2 bg-gray-100 rounded-md p-2 mb-4">
+            <button
+              onClick={() => updateField('tipo', 'pf')}
+              className={`w-full sm:flex-1 text-center p-3 rounded ${cliente.tipo === 'pf' ? 'bg-white shadow' : ''}`}
+            >
+              Pessoa física
+            </button>
+            <button
+              onClick={() => updateField('tipo', 'pj')}
+              className={`w-full sm:flex-1 text-center p-3 rounded ${cliente.tipo === 'pj' ? 'bg-white shadow' : ''}`}
+            >
+              Pessoa Jurídica
+            </button>
+          </div>
+        )}
 
   {step === 1 && (
           <div>
@@ -284,6 +295,8 @@ export default function InformacoesEntrega() {
                     toast({ title: 'Erro', description: 'Preencha todos os campos obrigatórios corretamente', variant: 'destructive' });
                     return;
                   }
+                  // reset submitted flag when moving to address step
+                  setSubmitted(false);
                   setStep(2);
                 }}
                 className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto"
@@ -294,7 +307,7 @@ export default function InformacoesEntrega() {
           </div>
         )}
 
-  {step === 2 && (
+  {step === 2 && !submitted && (
           <div>
             <h3 className="font-semibold mb-3">Entrega</h3>
             <label className="block text-sm font-medium text-gray-700">Digite seu CEP *</label>
@@ -331,9 +344,9 @@ export default function InformacoesEntrega() {
                 <input className="w-full p-3 border rounded-md mb-4" value={cliente.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
 
                 <div className="flex flex-col sm:flex-row justify-between gap-3">
-                  <button type="button" onClick={() => setStep(1)} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>
+                  <button type="button" onClick={() => { setSubmitted(false); setStep(1); }} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>
                   <button type="button" onClick={handleSalvar} disabled={salvando} className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto">
-                    {salvando ? 'Salvando...' : '→ Continuar'}
+                    {salvando ? 'Salvando...' : 'Enviar Formulário'}
                   </button>
                 </div>
               </div>
@@ -343,16 +356,14 @@ export default function InformacoesEntrega() {
           </div>
         )}
 
-        {step === 3 && (
+        {submitted && (
           <div className="text-center py-8">
             <svg xmlns="http://www.w3.org/2000/svg" className="mx-auto h-16 w-16 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <h3 className="mt-4 text-lg font-semibold">Formulário enviado com sucesso</h3>
             <p className="text-sm text-muted-foreground mt-2">Obrigado — seus dados foram salvos.</p>
-            <div className="mt-6 flex justify-center">
-              <button onClick={() => navigate(-1)} className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto">Voltar</button>
-            </div>
+            {/* no action button after submit per request */}
           </div>
         )}
       </div>
