@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Calendar, MessageSquare, AlertTriangle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import { Pedido } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -24,6 +25,18 @@ const etiquetaLabels = {
 };
 
 export function OrderCard({ pedido, onClick, draggable = false }: OrderCardProps) {
+  const { toast } = useToast();
+
+  const handleCopyId = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const val = pedido.idExterno || pedido.id || '';
+      navigator.clipboard.writeText(String(val));
+      toast({ title: 'ID copiado', description: String(val) });
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Não foi possível copiar o ID', variant: 'destructive' });
+    }
+  };
   return (
     <Card 
       className={cn(
@@ -37,8 +50,13 @@ export function OrderCard({ pedido, onClick, draggable = false }: OrderCardProps
         <div className="space-y-3 flex-1 min-h-0 overflow-y-auto pr-2">
           {/* Header com ID e urgência */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm">{pedido.idExterno}</span>
+              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <button onClick={handleCopyId} title="Copiar ID" className="font-semibold text-sm hover:underline text-left">
+                  {pedido.idExterno}
+                </button>
+                {/* click the ID text to copy (icon removed) */}
+              </div>
               {pedido.urgente && (
                 <Badge variant="destructive" className="text-xs">
                   <AlertTriangle className="h-3 w-3 mr-1" />
@@ -104,7 +122,12 @@ export function OrderCard({ pedido, onClick, draggable = false }: OrderCardProps
                         )}
                       </div>
                       <div className="flex-1 text-sm">
-                        <div className="font-medium truncate">{name}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-medium truncate">{name}</div>
+                          {it.item_faltante && (
+                            <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Faltante</span>
+                          )}
+                        </div>
                         <div className="text-xs text-muted-foreground">Qtd: {it.quantidade}</div>
                       </div>
                     </div>

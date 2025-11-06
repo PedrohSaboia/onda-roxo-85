@@ -52,7 +52,7 @@ export function Producao() {
 
         const { data, error: supaError } = await supabase
           .from('pedidos')
-          .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`) 
+          .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`) 
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -70,6 +70,7 @@ export function Producao() {
             id: it.id,
             quantidade: it.quantidade,
             precoUnitario: it.preco_unitario,
+            item_faltante: !!it.item_faltante,
             produto: it.produto ? { id: it.produto.id, nome: it.produto.nome, imagem: it.produto.img_url } : null,
             variacao: it.variacao ? { id: it.variacao.id, nome: it.variacao.nome, imagem: it.variacao.img_url } : null,
           }));
