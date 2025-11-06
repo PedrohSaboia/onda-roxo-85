@@ -39,6 +39,8 @@ export function Comercial() {
   const [totalExcludingEnviados, setTotalExcludingEnviados] = useState<number>(0);
   const [showFilters, setShowFilters] = useState(false);
   const ETIQUETA_FILTER_ID = '0c0ff1fc-1c3b-4eff-9dec-a505d33f3e18';
+  // etiqueta que representa "processado/impresso" — usada para remover do filtro de "Etiqueta Pendente"
+  const PROCESSED_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
   const initialEtiquetaParam = new URLSearchParams(location.search).get('etiqueta_envio_id') || '';
   const [filterEtiquetaId, setFilterEtiquetaId] = useState<string | ''>(initialEtiquetaParam);
   const [etiquetaCount, setEtiquetaCount] = useState<number>(0);
@@ -433,25 +435,53 @@ export function Comercial() {
           // show detailed message to user so they can report it
           const detail = (finalErr && (finalErr.message || finalErr.name)) || JSON.stringify(finalResp || finalErr);
           toast({ title: 'Erro ao processar etiqueta', description: String(detail).slice(0, 200), variant: 'destructive' });
-        } else {
-          const returnedUrl = finalResp?.url || null;
-          if (returnedUrl && /^https?:\/\//i.test(returnedUrl)) {
-            window.open(returnedUrl, '_blank');
-            toast({ title: 'Etiqueta processada', description: 'A etiqueta foi processada e aberta em nova aba' });
-          } else if (finalResp?.id) {
-            toast({ title: 'Etiqueta processada', description: 'Etiqueta gerada no Melhor Envio. Verifique o painel.' });
           } else {
-            // If response is unexpected, surface its JSON (truncated)
-            console.warn('Resposta inesperada ao processar etiqueta:', finalResp);
-            toast({ title: 'Etiqueta processada', description: 'Etiqueta processada. Verifique o painel do Melhor Envio.' });
-          }
+            const returnedUrl = finalResp?.url || null;
+            if (returnedUrl && /^https?:\/\//i.test(returnedUrl)) {
+              window.open(returnedUrl, '_blank');
+              toast({ title: 'Etiqueta processada', description: 'A etiqueta foi processada e aberta em nova aba' });
+            } else if (finalResp?.id) {
+              toast({ title: 'Etiqueta processada', description: 'Etiqueta gerada no Melhor Envio. Verifique o painel.' });
+            } else {
+              // If response is unexpected, surface its JSON (truncated)
+              console.warn('Resposta inesperada ao processar etiqueta:', finalResp);
+              toast({ title: 'Etiqueta processada', description: 'Etiqueta processada. Verifique o painel do Melhor Envio.' });
+            }
+
+            // Marcar o pedido como com etiqueta processada para que saia do filtro "Etiqueta Pendente"
+            try {
+              const { error: updateEtiquetaErr } = await supabase
+                .from('pedidos')
+                .update({ etiqueta_envio_id: PROCESSED_ETIQUETA_ID, atualizado_em: new Date().toISOString() } as any)
+                .eq('id', pedidoId);
+              if (updateEtiquetaErr) {
+                console.error('Erro ao atualizar etiqueta_envio_id no pedido:', updateEtiquetaErr);
+                // não interrompe o fluxo principal — só avisa o usuário
+                toast({ title: 'Aviso', description: 'Etiqueta processada, mas não foi possível atualizar o pedido no servidor.', variant: 'destructive' });
+              } else {
+                // Atualiza o estado local imediatamente para remover o pedido do filtro "Etiqueta Pendente"
+                setPedidos(prev => {
+                  // se o filtro de etiqueta pendente estiver ativo, remova o pedido da lista
+                  if (filterEtiquetaId === ETIQUETA_FILTER_ID) {
+                    return prev.filter(p => p.id !== pedidoId);
+                  }
+                  // caso contrário apenas atualize o campo da etiqueta no pedido
+                  return prev.map(p => p.id === pedidoId ? { ...p, etiquetaEnvioId: PROCESSED_ETIQUETA_ID, etiquetaEnvio: 'DISPONIVEL' } : p);
+                });
+
+                // decrementa contagem local de etiquetas pendentes se aplicável
+                setEtiquetaCount(c => Math.max(0, (c || 0) - (filterEtiquetaId === ETIQUETA_FILTER_ID ? 1 : 0)));
+              }
+            } catch (updErr) {
+              console.error('Exceção ao atualizar etiqueta_envio_id:', updErr);
+            }
         }
       } catch (err: any) {
         console.error('Erro ao processar etiqueta após envio ao carrinho:', err);
         toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
       }
-      // refresh list/count by reloading current route
-      navigate({ pathname: location.pathname, search: location.search });
+  // Note: we no longer refresh the entire route here — local state is updated to reflect
+  // the etiqueta change in real time (see setPedidos above). This avoids a full reload.
     } catch (err: any) {
       console.error('Erro no Envio Rápido:', err);
       toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
@@ -522,6 +552,8 @@ export function Comercial() {
                           setFilterEtiquetaId(ETIQUETA_FILTER_ID);
                           next.set('etiqueta_envio_id', ETIQUETA_FILTER_ID);
                         }
+                        // Ensure the module query is preserved so we don't unintentionally return to Dashboard
+                        if (!next.get('module')) next.set('module', 'comercial');
                         setPage(1);
                         navigate({ pathname: location.pathname, search: next.toString() });
                       }}
