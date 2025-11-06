@@ -52,7 +52,7 @@ export function Producao() {
 
         const { data, error: supaError } = await supabase
           .from('pedidos')
-          .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem)`) 
+          .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`) 
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -66,6 +66,14 @@ export function Producao() {
           const statusRow = pick(row.status);
           const etiquetaRow = pick(row.tipos_etiqueta);
 
+          const itens = (row.itens_pedido || []).map((it: any) => ({
+            id: it.id,
+            quantidade: it.quantidade,
+            precoUnitario: it.preco_unitario,
+            produto: it.produto ? { id: it.produto.id, nome: it.produto.nome, imagem: it.produto.img_url } : null,
+            variacao: it.variacao ? { id: it.variacao.id, nome: it.variacao.nome, imagem: it.variacao.img_url } : null,
+          }));
+
           return {
             id: row.id,
             idExterno: row.id_externo,
@@ -78,7 +86,7 @@ export function Producao() {
             urgente: !!row.urgente,
             dataPrevista: row.data_prevista || undefined,
             observacoes: row.observacoes || '',
-            itens: [],
+            itens,
             responsavel: usuarioRow ? { id: usuarioRow.id, nome: usuarioRow.nome, email: '', papel: 'operador', avatar: usuarioRow.img_url || undefined, ativo: true, criadoEm: '', atualizadoEm: '' } : undefined,
             plataforma: plataformaRow ? { id: plataformaRow.id, nome: plataformaRow.nome, cor: plataformaRow.cor, imagemUrl: plataformaRow.img_url || undefined, criadoEm: '', atualizadoEm: '' } : undefined,
             status: statusRow ? { id: statusRow.id, nome: statusRow.nome, corHex: statusRow.cor_hex, ordem: statusRow.ordem ?? 0, criadoEm: '', atualizadoEm: '' } : undefined,
