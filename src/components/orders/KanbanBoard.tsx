@@ -41,7 +41,16 @@ export function KanbanBoard({ pedidos, status, onOrderMove, onOrderClick }: Kanb
   };
 
   const getPedidosPorStatus = (statusId: string) => {
-    return pedidos.filter(pedido => pedido.statusId === statusId);
+    const list = pedidos.filter(pedido => pedido.statusId === statusId);
+    // Prioritize urgent orders first, then sort by created date from oldest to newest
+    return [...list].sort((a, b) => {
+      const aUrg = !!(a as any).urgente;
+      const bUrg = !!(b as any).urgente;
+      if (aUrg !== bUrg) return aUrg ? -1 : 1; // urgent first
+      const ta = new Date(a.criadoEm || 0).getTime();
+      const tb = new Date(b.criadoEm || 0).getTime();
+      return ta - tb; // older (smaller timestamp) first
+    });
   };
 
   return (

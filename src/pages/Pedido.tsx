@@ -816,8 +816,24 @@ export default function Pedido() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {pedido?.itens?.length ? pedido.itens.map((item: any) => (
-                    <TableRow key={item.id}>
+                  {pedido?.itens?.length ? (() => {
+                    // group items by produto id + variacao id + preco_unitario to combine equal items
+                    const grouped: Record<string, any> = {};
+                    (pedido.itens || []).forEach((it: any) => {
+                      const prodId = it.produto?.id || it.produto_id || '';
+                      const varId = it.variacao?.id || it.variacao_id || '';
+                      const price = String(it.preco_unitario ?? it.preco ?? 0);
+                      const key = `${prodId}::${varId}::${price}`;
+                      if (!grouped[key]) {
+                        grouped[key] = { ...it, quantidade: Number(it.quantidade || 0), _sourceIds: [it.id] };
+                      } else {
+                        grouped[key].quantidade = Number(grouped[key].quantidade || 0) + Number(it.quantidade || 0);
+                        grouped[key]._sourceIds.push(it.id);
+                      }
+                    });
+                    const groupedArray = Object.values(grouped);
+                    return groupedArray.map((item: any) => (
+                    <TableRow key={item._sourceIds?.[0] || item.id}>
                       <TableCell>
                         <div className="flex items-center gap-3">
                           {item.produto?.img_url || item.variacao?.img_url ? (
@@ -832,16 +848,17 @@ export default function Pedido() {
                       <TableCell>{item.variacao?.sku || item.produto?.sku || ''}</TableCell>
                       <TableCell>{item.quantidade}</TableCell>
                       <TableCell>R$ {Number(item.preco_unitario || item.produto?.preco || 0).toFixed(2)}</TableCell>
-                      <TableCell>R$ {(Number(item.preco_unitario || item.produto?.preco || 0) * item.quantidade).toFixed(2)}</TableCell>
+                      <TableCell>R$ {(Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 0)).toFixed(2)}</TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; setProductToRemove(item); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
+                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; /* target first source id for removal modal */ const toRemove = { ...item, id: (item._sourceIds && item._sourceIds[0]) || item.id }; setProductToRemove(toRemove); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
                             <Trash className="h-4 w-4" />
                           </Button>
                         </div>
                       </TableCell>
                     </TableRow>
-                  )) : (
+                    ))
+                  })() : (
                     <TableRow>
                       <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">Nenhum produto</TableCell>
                     </TableRow>
