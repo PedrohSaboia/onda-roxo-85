@@ -60,7 +60,9 @@ export function Producao() {
 
         const pick = (val: any) => Array.isArray(val) ? val[0] : val;
 
-        const mapped: Pedido[] = (data || []).map((row: any) => {
+        const mapPedidoRow = (row: any): Pedido => {
+          const pick = (val: any) => Array.isArray(val) ? val[0] : val;
+
           const usuarioRow = pick(row.usuarios);
           const plataformaRow = pick(row.plataformas);
           const statusRow = pick(row.status);
@@ -95,9 +97,82 @@ export function Producao() {
             atualizadoEm: row.atualizado_em,
             etiqueta: etiquetaRow ? { id: etiquetaRow.id, nome: etiquetaRow.nome, corHex: etiquetaRow.cor_hex, ordem: etiquetaRow.ordem ?? 0, criadoEm: '', atualizadoEm: '' } : undefined,
           }
-        });
+        };
+
+        const mapped: Pedido[] = (data || []).map(mapPedidoRow);
 
         setPedidos(mapped);
+
+        // realtime subscriptions: apenas após carregar os pedidos iniciais
+        // Inscreve em mudanças nas tabelas `pedidos` e `itens_pedido`
+        try {
+          // pedidos
+          const pedidosChannel = supabase
+            .channel('public:pedidos')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, (payload) => {
+              if (!mounted) return;
+              const handlePedidoChange = async () => {
+                const ev = (payload as any).eventType;
+                const row: any = (payload as any).new ?? (payload as any).old;
+                if (!row) return;
+
+                if (ev === 'DELETE') {
+                  setPedidos(prev => prev.filter(p => p.id !== row.id));
+                  return;
+                }
+
+                // INSERT or UPDATE: buscar dados do pedido atualizado com itens embarcados
+                const { data: pedidoRow, error } = await supabase
+                  .from('pedidos')
+                  .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`)
+                  .eq('id', row.id)
+                  .single();
+                if (error || !pedidoRow) return;
+                const mappedPedido = mapPedidoRow(pedidoRow);
+                setPedidos(prev => {
+                  const exists = prev.some(p => p.id === mappedPedido.id);
+                  if (exists) return prev.map(p => p.id === mappedPedido.id ? mappedPedido : p);
+                  return [mappedPedido, ...prev];
+                });
+              };
+              void handlePedidoChange();
+            })
+            .subscribe();
+
+          // itens_pedido
+          const itensChannel = supabase
+            .channel('public:itens_pedido')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'itens_pedido' }, (payload) => {
+              if (!mounted) return;
+              const row: any = (payload as any).new ?? (payload as any).old;
+              if (!row) return;
+
+              const pedidoId = row.pedido_id;
+              if (!pedidoId) return;
+
+              // Recarrega apenas o pedido afetado para manter consistência do relacionamento
+              (async () => {
+                const { data: pedidoRow, error } = await supabase
+                  .from('pedidos')
+                  .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`)
+                  .eq('id', pedidoId)
+                  .single();
+                if (error || !pedidoRow) return;
+                const mappedPedido = mapPedidoRow(pedidoRow);
+                setPedidos(prev => prev.map(p => p.id === mappedPedido.id ? mappedPedido : p));
+              })();
+            })
+            .subscribe();
+
+          // cleanup on unmount
+          const cleanup = () => {
+            try { pedidosChannel.unsubscribe(); } catch (e) { console.warn(e); }
+            try { itensChannel.unsubscribe(); } catch (e) { console.warn(e); }
+          };
+          (window as any).__producaoRealtimeCleanup = cleanup;
+        } catch (err) {
+          console.warn('Erro ao criar subscriptions realtime', err);
+        }
       } catch (err: any) {
         console.error('Erro ao buscar pedidos produção', err);
         setError(err?.message || String(err));
