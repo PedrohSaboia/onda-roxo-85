@@ -102,7 +102,7 @@ export default function NovoPedido() {
       // Use `id` and `preco` fields expected by the UI
       const existing = prev.find((i) => i.id === itemId && !!i.brinde === !!brinde);
       if (existing) return prev.map((i) => i.id === itemId ? { ...i, quantidade: i.quantidade + 1 } : i);
-      return [...prev, { id: itemId, produtoId: produto.id, nome: name, quantidade: 1, preco: unitary, imagemUrl: variacao?.img_url || produto.imagemUrl || produto.img_url, brinde: !!brinde }];
+  return [...prev, { id: itemId, produtoId: produto.id, nome: name, quantidade: 1, preco: unitary, imagemUrl: variacao?.img_url || produto.imagemUrl || produto.img_url, codigo_barras: variacao?.codigo_barras_v || produto.codigo_barras || null, brinde: !!brinde }];
     });
   };
 
@@ -215,18 +215,23 @@ export default function NovoPedido() {
         toast({ title: 'Aviso', description: 'Pedido criado, mas ocorreu um erro ao criar cliente.', variant: 'destructive' });
       }
 
-      // prepare itens_pedido
-      const itens = cart.map((it) => {
+      // prepare itens_pedido: expand each cart item into N rows (one per unit)
+      const itens = cart.reduce((acc: any[], it) => {
         const [produtoId, variacaoId] = String(it.id).split(':');
-        return {
-          pedido_id: pedidoId,
-          produto_id: it.produtoId || produtoId,
-          variacao_id: variacaoId || null,
-          quantidade: it.quantidade || 1,
-          preco_unitario: it.preco || 0,
-          criado_em: new Date().toISOString()
-        };
-      });
+        const qty = Number(it.quantidade || 1);
+        for (let i = 0; i < qty; i++) {
+          acc.push({
+            pedido_id: pedidoId,
+            produto_id: it.produtoId || produtoId,
+            variacao_id: variacaoId || null,
+            quantidade: 1,
+            preco_unitario: it.preco || 0,
+            codigo_barras: it.codigo_barras || null,
+            criado_em: new Date().toISOString()
+          });
+        }
+        return acc;
+      }, [] as any[]);
 
       const { error: itensError } = await supabase.from('itens_pedido').insert(itens as any);
       if (itensError) throw itensError;
@@ -250,7 +255,7 @@ export default function NovoPedido() {
       try {
         const { data, error } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
@@ -264,7 +269,8 @@ export default function NovoPedido() {
           unidade: p.unidade || 'un',
           categoria: p.categoria || '',
           imagemUrl: p.img_url || undefined,
-          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+          codigo_barras: p.codigo_barras || null,
+          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null, codigo_barras_v: v.codigo_barras_v || null })),
           nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
           criadoEm: p.criado_em,
@@ -398,7 +404,7 @@ export default function NovoPedido() {
               </div>
 
               <div>
-                <label className="text-sm">Status Almofada</label>
+                <label className="text-sm">Status do pedido</label>
                 <select className="w-full border rounded p-2" value={status} onChange={(e) => setStatus(e.target.value)}>
                   {loadingStatuses ? (
                     <option>Carregando...</option>
