@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Settings, Users, Tag, Palette, Building } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,9 +9,47 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { mockUsuarios, mockStatus, mockPlataformas } from '@/data/mockData';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/integrations/supabase/client';
 
 export function Configuracoes() {
   const [darkMode, setDarkMode] = useState(false);
+  const { toast } = useToast();
+
+  // new user modal state
+  const [openNewUser, setOpenNewUser] = useState(false);
+  const [newNome, setNewNome] = useState('');
+  const [newEmail, setNewEmail] = useState('');
+  const [newPapel, setNewPapel] = useState<'admin'|'operador'|'visualizador'>('operador');
+  const [newPassword, setNewPassword] = useState('');
+  const [creating, setCreating] = useState(false);
+  // users list state
+  type Usuario = { id?: string; nome: string; email?: string; acesso?: string; ativo?: boolean };
+  const [users, setUsers] = useState<Usuario[]>([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
+
+  const fetchUsuarios = async () => {
+    setLoadingUsers(true);
+    setUsersError(null);
+    try {
+      const { data, error } = await supabase.from('usuarios').select('id, nome, email, acesso, ativo').order('nome', { ascending: true });
+      if (error) throw error;
+      setUsers((data ?? []) as Usuario[]);
+    } catch (err) {
+      console.error('Erro ao buscar usuários:', err);
+      setUsersError(String(err));
+      setUsers([]);
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsuarios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="space-y-6 p-6">
@@ -51,9 +89,99 @@ export function Configuracoes() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Usuários do Sistema</CardTitle>
-                <Button className="bg-purple-600 hover:bg-purple-700">
-                  Novo Usuário
-                </Button>
+                <Dialog open={openNewUser} onOpenChange={setOpenNewUser}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-purple-600 hover:bg-purple-700">Novo Usuário</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Novo Usuário</DialogTitle>
+                      <DialogDescription>Crie uma nova conta de usuário. Será criada a autenticação e o registro em usuários será atualizado automaticamente quando possível.</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="novo-nome">Nome</Label>
+                        <Input id="novo-nome" value={newNome} onChange={(e) => setNewNome(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="novo-email">Email</Label>
+                        <Input id="novo-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="novo-senha">Senha</Label>
+                        <Input id="novo-senha" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="novo-papel">Papel</Label>
+                        <select id="novo-papel" value={newPapel} onChange={(e) => setNewPapel(e.target.value as 'admin'|'operador'|'visualizador')} className="border rounded px-2 py-1">
+                          <option value="operador">Operador</option>
+                          <option value="admin">Administrador</option>
+                          <option value="visualizador">Visualizador</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" onClick={() => setOpenNewUser(false)}>Cancelar</Button>
+                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                          // create auth user then upsert into usuarios
+                          try {
+                            if (!newNome || !newEmail || !newPassword) {
+                              toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+                              return;
+                            }
+                            setCreating(true);
+
+                            const { data, error } = await supabase.auth.signUp({ email: newEmail, password: newPassword, options: { data: { nome: newNome } } });
+
+                            if (error) {
+                              toast({ title: 'Erro ao criar autenticação', description: error.message || String(error), variant: 'destructive' });
+                              setCreating(false);
+                              return;
+                            }
+
+                            // try to read created user id from response
+                            type SignUpData = { user?: { id?: string } } | null;
+                            const userId = (data as SignUpData)?.user?.id ?? null;
+
+                            if (userId) {
+                              // upsert into usuarios with same uuid
+                              const { error: upsertErr } = await supabase.from('usuarios').upsert({ id: userId, nome: newNome, email: newEmail, acesso: newPapel, ativo: true }).select();
+                              if (upsertErr) {
+                                toast({ title: 'Conta criada, mas erro ao registrar no sistema', description: upsertErr.message || String(upsertErr), variant: 'destructive' });
+                              } else {
+                                toast({ title: 'Usuário criado', description: 'Autenticação criada e usuário registrado.' });
+                                await fetchUsuarios();
+                              }
+                            } else {
+                              // fallback: insert without linking id — admin will need to reconcile
+                              const { error: insErr } = await supabase.from('usuarios').insert({ nome: newNome, email: newEmail, acesso: newPapel, ativo: true }).select();
+                              if (insErr) {
+                                toast({ title: 'Erro ao inserir usuário', description: insErr.message || String(insErr), variant: 'destructive' });
+                              } else {
+                                toast({ title: 'Autenticação criada', description: 'Conta criada. O usuário será registrado no sistema automaticamente após confirmação de email.' });
+                                await fetchUsuarios();
+                              }
+                            }
+
+                            // reset form and close
+                            setNewNome(''); setNewEmail(''); setNewPassword(''); setNewPapel('operador');
+                            // refresh list (in case creation succeeded)
+                            fetchUsuarios();
+                            setOpenNewUser(false);
+                          } catch (err) {
+                            console.error('Erro criar usuário:', err);
+                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                          } finally {
+                            setCreating(false);
+                          }
+                        }} disabled={creating}>{creating ? 'Criando...' : 'Criar usuário'}</Button>
+                      </div>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -68,27 +196,41 @@ export function Configuracoes() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockUsuarios.map((usuario) => (
-                    <TableRow key={usuario.id}>
-                      <TableCell className="font-medium">{usuario.nome}</TableCell>
-                      <TableCell>{usuario.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={usuario.papel === 'admin' ? 'default' : 'secondary'}>
-                          {usuario.papel === 'admin' ? 'Administrador' : 'Operador'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={usuario.ativo ? 'default' : 'secondary'}>
-                          {usuario.ativo ? 'Ativo' : 'Inativo'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm">
-                          Editar
-                        </Button>
-                      </TableCell>
+                  {loadingUsers ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-sm text-muted-foreground">Carregando usuários...</TableCell>
                     </TableRow>
-                  ))}
+                  ) : usersError ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-sm text-destructive">Erro: {usersError}</TableCell>
+                    </TableRow>
+                  ) : users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-sm text-muted-foreground">Nenhum usuário encontrado.</TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map((usuario) => (
+                      <TableRow key={usuario.id ?? usuario.email ?? usuario.nome}>
+                        <TableCell className="font-medium">{usuario.nome}</TableCell>
+                        <TableCell>{usuario.email}</TableCell>
+                        <TableCell>
+                          <Badge variant={usuario.acesso === 'admin' ? 'default' : 'secondary'}>
+                            {usuario.acesso === 'admin' ? 'Administrador' : (usuario.acesso ?? 'Operador')}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={usuario.ativo ? 'default' : 'secondary'}>
+                            {usuario.ativo ? 'Ativo' : 'Inativo'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm">
+                            Editar
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
