@@ -30,6 +30,15 @@ export function Configuracoes() {
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
 
+  // edit user state
+  const [editOpen, setEditOpen] = useState(false);
+  const [editUserId, setEditUserId] = useState<string | undefined>(undefined);
+  const [editNome, setEditNome] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPapel, setEditPapel] = useState<'admin'|'operador'|'visualizador'>('operador');
+  const [editAtivo, setEditAtivo] = useState(true);
+  const [editing, setEditing] = useState(false);
+
   const fetchUsuarios = async () => {
     setLoadingUsers(true);
     setUsersError(null);
@@ -224,7 +233,15 @@ export function Configuracoes() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm">
+                          <Button variant="outline" size="sm" onClick={() => {
+                            // open edit modal with user data
+                            setEditUserId(usuario.id);
+                            setEditNome(usuario.nome ?? '');
+                            setEditEmail(usuario.email ?? '');
+                            setEditPapel((usuario.acesso as 'admin'|'operador'|'visualizador') ?? 'operador');
+                            setEditAtivo(usuario.ativo ?? true);
+                            setEditOpen(true);
+                          }}>
                             Editar
                           </Button>
                         </TableCell>
@@ -236,6 +253,67 @@ export function Configuracoes() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Edit user dialog */}
+        <Dialog open={editOpen} onOpenChange={setEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Usuário</DialogTitle>
+              <DialogDescription>Atualize os dados do usuário e salve as alterações.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="edit-nome">Nome</Label>
+                <Input id="edit-nome" value={editNome} onChange={(e) => setEditNome(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input id="edit-email" type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-papel">Papel</Label>
+                <select id="edit-papel" value={editPapel} onChange={(e) => setEditPapel(e.target.value as 'admin'|'operador'|'visualizador')} className="border rounded px-2 py-1">
+                  <option value="operador">Operador</option>
+                  <option value="admin">Administrador</option>
+                  <option value="visualizador">Visualizador</option>
+                </select>
+              </div>
+              <div className="flex items-center justify-between">
+                <Label>Ativo</Label>
+                <Switch checked={editAtivo} onCheckedChange={(v) => setEditAtivo(Boolean(v))} />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancelar</Button>
+                <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                  try {
+                    if (!editUserId) {
+                      toast({ title: 'Erro', description: 'Usuário sem id não pode ser editado', variant: 'destructive' });
+                      return;
+                    }
+                    setEditing(true);
+                    const { error } = await supabase.from('usuarios').update({ nome: editNome, email: editEmail, acesso: editPapel, ativo: editAtivo }).eq('id', editUserId).select();
+                    if (error) {
+                      toast({ title: 'Erro ao atualizar usuário', description: error.message || String(error), variant: 'destructive' });
+                    } else {
+                      toast({ title: 'Usuário atualizado' });
+                      await fetchUsuarios();
+                      setEditOpen(false);
+                    }
+                  } catch (err) {
+                    console.error('Erro ao atualizar usuário:', err);
+                    toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                  } finally {
+                    setEditing(false);
+                  }
+                }} disabled={editing}>{editing ? 'Salvando...' : 'Salvar alterações'}</Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <TabsContent value="status">
           <Card>
