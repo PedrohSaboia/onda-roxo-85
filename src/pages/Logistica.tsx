@@ -148,21 +148,24 @@ export function Logistica() {
         </p>
 
         <div className="mt-6">
-          <input
-            ref={barcodeRef}
-            value={barcode}
-            onChange={(e) => setBarcode(e.target.value)}
-            onKeyDown={handleKeyDown}
-            onBlur={() => setTimeout(() => {
-              // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
-              const items = foundPedido?.itens_pedido || [];
-              const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
-              if (!hasMissing) barcodeRef.current?.focus();
-            }, 0)}
-            className="w-full text-2xl p-2 border rounded bg-white"
-            placeholder="Escaneie o código do produto aqui"
-            aria-label="Leitor de código"
-          />
+          <div className="flex items-center gap-4">
+            <input
+              ref={barcodeRef}
+              value={barcode}
+              onChange={(e) => setBarcode(e.target.value)}
+              onKeyDown={handleKeyDown}
+              onBlur={() => setTimeout(() => {
+                // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
+                const items = foundPedido?.itens_pedido || [];
+                const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
+                if (!hasMissing) barcodeRef.current?.focus();
+              }, 0)}
+              className="flex-1 text-2xl p-2 border rounded bg-white"
+              placeholder="Escaneie o código do produto aqui"
+              aria-label="Leitor de código"
+            />
+            <Button variant="ghost" onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); }}>Limpar</Button>
+          </div>
         </div>
 
           {/* If a pedido was found, show a single pedido card with its items */}
@@ -182,15 +185,12 @@ export function Logistica() {
                             )}
                           </Avatar>
                         </div>
-                      {foundPedido.plataformas?.img_url && (
-                        <img src={foundPedido.plataformas.img_url} alt={foundPedido.plataformas.nome} className="w-8 h-8 rounded ml-4" />
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                      <div className="text-sm text-white/90">Pedido</div>
-                      <div className="font-semibold text-white">{foundPedido.id_externo || foundPedido.id || '—'}</div>
-                      <Button variant="ghost" className="text-white" onClick={() => { setFoundPedido(null); setFoundItemIds([]); }}>Limpar</Button>
+                      <div className="flex items-center gap-2">
+                        {foundPedido.plataformas?.img_url && (
+                          <img src={foundPedido.plataformas.img_url} alt={foundPedido.plataformas.nome} className="w-8 h-8 rounded" />
+                        )}
+                        <div className="text-sm font-medium text-white/90">{foundPedido.id_externo || foundPedido.id || '—'}</div>
+                      </div>
                     </div>
                   </div>
                 </CardHeader>
