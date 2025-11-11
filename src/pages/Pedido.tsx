@@ -112,7 +112,7 @@ export default function Pedido() {
       try {
         const { data, error } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
@@ -126,7 +126,8 @@ export default function Pedido() {
           unidade: p.unidade || 'un',
           categoria: p.categoria || '',
           imagemUrl: p.img_url || undefined,
-          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+          codigo_barras: p.codigo_barras || null,
+          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null, codigo_barras_v: v.codigo_barras_v || null })),
           nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
           criadoEm: p.criado_em,
@@ -1323,15 +1324,17 @@ export default function Pedido() {
 
                     <div>
                       <Button className="bg-purple-700 text-white" onClick={() => {
-                        // add to modal cart
+                        // add to modal cart (include codigo_barras)
                         const variacaoId = variationSelectionsModal[p.id] || (p.variacoes && p.variacoes[0]?.id) || null;
                         const quantidade = 1;
                         const unitario = variacaoId ? Number((p.variacoes || []).find((v: any) => v.id === variacaoId)?.valor || p.preco || 0) : Number(p.preco || 0);
                         const itemId = variacaoId ? `${p.id}:${variacaoId}` : p.id;
+                        const selectedVar = variacaoId ? (p.variacoes || []).find((v: any) => v.id === variacaoId) : null;
+                        const barcode = selectedVar?.codigo_barras_v || p.codigo_barras || null;
                         setModalCart(prev => {
                           const existing = prev.find(i => i.id === itemId && !!i.brinde === !!brindeSelectionsModal[p.id]);
                           if (existing) return prev.map(i => i.id === itemId ? { ...i, quantidade: i.quantidade + 1 } : i);
-                          return [...prev, { id: itemId, produtoId: p.id, nome: p.nome, quantidade, preco: unitario, imagemUrl: p.imagemUrl, brinde: !!brindeSelectionsModal[p.id] }];
+                          return [...prev, { id: itemId, produtoId: p.id, nome: p.nome, quantidade, preco: unitario, imagemUrl: p.imagemUrl, codigo_barras: barcode, brinde: !!brindeSelectionsModal[p.id] }];
                         });
                       }}>+</Button>
                     </div>
@@ -1455,27 +1458,23 @@ export default function Pedido() {
                     const providedValue = parseCurrencyBR(wizardValueStr);
                     setWizardSaving(true);
                     try {
-                      // load existing items for this pedido to merge quantities
-                      const { data: existingItems, error: existingError } = await supabase.from('itens_pedido').select('*').eq('pedido_id', pedido.id);
-                      if (existingError) throw existingError;
-
+                      // Build inserts: expand quantities into individual rows (one per unit)
                       const inserts: any[] = [];
-                      const updates: any[] = [];
-
                       modalCart.forEach((it) => {
                         const [produtoId, variacaoId] = String(it.id).split(':');
-                        const match = (existingItems || []).find((e: any) => String(e.produto_id) === String(it.produtoId || produtoId) && String(e.variacao_id || '') === String(variacaoId || ''));
-                        if (match) {
-                          updates.push({ id: match.id, quantidade: (Number(match.quantidade || 0) + Number(it.quantidade || 1)), preco_unitario: it.preco || match.preco_unitario });
-                        } else {
-                          inserts.push({ pedido_id: pedido.id, produto_id: it.produtoId || produtoId, variacao_id: variacaoId || null, quantidade: it.quantidade || 1, preco_unitario: it.preco || 0, criado_em: new Date().toISOString() });
+                        const qty = Number(it.quantidade || 1);
+                        for (let k = 0; k < qty; k++) {
+                          inserts.push({
+                            pedido_id: pedido.id,
+                            produto_id: it.produtoId || produtoId,
+                            variacao_id: variacaoId || null,
+                            quantidade: 1,
+                            preco_unitario: it.preco || 0,
+                            codigo_barras: it.codigo_barras || null,
+                            criado_em: new Date().toISOString()
+                          });
                         }
                       });
-
-                      for (const u of updates) {
-                        const { error: upErr } = await supabase.from('itens_pedido').update({ quantidade: u.quantidade, preco_unitario: u.preco_unitario } as any).eq('id', u.id);
-                        if (upErr) throw upErr;
-                      }
 
                       if (inserts.length) {
                         const { error: insErr } = await supabase.from('itens_pedido').insert(inserts as any);
