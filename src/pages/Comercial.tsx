@@ -77,7 +77,6 @@ export function Comercial() {
           .order('criado_em', { ascending: false });
 
         // apply search term server-side so pagination is based on the query
-        const searchTrim = (searchTerm || '').trim();
         if (searchTrim.length > 0) {
           // use ilike (case-insensitive) for id_externo, cliente_nome and contato
           // PostgREST OR syntax: "col.ilike.%term%,othercol.ilike.%term%"
@@ -725,13 +724,7 @@ export function Comercial() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center">
-                    Carregando pedidos...
-                  </TableCell>
-                </TableRow>
-              )}
+              {/* loading row intentionally removed per request */}
               {error && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-red-600">
