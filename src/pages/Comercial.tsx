@@ -58,10 +58,12 @@ export function Comercial() {
       setLoading(true);
       setError(null);
       try {
-        // Select pedidos with related plataforma, responsavel (usuarios), status and etiqueta (tipos_etiqueta)
-        // use range for pagination and request exact count
-        const from = (page - 1) * pageSize;
-        const to = page * pageSize - 1;
+  // Select pedidos with related plataforma, responsavel (usuarios), status and etiqueta (tipos_etiqueta)
+  // use range for pagination and request exact count
+  const searchTrim = (searchTerm || '').trim();
+  const actualPage = searchTrim.length > 0 ? 1 : page;
+  const from = (actualPage - 1) * pageSize;
+  const to = actualPage * pageSize - 1;
 
         // If the ComercialSidebar requested a specific view (ex: enviados), apply extra filters
         const view = new URLSearchParams(location.search).get('view') || 'pedidos';
@@ -73,6 +75,19 @@ export function Comercial() {
             { count: 'exact' }
           )
           .order('criado_em', { ascending: false });
+
+        // apply search term server-side so pagination is based on the query
+        if (searchTrim.length > 0) {
+          // use ilike (case-insensitive) for id_externo, cliente_nome and contato
+          // PostgREST OR syntax: "col.ilike.%term%,othercol.ilike.%term%"
+          const pattern = `%${searchTrim}%`;
+          try {
+            (query as any).or(`id_externo.ilike.${pattern},cliente_nome.ilike.${pattern},contato.ilike.${pattern}`);
+          } catch (e) {
+            // fallback: if .or fails, attempt adding single ilike on cliente_nome
+            (query as any).ilike('cliente_nome', pattern);
+          }
+        }
 
         // when on the "enviados" view, only fetch pedidos with the Enviado status id
         if (view === 'enviados') {
@@ -199,7 +214,12 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, searchTerm]);
+
+  // when the user types a search, reset to page 1 so results appear on the first page
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
 
   // load count of pedidos with the specific etiqueta id (to show next to filter)
   useEffect(() => {
@@ -246,13 +266,14 @@ export function Comercial() {
   const filteredPedidos = pedidos.filter(pedido => {
     const idExterno = normalize(pedido.idExterno);
     const cliente = normalize(pedido.clienteNome);
-    const contato = digitsOnly(pedido.contato);
+    const contatoText = normalize(pedido.contato);
+    const contatoDigits = digitsOnly(pedido.contato);
 
-    // match by id_externo or cliente_nome (case-insensitive, diacritics-insensitive)
-    if (idExterno.includes(normalizedSearch) || cliente.includes(normalizedSearch)) return true;
+    // match by id_externo, cliente_nome or contato (text)
+    if (idExterno.includes(normalizedSearch) || cliente.includes(normalizedSearch) || contatoText.includes(normalizedSearch)) return true;
 
-    // if user typed digits (or phone with formatting), match contato ignoring formatting
-    if (normalizedDigits.length > 0 && contato.includes(normalizedDigits)) return true;
+    // if user typed digits (or phone with formatting), match contato ignoring formatting (numbers-only)
+    if (normalizedDigits.length > 0 && contatoDigits.includes(normalizedDigits)) return true;
 
     return false;
   });
@@ -703,13 +724,7 @@ export function Comercial() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading && (
-                <TableRow>
-                  <TableCell colSpan={8} className="text-center">
-                    Carregando pedidos...
-                  </TableCell>
-                </TableRow>
-              )}
+              {/* loading row intentionally removed per request */}
               {error && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center text-red-600">
