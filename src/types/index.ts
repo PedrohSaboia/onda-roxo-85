@@ -88,6 +88,9 @@ export interface Pedido {
   id: string;
   idExterno: string;
   clienteNome: string;
+  clienteEmail?: string;
+  clienteCpf?: string;
+  clienteCnpj?: string;
   contato: string;
   responsavelId: string;
   plataformaId: string;

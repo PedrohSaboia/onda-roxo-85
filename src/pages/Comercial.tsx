@@ -68,21 +68,19 @@ export function Comercial() {
         // If the ComercialSidebar requested a specific view (ex: enviados), apply extra filters
         const view = new URLSearchParams(location.search).get('view') || 'pedidos';
 
+        // Query the vw_clientes_pedidos view which flattens cliente+pedido fields
         const query = supabase
-          .from('pedidos')
-          .select(
-            `*, plataformas(id,nome,cor,img_url), usuarios(id,nome,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem,criado_em,atualizado_em), clientes(id,nome,formulario_enviado)`,
-            { count: 'exact' }
-          )
-          .order('criado_em', { ascending: false });
+          .from('vw_clientes_pedidos')
+          .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio`, { count: 'exact' })
+          .order('pedido_criado_em', { ascending: false });
 
         // apply search term server-side so pagination is based on the query
-        if (searchTrim.length > 0) {
+          if (searchTrim.length > 0) {
           // use ilike (case-insensitive) for id_externo, cliente_nome and contato
           // PostgREST OR syntax: "col.ilike.%term%,othercol.ilike.%term%"
           const pattern = `%${searchTrim}%`;
           try {
-            (query as any).or(`id_externo.ilike.${pattern},cliente_nome.ilike.${pattern},contato.ilike.${pattern}`);
+            (query as any).or(`id_externo.ilike.${pattern},cliente_nome.ilike.${pattern},contato.ilike.${pattern},email.ilike.${pattern},cpf.ilike.${pattern},cnpj.ilike.${pattern}`);
           } catch (e) {
             // fallback: if .or fails, attempt adding single ilike on cliente_nome
             (query as any).ilike('cliente_nome', pattern);
@@ -106,22 +104,30 @@ export function Comercial() {
           (query as any).eq('etiqueta_envio_id', filterEtiquetaId);
         }
 
-  const { data, error: supaError, count } = await query.range(from, to);
+        // fetch small lookup tables in parallel so we can map ids to display rows
+        const [resLookup, resData] = await Promise.all([
+          Promise.all([
+            supabase.from('plataformas').select('*'),
+            supabase.from('usuarios').select('id,nome,img_url'),
+            supabase.from('status').select('*'),
+            supabase.from('tipos_etiqueta').select('*')
+          ]),
+          query.range(from, to)
+        ]);
+
+        const [[platResp, userResp, statusResp, etiquetaResp], { data, error: supaError, count }] = resLookup.concat([]).length ? [resLookup, resData] : [resLookup, resData];
 
         if (supaError) throw supaError;
-
         if (!mounted) return;
 
-        const mapped: Pedido[] = (data || []).map((row: any) => {
-          const pick = (val: any) => Array.isArray(val) ? val[0] : val;
+        const plataformasMap = (platResp?.data || platResp) ? (platResp.data || platResp).reduce((acc: any, p: any) => (acc[p.id] = p, acc), {}) : {};
+        const usuariosMap = (userResp?.data || userResp) ? (userResp.data || userResp).reduce((acc: any, u: any) => (acc[u.id] = u, acc), {}) : {};
+        const statusMap = (statusResp?.data || statusResp) ? (statusResp.data || statusResp).reduce((acc: any, s: any) => (acc[s.id] = s, acc), {}) : {};
+        const etiquetaMap = (etiquetaResp?.data || etiquetaResp) ? (etiquetaResp.data || etiquetaResp).reduce((acc: any, t: any) => (acc[t.id] = t, acc), {}) : {};
 
-          const plataformaRow = pick(row.plataformas);
-          const usuarioRow = pick(row.usuarios);
-          const statusRow = pick(row.status);
-          const etiquetaRow = pick(row.tipos_etiqueta);
-          const clienteRow = pick(row.clientes);
-          // frete_melhor_envio may be saved as JSON on pedidos
-          const freteMe = (row as any).frete_melhor_envio || null;
+        const mapped: Pedido[] = (data || []).map((row: any) => {
+          // row corresponds to view columns: cliente_*, pedido_*
+          const freteMe = row.frete_melhor_envio || null;
 
           const normalizeEtiqueta = (nome?: string) => {
             if (!nome) return 'NAO_LIBERADO' as const;
@@ -131,12 +137,20 @@ export function Comercial() {
             return 'NAO_LIBERADO' as const;
           }
 
+          const plataformaRow = plataformasMap[row.plataforma_id];
+          const usuarioRow = usuariosMap[row.responsavel_id];
+          const statusRow = statusMap[row.status_id];
+          const etiquetaRow = etiquetaMap[row.etiqueta_envio_id];
+
           return {
-            id: row.id,
+            id: row.pedido_id,
             idExterno: row.id_externo,
-            clienteNome: clienteRow?.nome || row.cliente_nome,
+            clienteNome: row.cliente_nome || row.pedido_cliente_nome,
+            clienteEmail: row.email || undefined,
+            clienteCpf: row.cpf || undefined,
+            clienteCnpj: row.cnpj || undefined,
             contato: row.contato || '',
-            formularioEnviado: !!clienteRow?.formulario_enviado,
+            formularioEnviado: !!row.formulario_enviado,
             etiquetaEnvioId: row.etiqueta_envio_id || '',
             responsavelId: row.responsavel_id,
             plataformaId: row.plataforma_id,
@@ -169,7 +183,6 @@ export function Comercial() {
                 }
               : undefined,
             transportadora: freteMe ? (() => {
-              // prefer nested raw_response.company.picture per sample payload; fallback to company fields
               const raw = (freteMe.raw_response || freteMe.raw || freteMe);
               const company = raw?.company || freteMe.company || null;
               const nome = freteMe.transportadora || company?.name || raw?.company?.name || undefined;
@@ -196,8 +209,8 @@ export function Comercial() {
                   atualizadoEm: etiquetaRow.atualizado_em || '',
                 }
               : undefined,
-            criadoEm: row.criado_em,
-            atualizadoEm: row.atualizado_em,
+            criadoEm: row.pedido_criado_em,
+            atualizadoEm: row.pedido_atualizado_em,
           };
         });
 
@@ -268,12 +281,15 @@ export function Comercial() {
     const cliente = normalize(pedido.clienteNome);
     const contatoText = normalize(pedido.contato);
     const contatoDigits = digitsOnly(pedido.contato);
+    const clienteEmail = normalize((pedido as any).clienteEmail);
+    const clienteCpfDigits = digitsOnly((pedido as any).clienteCpf || '');
+    const clienteCnpjDigits = digitsOnly((pedido as any).clienteCnpj || '');
 
     // match by id_externo, cliente_nome or contato (text)
-    if (idExterno.includes(normalizedSearch) || cliente.includes(normalizedSearch) || contatoText.includes(normalizedSearch)) return true;
+    if (idExterno.includes(normalizedSearch) || cliente.includes(normalizedSearch) || contatoText.includes(normalizedSearch) || clienteEmail.includes(normalizedSearch)) return true;
 
     // if user typed digits (or phone with formatting), match contato ignoring formatting (numbers-only)
-    if (normalizedDigits.length > 0 && contatoDigits.includes(normalizedDigits)) return true;
+    if (normalizedDigits.length > 0 && (contatoDigits.includes(normalizedDigits) || clienteCpfDigits.includes(normalizedDigits) || clienteCnpjDigits.includes(normalizedDigits))) return true;
 
     return false;
   });
