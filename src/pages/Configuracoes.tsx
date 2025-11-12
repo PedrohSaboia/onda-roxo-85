@@ -310,8 +310,11 @@ export function Configuracoes() {
                 <Input id="edit-status-nome" value={editStatusNome} onChange={(e) => setEditStatusNome(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="edit-status-cor">Cor (hex)</Label>
-                <Input id="edit-status-cor" value={editStatusCor} onChange={(e) => setEditStatusCor(e.target.value)} />
+                <Label htmlFor="edit-status-cor">Cor</Label>
+                <div className="flex items-center gap-2">
+                  <input id="edit-status-cor" type="color" value={editStatusCor} onChange={(e) => setEditStatusCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
+                  <Input value={editStatusCor} onChange={(e) => setEditStatusCor(e.target.value)} />
+                </div>
               </div>
               <div className="space-y-1">
                 <Label htmlFor="edit-status-ordem">Ordem</Label>

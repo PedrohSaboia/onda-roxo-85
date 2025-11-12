@@ -4,6 +4,9 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import type { SyntheticEvent } from 'react';
+import SearchPanel from '@/components/layout/SearchPanel';
+import { useState } from 'react';
 
 interface AppHeaderProps {
   onMenuClick?: () => void;
@@ -13,6 +16,8 @@ interface AppHeaderProps {
 
 export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHeaderProps) {
   const { user, signOut } = useAuth();
+
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const handleLogout = async () => {
     await signOut();
@@ -41,7 +46,7 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
 
   return (
     <header
-      className="h-16 border-b px-4 flex items-center shadow-lg"
+      className="relative h-16 border-b px-4 flex items-center shadow-lg"
       style={{ background: 'var(--gradient-primary)', borderBottomColor: 'rgba(0,0,0,0.06)' }}
     >
       <div className="flex items-center gap-4">
@@ -62,7 +67,7 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
               alt="zeelux"
               className="h-10 object-contain"
               style={{ maxWidth: 200 }}
-              onError={(e:any) => { e.currentTarget.src = '/placeholder.svg'; }}
+              onError={(e: React.SyntheticEvent<HTMLImageElement, Event>) => { (e.currentTarget as HTMLImageElement).src = '/placeholder.svg'; }}
             />
           </div>
         </div>
@@ -88,15 +93,13 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
 
       {/* Right area: search + icons */}
       <div className="flex items-center gap-3 ml-auto">
-        <div className="w-64">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 h-4 w-4" />
-            <Input
-              placeholder="Buscar pedidos..."
-              className="bg-white/10 border-white/20 text-white placeholder:text-white/60 pl-10 focus:bg-white/20 focus:border-white/40 transition-colors"
-            />
-          </div>
+        <div>
+          <Button variant="ghost" size="sm" className="text-white hover:bg-white/10" onClick={() => setSearchOpen(true)} aria-label="Abrir busca">
+            <Search className="h-4 w-4" />
+          </Button>
         </div>
+
+        <SearchPanel open={searchOpen} onClose={() => setSearchOpen(false)} />
 
         <Button
           variant="ghost"
