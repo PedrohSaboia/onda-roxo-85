@@ -38,6 +38,52 @@ export function Logistica() {
   const itemRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [itemStatus, setItemStatus] = useState<Record<string, 'idle' | 'success' | 'error'>>({});
 
+  // logística view items (cards)
+  type LogItem = { produto_id: string | null; variacao_id: string | null; quantidade_total: number; produto?: any; variacao?: any };
+  const [logItems, setLogItems] = useState<LogItem[]>([]);
+  const [loadingLogItems, setLoadingLogItems] = useState(false);
+  const [logItemsError, setLogItemsError] = useState<string | null>(null);
+
+  const fetchLogItems = async () => {
+    setLoadingLogItems(true);
+    setLogItemsError(null);
+    try {
+  const { data, error } = await (supabase as any).from('vw_itens_logistica').select('produto_id, variacao_id, quantidade_total');
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }>;
+
+      // collect ids
+      const produtoIds = Array.from(new Set(rows.map(r => r.produto_id).filter(Boolean))) as string[];
+      const variacaoIds = Array.from(new Set(rows.map(r => r.variacao_id).filter(Boolean))) as string[];
+
+      // fetch products and variations in parallel
+      const [prodRes, varRes] = await Promise.all([
+        produtoIds.length ? (supabase as any).from('produtos').select('id, nome, sku, img_url').in('id', produtoIds) : Promise.resolve({ data: [], error: null }),
+        variacaoIds.length ? (supabase as any).from('variacoes_produto').select('id, nome, sku, img_url, produto_id').in('id', variacaoIds) : Promise.resolve({ data: [], error: null })
+      ] as const);
+
+      if (prodRes?.error) throw prodRes.error;
+      if (varRes?.error) throw varRes.error;
+
+      const prodMap = new Map<string, any>((prodRes?.data ?? []).map((p: any) => [p.id, p]));
+      const varMap = new Map<string, any>((varRes?.data ?? []).map((v: any) => [v.id, v]));
+
+      const enriched = rows.map(r => ({ ...r, produto: r.produto_id ? prodMap.get(r.produto_id) : undefined, variacao: r.variacao_id ? varMap.get(r.variacao_id) : undefined }));
+      setLogItems(enriched);
+    } catch (err) {
+      console.error('Erro ao buscar itens de logística:', err);
+      setLogItemsError(String(err));
+      setLogItems([]);
+    } finally {
+      setLoadingLogItems(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchLogItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
   const allItemsBipado = items.length > 0 && items.every((it: any) => (foundItemIds || []).includes(it.id) || it.bipado === true);
@@ -131,6 +177,12 @@ export function Logistica() {
 
         return merged;
       });
+      // refresh cards after marking an item on the server
+      try {
+        await fetchLogItems();
+      } catch (e) {
+        // ignore — fetchLogItems logs its own errors
+      }
     } catch (err: any) {
       console.error('Erro ao buscar item por código:', err);
       toast({ title: 'Erro', description: err.message || String(err), variant: 'destructive' });
@@ -166,6 +218,48 @@ export function Logistica() {
             />
             <Button variant="ghost" onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); }}>Limpar</Button>
           </div>
+        </div>
+
+        {/* Cards: itens a enviar (view vw_itens_logistica) */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-medium">Itens a enviar</h3>
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" onClick={() => fetchLogItems()}>Atualizar</Button>
+            </div>
+          </div>
+
+          {loadingLogItems ? (
+            <div className="text-sm text-muted-foreground">Carregando itens de logística...</div>
+          ) : logItemsError ? (
+            <div className="text-sm text-destructive">Erro: {logItemsError}</div>
+          ) : logItems.length === 0 ? (
+            <div className="text-sm text-muted-foreground">Nenhum item pendente para logística.</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {logItems.map((it) => (
+                <Card key={`${it.produto_id ?? 'p'}-${it.variacao_id ?? 'v'}`} className="h-28">
+                  <CardContent className="flex items-center p-4 gap-3 h-full">
+                    <div className="flex items-center h-full">
+                      {it.variacao?.img_url || it.produto?.img_url ? (
+                        <img src={it.variacao?.img_url || it.produto?.img_url} className="w-16 h-16 rounded object-cover" />
+                      ) : (
+                        <div className="w-16 h-16 bg-gray-100 rounded" />
+                      )}
+                    </div>
+                    <div className="flex-1 flex flex-col justify-center h-full">
+                      <div className="font-medium">{it.variacao?.nome || it.produto?.nome || '—'}</div>
+                      <div className="text-sm text-muted-foreground">SKU: {it.variacao?.sku || it.produto?.sku || '-'}</div>
+                    </div>
+                    <div className="text-right flex flex-col justify-center h-full">
+                      <div className="text-sm text-muted-foreground">Qtd a enviar</div>
+                      <div className="text-xl font-semibold">{it.quantidade_total}</div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
 
           {/* If a pedido was found, show a single pedido card with its items */}
@@ -244,8 +338,8 @@ export function Logistica() {
                                         setTimeout(() => barcodeRef.current?.focus(), 0);
                                       }
 
-                                      // call server RPC to persist the bipagem (no await to keep UI snappy)
-                                      handleScan(val).catch(() => {});
+                      // call server RPC to persist the bipagem and refresh cards
+                      await handleScan(val);
                                     } else {
                                       // error UI: clear the input but keep focus so the user can bip again
                                       setItemStatus(prev => ({ ...prev, [it.id]: 'error' }));
@@ -299,6 +393,13 @@ export function Logistica() {
                           setFoundItemIds([]);
                           setItemInputs({});
                           setItemStatus({});
+
+                                  // refresh logistics cards after concluding pedido
+                                  try {
+                                    await fetchLogItems();
+                                  } catch (e) {
+                                    // ignore — fetchLogItems logs its own errors
+                                  }
 
                           // focus main input for next scan
                           setTimeout(() => barcodeRef.current?.focus(), 0);

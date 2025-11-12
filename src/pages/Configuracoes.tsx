@@ -60,6 +60,48 @@ export function Configuracoes() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // statuses state
+  type Status = { id?: string; nome: string; cor_hex: string; ordem: number };
+  const [statuses, setStatuses] = useState<Status[]>([]);
+  const [loadingStatuses, setLoadingStatuses] = useState(false);
+  const [statusesError, setStatusesError] = useState<string | null>(null);
+
+  const fetchStatuses = async () => {
+    setLoadingStatuses(true);
+    setStatusesError(null);
+    try {
+      const { data, error } = await supabase.from('status').select('id, nome, cor_hex, ordem').order('ordem', { ascending: true });
+      if (error) throw error;
+      setStatuses((data ?? []) as Status[]);
+    } catch (err) {
+      console.error('Erro ao buscar status:', err);
+      setStatusesError(String(err));
+      setStatuses([]);
+    } finally {
+      setLoadingStatuses(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStatuses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // create status modal state
+  const [createStatusOpen, setCreateStatusOpen] = useState(false);
+  const [createNome, setCreateNome] = useState('');
+  const [createCor, setCreateCor] = useState('#000000');
+  const [createOrdem, setCreateOrdem] = useState<number>(1);
+  const [creatingStatus, setCreatingStatus] = useState(false);
+
+  // edit status dialog state
+  const [editStatusOpen, setEditStatusOpen] = useState(false);
+  const [editStatusId, setEditStatusId] = useState<string | undefined>(undefined);
+  const [editStatusNome, setEditStatusNome] = useState('');
+  const [editStatusCor, setEditStatusCor] = useState('#000000');
+  const [editStatusOrdem, setEditStatusOrdem] = useState<number>(1);
+  const [editingStatus, setEditingStatus] = useState(false);
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -254,6 +296,59 @@ export function Configuracoes() {
           </Card>
         </TabsContent>
 
+        {/* Edit status dialog */}
+        <Dialog open={editStatusOpen} onOpenChange={setEditStatusOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Status</DialogTitle>
+              <DialogDescription>Atualize nome, cor e ordem do status.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="edit-status-nome">Nome</Label>
+                <Input id="edit-status-nome" value={editStatusNome} onChange={(e) => setEditStatusNome(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-status-cor">Cor (hex)</Label>
+                <Input id="edit-status-cor" value={editStatusCor} onChange={(e) => setEditStatusCor(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-status-ordem">Ordem</Label>
+                <Input id="edit-status-ordem" type="number" value={String(editStatusOrdem)} onChange={(e) => setEditStatusOrdem(Number(e.target.value))} />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setEditStatusOpen(false)}>Cancelar</Button>
+                <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                  try {
+                    if (!editStatusId) {
+                      toast({ title: 'Erro', description: 'Status sem id não pode ser editado', variant: 'destructive' });
+                      return;
+                    }
+                    setEditingStatus(true);
+                    const { error } = await supabase.from('status').update({ nome: editStatusNome, cor_hex: editStatusCor, ordem: editStatusOrdem }).eq('id', editStatusId).select();
+                    if (error) {
+                      toast({ title: 'Erro ao atualizar status', description: error.message || String(error), variant: 'destructive' });
+                    } else {
+                      toast({ title: 'Status atualizado' });
+                      await fetchStatuses();
+                      setEditStatusOpen(false);
+                    }
+                  } catch (err) {
+                    console.error('Erro ao atualizar status:', err);
+                    toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                  } finally {
+                    setEditingStatus(false);
+                  }
+                }} disabled={editingStatus}>{editingStatus ? 'Salvando...' : 'Salvar alterações'}</Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Edit user dialog */}
         <Dialog open={editOpen} onOpenChange={setEditOpen}>
           <DialogContent>
@@ -320,9 +415,59 @@ export function Configuracoes() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Status dos Pedidos</CardTitle>
-                <Button className="bg-purple-600 hover:bg-purple-700">
-                  Novo Status
-                </Button>
+                <Dialog open={createStatusOpen} onOpenChange={setCreateStatusOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-purple-600 hover:bg-purple-700">Novo Status</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Novo Status</DialogTitle>
+                      <DialogDescription>Crie um novo status para os pedidos.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="novo-status-nome">Nome</Label>
+                        <Input id="novo-status-nome" value={createNome} onChange={(e) => setCreateNome(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="novo-status-cor">Cor (hex)</Label>
+                        <Input id="novo-status-cor" value={createCor} onChange={(e) => setCreateCor(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="novo-status-ordem">Ordem</Label>
+                        <Input id="novo-status-ordem" type="number" value={String(createOrdem)} onChange={(e) => setCreateOrdem(Number(e.target.value))} />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" onClick={() => setCreateStatusOpen(false)}>Cancelar</Button>
+                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                          try {
+                            if (!createNome || !createCor) {
+                              toast({ title: 'Preencha os campos', variant: 'destructive' });
+                              return;
+                            }
+                            setCreatingStatus(true);
+                            const { error } = await supabase.from('status').insert({ nome: createNome, cor_hex: createCor, ordem: createOrdem }).select();
+                            if (error) {
+                              toast({ title: 'Erro ao criar status', description: error.message || String(error), variant: 'destructive' });
+                            } else {
+                              toast({ title: 'Status criado' });
+                              fetchStatuses();
+                              setCreateNome(''); setCreateCor('#000000'); setCreateOrdem(1);
+                            }
+                            setCreateStatusOpen(false);
+                          } catch (err) {
+                            console.error('Erro criar status:', err);
+                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                          } finally {
+                            setCreatingStatus(false);
+                          }
+                        }} disabled={creatingStatus}>{creatingStatus ? 'Criando...' : 'Criar'}</Button>
+                      </div>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -336,26 +481,45 @@ export function Configuracoes() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockStatus.map((status) => (
-                    <TableRow key={status.id}>
-                      <TableCell>{status.ordem}</TableCell>
-                      <TableCell className="font-medium">{status.nome}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-4 h-4 rounded-full"
-                            style={{ backgroundColor: status.corHex }}
-                          />
-                          <span className="font-mono text-sm">{status.corHex}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm">
-                          Editar
-                        </Button>
-                      </TableCell>
+                  {loadingStatuses ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-sm text-muted-foreground">Carregando status...</TableCell>
                     </TableRow>
-                  ))}
+                  ) : statusesError ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-sm text-destructive">Erro: {statusesError}</TableCell>
+                    </TableRow>
+                  ) : statuses.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-sm text-muted-foreground">Nenhum status encontrado.</TableCell>
+                    </TableRow>
+                  ) : (
+                    statuses.map((status) => (
+                      <TableRow key={status.id ?? status.nome}>
+                        <TableCell>{status.ordem}</TableCell>
+                        <TableCell className="font-medium">{status.nome}</TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-4 h-4 rounded-full"
+                              style={{ backgroundColor: status.cor_hex }}
+                            />
+                            <span className="font-mono text-sm">{status.cor_hex}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="outline" size="sm" onClick={() => {
+                            // open edit status modal
+                            setEditStatusId(status.id);
+                            setEditStatusNome(status.nome);
+                            setEditStatusCor(status.cor_hex);
+                            setEditStatusOrdem(status.ordem);
+                            setEditStatusOpen(true);
+                          }}>Editar</Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
