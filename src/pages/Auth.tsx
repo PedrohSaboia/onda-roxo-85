@@ -30,7 +30,7 @@ type SignupFormData = z.infer<typeof signupSchema>;
 export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const { signIn, signUp, user, isUserActive, isLoading } = useAuth();
+  const { signIn, signUp, user, isUserActive, isLoading, acesso } = useAuth();
   const navigate = useNavigate();
 
   const loginForm = useForm<LoginFormData>({
@@ -54,9 +54,14 @@ export default function Auth() {
   // Redirecionar se usuário já estiver logado e ativo
   useEffect(() => {
     if (user && isUserActive && !isLoading) {
-      navigate('/');
+      // se o usuário for visualizador ou operador, levá-lo ao Comercial
+      if (acesso === 'visualizador' || acesso === 'operador') {
+        navigate('/comercial');
+      } else {
+        navigate('/');
+      }
     }
-  }, [user, isUserActive, isLoading, navigate]);
+  }, [user, isUserActive, isLoading, acesso, navigate]);
 
   const onLogin = async (data: LoginFormData) => {
     await signIn(data.email, data.password);

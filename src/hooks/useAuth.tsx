@@ -8,6 +8,7 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   isUserActive: boolean;
+  acesso?: string | null;
   signUp: (email: string, password: string, nome: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<{ error: any }>;
@@ -20,6 +21,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUserActive, setIsUserActive] = useState(false);
+  const [acesso, setAcesso] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Verificar se usuário está ativo
@@ -43,6 +45,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchAcesso = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('acesso')
+        .eq('id', userId)
+        .single();
+
+      if (error) {
+        console.error('Erro ao buscar acesso do usuário:', error);
+        return null;
+      }
+
+      return data?.acesso ?? null;
+    } catch (err) {
+      console.error('Erro ao buscar acesso do usuário:', err);
+      return null;
+    }
+  };
+
   useEffect(() => {
     // Configurar listener de mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -56,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
               const active = await checkUserActive(session.user.id);
               setIsUserActive(active);
+              const acc = await fetchAcesso(session.user.id);
+              setAcesso(acc);
               
               if (!active && event === 'SIGNED_IN') {
                 toast({
@@ -72,6 +96,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }, 0);
         } else {
           setIsUserActive(false);
+          setAcesso(null);
           setIsLoading(false);
         }
       }
@@ -87,6 +112,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const active = await checkUserActive(session.user.id);
             setIsUserActive(active);
+            const acc = await fetchAcesso(session.user.id);
+            setAcesso(acc);
           } catch (error) {
             console.error('Erro ao verificar status do usuário:', error);
             setIsUserActive(false);
@@ -198,6 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     session,
     isLoading,
     isUserActive,
+    acesso,
     signUp,
     signIn,
     signOut
