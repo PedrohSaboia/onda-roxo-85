@@ -54,14 +54,10 @@ export default function Auth() {
   // Redirecionar se usuário já estiver logado e ativo
   useEffect(() => {
     if (user && isUserActive && !isLoading) {
-      // se o usuário for visualizador ou operador, levá-lo ao Comercial
-      if (acesso === 'visualizador' || acesso === 'operador') {
-        navigate('/comercial');
-      } else {
-        navigate('/');
-      }
+      // redireciona para a raiz após login — não forçamos rota diferente por papel no frontend
+      navigate('/');
     }
-  }, [user, isUserActive, isLoading, acesso, navigate]);
+  }, [user, isUserActive, isLoading, navigate]);
 
   const onLogin = async (data: LoginFormData) => {
     await signIn(data.email, data.password);

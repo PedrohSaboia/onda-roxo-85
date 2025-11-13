@@ -11,7 +11,6 @@ import { Button } from '@/components/ui/button';
 
 export function Dashboard() {
   const { acesso, isLoading } = useAuth();
-  const noAccess = !isLoading && (acesso === 'visualizador' || acesso === 'operador');
   // default is Hoje
   const [startDate, setStartDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
@@ -129,17 +128,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      {noAccess ? (
-        <div className="mt-6">
-          <Card>
-            <CardContent className="py-16 text-center">
-              <h3 className="text-lg font-semibold">Acesso restrito</h3>
-              <p className="text-sm text-muted-foreground mt-2">Você não tem permissão para visualizar o painel. Entre em contato com um administrador.</p>
-            </CardContent>
-          </Card>
-        </div>
-      ) : (
-        <>
+          <>
           <Dialog open={pickerOpen} onOpenChange={(open) => setPickerOpen(open)}>
             <DialogContent className="max-w-4xl w-full">
               <DialogHeader>
@@ -250,9 +239,8 @@ export function Dashboard() {
               </CardContent>
             </Card>
           </div>
-        </>
-      )}
-      {error && <div className="text-sm text-red-600">{error}</div>}
+          </>
+        {error && <div className="text-sm text-red-600">{error}</div>}
     </div>
   );
 }
