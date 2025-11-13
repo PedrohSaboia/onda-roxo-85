@@ -10,6 +10,8 @@ import { Eye, EyeOff, Mail, Lock } from 'lucide-react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -20,7 +22,11 @@ type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
-  const { signIn, signUp, user, isUserActive, isLoading, acesso } = useAuth();
+  const { signIn, resetPassword, user, isUserActive, isLoading, acesso } = useAuth();
+  const { toast } = useToast();
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetting, setResetting] = useState(false);
   const navigate = useNavigate();
 
   const loginForm = useForm<LoginFormData>({
@@ -43,6 +49,29 @@ export default function Auth() {
 
   const onLogin = async (data: LoginFormData) => {
     await signIn(data.email, data.password);
+  };
+
+  const onReset = async () => {
+    if (!resetEmail) {
+      toast({ title: 'Informe o email', variant: 'destructive' });
+      return;
+    }
+    setResetting(true);
+    try {
+      const { error } = await resetPassword(resetEmail);
+      if (error) {
+        toast({ title: 'Erro', description: error.message || String(error), variant: 'destructive' });
+      } else {
+        toast({ title: 'Enviado', description: 'Verifique seu email para redefinir a senha.' });
+        setResetOpen(false);
+        setResetEmail('');
+      }
+    } catch (err) {
+      console.error('Erro ao solicitar reset:', err);
+      toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+    } finally {
+      setResetting(false);
+    }
   };
 
   
@@ -136,10 +165,31 @@ export default function Auth() {
                   >
                     {loginForm.formState.isSubmitting ? 'Entrando...' : 'Entrar'}
                   </Button>
+                  <div className="text-center mt-3">
+                    <button type="button" className="text-sm text-primary underline" onClick={() => setResetOpen(true)}>Esqueci a senha</button>
+                  </div>
                 </form>
               </CardContent>
             </TabsContent>
-
+            <Dialog open={resetOpen} onOpenChange={setResetOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Redefinir senha</DialogTitle>
+                </DialogHeader>
+                <div className="grid gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="reset-email">Email</Label>
+                    <Input id="reset-email" type="email" value={resetEmail} onChange={(e) => setResetEmail(e.target.value)} />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" onClick={() => setResetOpen(false)}>Cancelar</Button>
+                    <Button className="bg-purple-600 hover:bg-purple-700" onClick={onReset} disabled={resetting}>{resetting ? 'Enviando...' : 'Enviar email'}</Button>
+                  </div>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
             
           </Tabs>
         </Card>

@@ -12,6 +12,7 @@ interface AuthContextType {
   signUp: (email: string, password: string, nome: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<{ error: any }>;
+    resetPassword: (email: string) => Promise<{ error: any }>; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -220,6 +221,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      // try v2 method names safely via any
+  // don't set redirectTo here so Supabase uses its default reset flow
+      const authAny: any = supabase.auth as any;
+      if (typeof authAny.resetPasswordForEmail === 'function') {
+        const res = await authAny.resetPasswordForEmail(email);
+        return { error: res?.error ?? null };
+      }
+      if (typeof authAny.sendPasswordResetEmail === 'function') {
+        const res = await authAny.sendPasswordResetEmail(email);
+        return { error: res?.error ?? null };
+      }
+      // fallback to signUp-like api if available
+      if (typeof authAny.api?.resetPasswordForEmail === 'function') {
+        const res = await authAny.api.resetPasswordForEmail(email);
+        return { error: res?.error ?? null };
+      }
+      return { error: new Error('Password reset not supported by client version') };
+    } catch (err) {
+      console.error('Erro ao solicitar reset de senha:', err);
+      return { error: err };
+    }
+  };
+
   const value = {
     user,
     session,
@@ -228,7 +254,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     acesso,
     signUp,
     signIn,
-    signOut
+    signOut,
+    resetPassword
   };
 
   return (
