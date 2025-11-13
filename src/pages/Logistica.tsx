@@ -92,15 +92,16 @@ export function Logistica() {
     if (!code) return;
     setLoadingScan(true);
     try {
-      // Try atomic find-and-mark RPC first, fall back to find-only if not available
-      let rpcRes: any = await (supabase as any).rpc('achar_e_marcar_item_por_codigo_bipado', { codigo_bipado: code });
-      let data: any = rpcRes?.data ?? rpcRes;
-      let error: any = rpcRes?.error ?? null;
 
-      if (error && (error.code === 'PGRST202' || String(error.message || '').includes('achar_e_marcar_item_por_codigo_bipado'))) {
-        const fallback: any = await (supabase as any).rpc('achar_item_por_codigo_bipado', { codigo_bipado: code });
-        data = fallback?.data ?? fallback;
-        error = fallback?.error ?? null;
+      // Call RPC to find item by barcode (server function `achar_item_por_codigo_bipado`)
+      let data: any = null;
+      let error: any = null;
+      try {
+        const rpcRes: any = await (supabase as any).rpc('achar_item_por_codigo_bipado', { codigo_bipado: code });
+        data = rpcRes?.data ?? rpcRes;
+        error = rpcRes?.error ?? null;
+      } catch (e: any) {
+        error = e;
       }
 
       if (error) throw error;
