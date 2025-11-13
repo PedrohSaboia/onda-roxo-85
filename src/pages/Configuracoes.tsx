@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Settings, Users, Tag, Palette, Building } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -24,6 +24,8 @@ export function Configuracoes() {
   const [newPapel, setNewPapel] = useState<'admin'|'operador'|'visualizador'>('operador');
   const [newPassword, setNewPassword] = useState('');
   const [creating, setCreating] = useState(false);
+  const [newFile, setNewFile] = useState<File | null>(null);
+  const newFileInputRef = useRef<HTMLInputElement | null>(null);
   // users list state
   type Usuario = { id?: string; nome: string; email?: string; acesso?: string; ativo?: boolean };
   const [users, setUsers] = useState<Usuario[]>([]);
@@ -38,6 +40,43 @@ export function Configuracoes() {
   const [editPapel, setEditPapel] = useState<'admin'|'operador'|'visualizador'>('operador');
   const [editAtivo, setEditAtivo] = useState(true);
   const [editing, setEditing] = useState(false);
+  const [editFile, setEditFile] = useState<File | null>(null);
+  const editFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // helper to upload a user's image to Supabase Storage and return public URL
+  const uploadUserImage = async (file: File, userId: string) => {
+    try {
+      // create filename with timestamp to avoid collisions
+      const parts = file.name.split('.');
+      const ext = parts.length > 1 ? parts.pop() : 'jpg';
+      const filename = `${Date.now()}.${ext}`;
+      const path = `Fotos/${userId}/${filename}`;
+
+      const { error: uploadErr } = await supabase.storage.from('Usuarios').upload(path, file, { upsert: true });
+      if (uploadErr) {
+        console.error('Erro upload imagem:', uploadErr);
+        return null;
+      }
+
+      // get public URL (supabase v2 returns data.publicUrl)
+      const pub = supabase.storage.from('Usuarios').getPublicUrl(path as string) as any;
+      const publicUrl = pub?.data?.publicUrl ?? pub?.publicUrl ?? null;
+      return publicUrl;
+    } catch (err) {
+      console.error('Erro ao enviar imagem:', err);
+      return null;
+    }
+  };
+
+  // helper: create object URL for preview and revoke previous if any
+  const createPreviewUrl = (file: File | null) => {
+    if (!file) return null;
+    try {
+      return URL.createObjectURL(file);
+    } catch (err) {
+      return null;
+    }
+  };
 
   const fetchUsuarios = async () => {
     setLoadingUsers(true);
@@ -171,6 +210,34 @@ export function Configuracoes() {
                           <option value="visualizador">Visualizador</option>
                         </select>
                       </div>
+                      <div className="space-y-1">
+                        <Label>Foto)</Label>
+                        <div
+                          onClick={() => newFileInputRef.current?.click()}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const f = e.dataTransfer?.files?.[0];
+                            if (f) setNewFile(f);
+                          }}
+                          className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                        >
+                          {!newFile ? (
+                            <div className="text-center text-sm text-muted-foreground">
+                              Clique ou arraste uma imagem aqui para anexar
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-4">
+                              <img src={createPreviewUrl(newFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
+                              <div className="flex flex-col gap-2">
+                                <Button variant="outline" onClick={(e) => { e.stopPropagation(); newFileInputRef.current?.click(); }}>Trocar</Button>
+                                <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setNewFile(null); }}>Remover</Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <input ref={newFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setNewFile(e.target.files?.[0] ?? null)} />
+                      </div>
                     </div>
 
                     <DialogFooter>
@@ -198,8 +265,19 @@ export function Configuracoes() {
                             const userId = (data as SignUpData)?.user?.id ?? null;
 
                             if (userId) {
+                              // if an image was selected, upload it first
+                              let imgUrl: string | null = null;
+                              if (newFile) {
+                                imgUrl = await uploadUserImage(newFile, userId);
+                                if (!imgUrl) {
+                                  toast({ title: 'Aviso', description: 'Imagem não pôde ser enviada. Usuário será criado sem foto.', variant: 'destructive' });
+                                }
+                              }
+
                               // upsert into usuarios with same uuid
-                              const { error: upsertErr } = await supabase.from('usuarios').upsert({ id: userId, nome: newNome, email: newEmail, acesso: newPapel, ativo: true }).select();
+                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
+                              if (imgUrl) upsertObj.img_url = imgUrl;
+                              const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
                               if (upsertErr) {
                                 toast({ title: 'Conta criada, mas erro ao registrar no sistema', description: upsertErr.message || String(upsertErr), variant: 'destructive' });
                               } else {
@@ -218,7 +296,7 @@ export function Configuracoes() {
                             }
 
                             // reset form and close
-                            setNewNome(''); setNewEmail(''); setNewPassword(''); setNewPapel('operador');
+                            setNewNome(''); setNewEmail(''); setNewPassword(''); setNewPapel('operador'); setNewFile(null);
                             // refresh list (in case creation succeeded)
                             fetchUsuarios();
                             setOpenNewUser(false);
@@ -377,6 +455,34 @@ export function Configuracoes() {
                   <option value="visualizador">Visualizador</option>
                 </select>
               </div>
+              <div className="space-y-1">
+                <Label>Foto</Label>
+                <div
+                  onClick={() => editFileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer?.files?.[0];
+                    if (f) setEditFile(f);
+                  }}
+                  className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                >
+                  {!editFile ? (
+                    <div className="text-center text-sm text-muted-foreground">
+                      Clique ou arraste uma imagem aqui para anexar
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <img src={createPreviewUrl(editFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
+                      <div className="flex flex-col gap-2">
+                        <Button variant="outline" onClick={(e) => { e.stopPropagation(); editFileInputRef.current?.click(); }}>Trocar</Button>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setEditFile(null); }}>Remover</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <input ref={editFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setEditFile(e.target.files?.[0] ?? null)} />
+              </div>
               <div className="flex items-center justify-between">
                 <Label>Ativo</Label>
                 <Switch checked={editAtivo} onCheckedChange={(v) => setEditAtivo(Boolean(v))} />
@@ -393,13 +499,25 @@ export function Configuracoes() {
                       return;
                     }
                     setEditing(true);
-                    const { error } = await supabase.from('usuarios').update({ nome: editNome, email: editEmail, acesso: editPapel, ativo: editAtivo }).eq('id', editUserId).select();
+                    // if a new image was selected, upload it and include img_url in update
+                    let imgUrl: string | null = null;
+                    if (editFile) {
+                      imgUrl = await uploadUserImage(editFile, editUserId);
+                      if (!imgUrl) {
+                        toast({ title: 'Aviso', description: 'Imagem não pôde ser enviada. Alterações serão salvas sem foto.', variant: 'destructive' });
+                      }
+                    }
+
+                    const updateObj: any = { nome: editNome, email: editEmail, acesso: editPapel, ativo: editAtivo };
+                    if (imgUrl) updateObj.img_url = imgUrl;
+                    const { error } = await supabase.from('usuarios').update(updateObj).eq('id', editUserId).select();
                     if (error) {
                       toast({ title: 'Erro ao atualizar usuário', description: error.message || String(error), variant: 'destructive' });
                     } else {
                       toast({ title: 'Usuário atualizado' });
                       await fetchUsuarios();
                       setEditOpen(false);
+                      setEditFile(null);
                     }
                   } catch (err) {
                     console.error('Erro ao atualizar usuário:', err);

@@ -8,9 +8,11 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   isUserActive: boolean;
+  acesso?: string | null;
   signUp: (email: string, password: string, nome: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<{ error: any }>;
+    resetPassword: (email: string) => Promise<{ error: any }>; 
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUserActive, setIsUserActive] = useState(false);
+  const [acesso, setAcesso] = useState<string | null>(null);
   const { toast } = useToast();
 
   // Verificar se usuário está ativo
@@ -29,7 +32,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         .from('usuarios')
         .select('ativo')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
       
       if (error) {
         console.error('Erro ao verificar status do usuário:', error);
@@ -40,6 +43,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Erro ao verificar status do usuário:', error);
       return false;
+    }
+  };
+
+  const fetchAcesso = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('usuarios')
+        .select('acesso')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Erro ao buscar acesso do usuário:', error);
+        return null;
+      }
+
+      return data?.acesso ?? null;
+    } catch (err) {
+      console.error('Erro ao buscar acesso do usuário:', err);
+      return null;
     }
   };
 
@@ -56,6 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             try {
               const active = await checkUserActive(session.user.id);
               setIsUserActive(active);
+              const acc = await fetchAcesso(session.user.id);
+              setAcesso(acc);
               
               if (!active && event === 'SIGNED_IN') {
                 toast({
@@ -72,6 +97,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }, 0);
         } else {
           setIsUserActive(false);
+          setAcesso(null);
           setIsLoading(false);
         }
       }
@@ -87,6 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           try {
             const active = await checkUserActive(session.user.id);
             setIsUserActive(active);
+            const acc = await fetchAcesso(session.user.id);
+            setAcesso(acc);
           } catch (error) {
             console.error('Erro ao verificar status do usuário:', error);
             setIsUserActive(false);
@@ -193,14 +221,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const resetPassword = async (email: string) => {
+    try {
+      // try v2 method names safely via any
+  // don't set redirectTo here so Supabase uses its default reset flow
+      const authAny: any = supabase.auth as any;
+      if (typeof authAny.resetPasswordForEmail === 'function') {
+        const res = await authAny.resetPasswordForEmail(email);
+        return { error: res?.error ?? null };
+      }
+      if (typeof authAny.sendPasswordResetEmail === 'function') {
+        const res = await authAny.sendPasswordResetEmail(email);
+        return { error: res?.error ?? null };
+      }
+      // fallback to signUp-like api if available
+      if (typeof authAny.api?.resetPasswordForEmail === 'function') {
+        const res = await authAny.api.resetPasswordForEmail(email);
+        return { error: res?.error ?? null };
+      }
+      return { error: new Error('Password reset not supported by client version') };
+    } catch (err) {
+      console.error('Erro ao solicitar reset de senha:', err);
+      return { error: err };
+    }
+  };
+
   const value = {
     user,
     session,
     isLoading,
     isUserActive,
+    acesso,
     signUp,
     signIn,
-    signOut
+    signOut,
+    resetPassword
   };
 
   return (

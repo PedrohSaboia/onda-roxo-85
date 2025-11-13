@@ -19,6 +19,7 @@ type LeadRow = {
   tag_utm?: string | null;
   tipo_pessoa?: string | null;
   tipo_de_lead_id?: number | null;
+  vendido?: boolean | null;
   nome?: string | null;
   contato?: string | null;
   produto_id?: string | null;
@@ -163,11 +164,13 @@ export default function Leads() {
     };
 
     const filtered = leads.filter(l => {
-    if (!search) return true;
-    const q = search.toLowerCase();
-    const prodName = l.produto_id ? (productsMap[l.produto_id]?.nome || '') : '';
-    return String(l.nome || '').toLowerCase().includes(q) || String(l.contato || '').toLowerCase().includes(q) || String(prodName).toLowerCase().includes(q);
-  });
+      // hide leads already marked as sold
+      if (l.vendido === true) return false;
+      if (!search) return true;
+      const q = search.toLowerCase();
+      const prodName = l.produto_id ? (productsMap[l.produto_id]?.nome || '') : '';
+      return String(l.nome || '').toLowerCase().includes(q) || String(l.contato || '').toLowerCase().includes(q) || String(prodName).toLowerCase().includes(q);
+    });
 
   const clearSearch = () => setSearch('');
 
@@ -358,19 +361,26 @@ export default function Leads() {
                             // determinar plataforma a partir do tipo do lead (tipo_pessoa ou tag_utm)
                             let plataformaId = 'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4'; // fallback
                             try {
-                              const leadType = ((activeLead.tipo_pessoa || activeLead.tag_utm) || '').toString().toLowerCase();
-                              let searchName: string | null = null;
-                              if (leadType.includes('pix')) searchName = 'pix';
-                              else if (leadType.includes('carrinho') || leadType.includes('cart') || leadType.includes('checkout')) searchName = 'carrinho';
+                              // If tipo_de_lead_id is set, use explicit mapping requested by product owner
+                              if (activeLead.tipo_de_lead_id === 1) {
+                                plataformaId = '0e27f292-924c-4ffc-a141-bbe00ec00428';
+                              } else if (activeLead.tipo_de_lead_id === 2) {
+                                plataformaId = 'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f';
+                              } else {
+                                const leadType = ((activeLead.tipo_pessoa || activeLead.tag_utm) || '').toString().toLowerCase();
+                                let searchName: string | null = null;
+                                if (leadType.includes('pix')) searchName = 'pix';
+                                else if (leadType.includes('carrinho') || leadType.includes('cart') || leadType.includes('checkout')) searchName = 'carrinho';
 
-                              if (searchName) {
-                                const { data: plats, error: platsError } = await (supabase as any)
-                                  .from('plataformas')
-                                  .select('id,nome')
-                                  .ilike('nome', `%${searchName}%`)
-                                  .limit(1);
-                                if (!platsError && (plats || []).length > 0) {
-                                  plataformaId = plats[0].id;
+                                if (searchName) {
+                                  const { data: plats, error: platsError } = await (supabase as any)
+                                    .from('plataformas')
+                                    .select('id,nome')
+                                    .ilike('nome', `%${searchName}%`)
+                                    .limit(1);
+                                  if (!platsError && (plats || []).length > 0) {
+                                    plataformaId = plats[0].id;
+                                  }
                                 }
                               }
                             } catch (errPlat: any) {
@@ -421,6 +431,24 @@ export default function Leads() {
                                 console.error('Erro ao criar cliente:', errCliente);
                                 toast({ title: 'Atenção', description: 'Pedido criado, mas ocorreu um erro ao criar o cliente', variant: 'destructive' });
                               }
+                            }
+
+                            // marcar lead como vendido
+                            try {
+                              if (activeLead?.id) {
+                                const { error: markErr } = await (supabase as any)
+                                  .from('leads')
+                                  .update({ vendido: true })
+                                  .eq('id', activeLead.id);
+                                if (markErr) {
+                                  console.error('Erro ao marcar lead como vendido:', markErr);
+                                } else {
+                                  // update local state to reflect sold status (will be filtered out)
+                                  setLeads(prev => prev.map(l => l.id === activeLead.id ? { ...l, vendido: true } : l));
+                                }
+                              }
+                            } catch (errMark: any) {
+                              console.error('Erro ao marcar lead como vendido:', errMark);
                             }
 
                             toast({ title: 'Pedido criado', description: `Pedido criado para ${activeLead.nome}` });
