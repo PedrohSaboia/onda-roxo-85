@@ -105,6 +105,8 @@ export interface Pedido {
   plataforma?: Plataforma;
   transportadora?: { id?: string; nome?: string; imagemUrl?: string; raw?: any };
   status?: Status;
+  corDoPedido?: string;
+  foiDuplicado?: boolean;
   criadoEm: string;
   atualizadoEm: string;
 }
