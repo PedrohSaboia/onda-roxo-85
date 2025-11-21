@@ -11,6 +11,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Pedido } from '@/types';
+import EditSelectModal from '@/components/modals/EditSelectModal';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 
 const etiquetaLabels = {
@@ -314,6 +315,13 @@ export function Comercial() {
   // apply client-formulario filter client-side: only include pedidos whose cliente.formulario_enviado === false
   const filteredPedidosWithClienteFilter = filterClienteFormNotSent ? filteredPedidos.filter(p => !(p as any).formularioEnviado) : filteredPedidos;
 
+  // Status edit modal state
+  const [statusEditOpen, setStatusEditOpen] = useState(false);
+  const [statusEditPedidoId, setStatusEditPedidoId] = useState<string | null>(null);
+  const [statusEditValue, setStatusEditValue] = useState<string | null>(null);
+  const [statusOptions, setStatusOptions] = useState<Array<{ id: string; nome: string; cor_hex?: string; ordem?: number }>>([]);
+  const [loadingStatusOptions, setLoadingStatusOptions] = useState(false);
+
   const handleEnvioRapido = async (pedidoId: string) => {
     if (!pedidoId) return;
     setProcessingRapid(prev => ({ ...prev, [pedidoId]: true }));
@@ -597,7 +605,7 @@ export function Comercial() {
   newPedidoPayload.duplicata = true;
 
   const { data: newPedidoData, error: newPedidoError } = await supabase.from('pedidos').insert(newPedidoPayload).select('id').single();
-      if (newPedidoError) throw newPedidoError;
+      if (newPedidoError) throw newPedidoError;   
 
       const newPedidoId = (newPedidoData as any).id;
 
@@ -692,6 +700,9 @@ export function Comercial() {
   const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
 
   const pageSizeOptions = [10, 20, 30, 50];
+
+  // helper to get status options formatted for EditSelectModal
+  const statusModalOptions = statusOptions.map(o => ({ id: o.id, nome: o.nome }));
 
   return (
     <div className="flex items-start gap-6">
@@ -909,8 +920,34 @@ export function Comercial() {
                         <div className="w-2 h-2 bg-red-500 rounded-full" />
                       )}
                           <div
-                            className="max-w-[220px] truncate overflow-hidden whitespace-nowrap"
-                            title={pedido.idExterno}
+                            className="max-w-[220px] truncate overflow-hidden whitespace-nowrap cursor-pointer"
+                            title="Clique para copiar"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const text = String(pedido.idExterno || '');
+                              try {
+                                if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                                  navigator.clipboard.writeText(text).then(() => {
+                                    toast({ title: 'Copiado', description: 'ID do pedido copiado para a área de transferência.' });
+                                  }).catch((err) => {
+                                    console.error('Erro ao copiar:', err);
+                                    toast({ title: 'Erro', description: 'Não foi possível copiar o ID.' , variant: 'destructive'});
+                                  });
+                                } else {
+                                  // fallback: select and execCommand (may be deprecated)
+                                  const ta = document.createElement('textarea');
+                                  ta.value = text;
+                                  document.body.appendChild(ta);
+                                  ta.select();
+                                  try { document.execCommand('copy'); toast({ title: 'Copiado', description: 'ID do pedido copiado para a área de transferência.' }); }
+                                  catch (ex) { console.error('Fallback copy failed', ex); toast({ title: 'Erro', description: 'Não foi possível copiar o ID.' , variant: 'destructive'}); }
+                                  document.body.removeChild(ta);
+                                }
+                              } catch (err) {
+                                console.error('Copy exception', err);
+                                toast({ title: 'Erro', description: 'Não foi possível copiar o ID.' , variant: 'destructive'});
+                              }
+                            }}
                             style={{ color: pedido.corDoPedido || '#8B5E3C' }}
                           >
                             {pedido.idExterno}
@@ -980,16 +1017,43 @@ export function Comercial() {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center justify-center">
-                      <Badge 
-                        variant="outline"
+                      <div onClick={(e) => { e.stopPropagation();
+                        // open status edit modal for this pedido
+                        setStatusEditPedidoId(pedido.id);
+                        setStatusEditValue(pedido.statusId || null);
+                        setStatusEditOpen(true);
+                        // load options if not loaded
+                        if (!statusOptions.length) {
+                          (async () => {
+                            setLoadingStatusOptions(true);
+                            try {
+                              const { data, error } = await supabase.from('status').select('id,nome,cor_hex,ordem').order('ordem', { ascending: true });
+                              setLoadingStatusOptions(false);
+                              if (error) {
+                                console.error('Erro ao carregar status options', error);
+                                toast({ title: 'Erro', description: 'Não foi possível carregar opções de status', variant: 'destructive' });
+                                return;
+                              }
+                              setStatusOptions(data || []);
+                            } catch (err) {
+                              setLoadingStatusOptions(false);
+                              console.error('Exception loading status options', err);
+                            }
+                          })();
+                        }
+                      }}>
+                        <Badge 
+                          variant="outline"
+                          className="cursor-pointer"
                           style={{ 
                             backgroundColor: `${pedido.status?.corHex}15`,
                             borderColor: pedido.status?.corHex,
                             color: pedido.status?.corHex
                           }}
-                         >
-                        {pedido.status?.nome}
-                      </Badge>
+                        >
+                          {pedido.status?.nome}
+                        </Badge>
+                      </div>
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
@@ -1046,6 +1110,35 @@ export function Comercial() {
             </TableBody>
           </Table>
         </CardContent>
+            {/* Status edit modal reused here */}
+            <EditSelectModal
+              open={statusEditOpen}
+              onOpenChange={(open) => setStatusEditOpen(open)}
+              title="Atualizar Status"
+              options={statusModalOptions}
+              value={statusEditValue}
+              onSave={async (selectedId) => {
+                if (!statusEditPedidoId) {
+                  toast({ title: 'Erro', description: 'Pedido não selecionado', variant: 'destructive' });
+                  return;
+                }
+                try {
+                  const updateData: any = { atualizado_em: new Date().toISOString(), status_id: selectedId || null };
+                  const { error } = await supabase.from('pedidos').update(updateData).eq('id', statusEditPedidoId);
+                  if (error) throw error;
+
+                  // update local state: replace statusId and status object (if we have details)
+                  const selectedStatus = statusOptions.find(s => s.id === selectedId) || null;
+                  setPedidos(prev => prev.map(p => p.id === statusEditPedidoId ? { ...p, statusId: selectedId || '', status: selectedStatus ? { id: selectedStatus.id, nome: selectedStatus.nome, corHex: selectedStatus.cor_hex, ordem: selectedStatus.ordem ?? 0, criadoEm: '', atualizadoEm: '' } : p.status } : p));
+
+                  toast({ title: 'Atualizado', description: 'Status atualizado com sucesso' });
+                  setStatusEditOpen(false);
+                } catch (err: any) {
+                  console.error('Erro ao atualizar status do pedido:', err);
+                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                }
+              }}
+            />
         <div className="flex items-center justify-between p-4 border-t">
           <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
