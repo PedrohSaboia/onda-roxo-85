@@ -50,6 +50,7 @@ export function Comercial() {
   const { toast } = useToast();
   const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
+  const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
   // filter: when true, only show pedidos where pedido_liberado = FALSE
   const initialLiberadoParam = new URLSearchParams(location.search).get('pedido_liberado');
   const [filterNotLiberado, setFilterNotLiberado] = useState<boolean>(initialLiberadoParam === 'false');
@@ -89,10 +90,9 @@ export function Comercial() {
           }
         }
 
-        // when on the "enviados" view, only fetch pedidos with the Enviado status id
-        if (view === 'enviados') {
-          query.eq('status_id', 'fa6b38ba-1d67-4bc3-821e-ab089d641a25');
-        }
+        // Exclude pedidos with 'Enviado' status from the main Comercial list
+        // (those are shown in the dedicated PedidosEnviados page)
+        (query as any).neq('status_id', ENVIADO_STATUS_ID);
 
         // apply pedido_liberado = FALSE filter when requested
         if (filterNotLiberado) {

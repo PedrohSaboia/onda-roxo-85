@@ -12,6 +12,7 @@ import Pedido from "./pages/Pedido";
 import NovoPedido from "./pages/NovoPedido";
 import InformacoesEntrega from "./pages/InformacoesEntrega";
 import Leads from "./pages/Leads";
+import PedidosEnviados from "./pages/PedidosEnviados";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,11 @@ const App = () => (
             <Route path="/leads" element={
               <ProtectedRoute>
                 <Leads />
+              </ProtectedRoute>
+            } />
+            <Route path="/pedidos-enviados" element={
+              <ProtectedRoute>
+                <PedidosEnviados />
               </ProtectedRoute>
             } />
             <Route path="/" element={

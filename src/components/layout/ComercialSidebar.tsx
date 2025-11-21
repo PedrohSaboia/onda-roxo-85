@@ -22,13 +22,19 @@ export function ComercialSidebar() {
       return;
     }
 
+    // Special-case: open the dedicated PedidosEnviados page
+    if (id === 'enviados') {
+      navigate('/pedidos-enviados');
+      return;
+    }
+
     // keep module=comercial while switching view for other items
     const next = new URLSearchParams(location.search)
     next.set('module', 'comercial')
     next.set('view', id)
-    // If we're currently on a dedicated route like /leads, navigate back to the Comercial root
+    // If we're currently on a dedicated route like /leads or /pedidos-enviados, navigate back to the Comercial root
     // so the Comercial page will receive the query params and render the requested view.
-    const targetPath = location.pathname === '/leads' ? '/' : location.pathname;
+    const targetPath = (location.pathname === '/leads' || location.pathname === '/pedidos-enviados') ? '/' : location.pathname;
     navigate({ pathname: targetPath, search: next.toString() })
   }
 
@@ -42,10 +48,12 @@ export function ComercialSidebar() {
           <ul className="px-3 py-3 space-y-2">{/* options directly in menu (no surrounding card) */}
             {items.map((it) => {
               const Icon = it.icon
-              // When on the dedicated /leads route, only mark the 'leads' item active.
+              // When on the dedicated /leads or /pedidos-enviados route, mark the corresponding item active.
               let isActive = false;
               if (location.pathname === '/leads') {
                 isActive = it.id === 'leads';
+              } else if (location.pathname === '/pedidos-enviados') {
+                isActive = it.id === 'enviados';
               } else {
                 isActive = view === it.id && currentModule === 'comercial';
               }
