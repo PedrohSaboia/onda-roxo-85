@@ -151,12 +151,12 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Opções de Frete</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-4 overflow-y-auto pr-2 flex-1">
           {cotacoes.length === 0 ? (
             <div className="text-center text-sm text-muted-foreground py-8">
               Nenhuma cotação retornada. Tente outro remetente/embalagem.

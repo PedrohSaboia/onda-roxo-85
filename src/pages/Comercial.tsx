@@ -753,7 +753,7 @@ export function Comercial() {
               <h1 className="text-2xl font-bold">{view === 'enviados' ? 'Pedidos Enviados' : 'Pedidos'}</h1>
               <p className="text-muted-foreground">
                 {view === 'enviados'
-                  ? `${filteredPedidosWithClienteFilter.length} pedidos encontrados`
+                  ? `${filteredPedidosWithClienteFilter.length} pedidos   ados`
                   : filterNotLiberado
                     ? `${total} pedidos encontrados`
                     : `${totalExcludingEnviados} pedidos encont rados`}

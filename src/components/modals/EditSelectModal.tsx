@@ -24,12 +24,12 @@ export default function EditSelectModal({ open, onOpenChange, title = 'Editar', 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
 
-        <div className="py-4">
+        <div className="py-4 overflow-y-auto pr-2 flex-1">
           <select className="w-full border rounded p-3" value={selected || ''} onChange={(e) => setSelected(e.target.value || null)}>
             <option value="">Nenhum</option>
             {options.map((o) => (

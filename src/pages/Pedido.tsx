@@ -75,6 +75,8 @@ export default function Pedido() {
   const [loadingProdutosModal, setLoadingProdutosModal] = useState(false);
   const [produtosErrorModal, setProdutosErrorModal] = useState<string | null>(null);
   const [searchModal, setSearchModal] = useState('');
+  const [modalPage, setModalPage] = useState(1);
+  const [modalPageSize] = useState(5);
   const [variationSelectionsModal, setVariationSelectionsModal] = useState<Record<string, string>>({});
   const [brindeSelectionsModal, setBrindeSelectionsModal] = useState<Record<string, boolean>>({});
   const [modalCart, setModalCart] = useState<any[]>([]);
@@ -1298,22 +1300,31 @@ export default function Pedido() {
 
       {/* Modal de Adicionar Produtos (copiado do NovoPedido UI pattern) */}
   <Dialog open={addProductsVisible} onOpenChange={(open) => { if (!readonly) setAddProductsVisible(open); }}>
-        <DialogContent className="max-w-6xl w-full">
-          <div className="grid grid-cols-2 gap-6">
-            <div>
-              <Input placeholder="Buscar produto" value={searchModal} onChange={(e) => setSearchModal(e.target.value)} />
-              <div className="space-y-4 mt-4">
+        <DialogContent className="max-w-6xl w-full h-[90vh] flex flex-col">
+          <div className="grid grid-cols-2 gap-6 flex-1 overflow-hidden" style={{ minHeight: '600px' }}>
+            <div className="flex flex-col h-full">
+              <Input placeholder="Buscar produto" value={searchModal} onChange={(e) => { setSearchModal(e.target.value); setModalPage(1); }} />
+              <div className="flex-1 flex flex-col mt-4" style={{ minHeight: '500px' }}>
+                <div className="space-y-4 overflow-y-auto flex-1 pr-2">
                 {loadingProdutosModal && <div className="text-sm text-muted-foreground">Carregando produtos...</div>}
                 {produtosErrorModal && <div className="text-sm text-destructive">Erro: {produtosErrorModal}</div>}
-                {!loadingProdutosModal && !produtosErrorModal && produtosListModal.filter(p => p.nome.toLowerCase().includes(searchModal.toLowerCase())).map((p) => (
-                  <div key={p.id} className="flex items-center gap-4">
-                    <img src={p.imagemUrl} alt={p.nome} className="w-12 h-12 rounded" />
-                    <div className="flex-1">
-                      <div className="font-medium text-purple-700">{p.nome}</div>
+                {!loadingProdutosModal && !produtosErrorModal && (() => {
+                  const filtered = produtosListModal.filter(p => p.nome.toLowerCase().includes(searchModal.toLowerCase()));
+                  const totalPages = Math.max(1, Math.ceil(filtered.length / modalPageSize));
+                  const startIdx = (modalPage - 1) * modalPageSize;
+                  const endIdx = startIdx + modalPageSize;
+                  const paginated = filtered.slice(startIdx, endIdx);
+                  return (
+                    <>
+                      {paginated.map((p) => (
+                  <div key={p.id} className="flex items-center gap-4 py-2 min-h-[80px]">
+                    <img src={p.imagemUrl} alt={p.nome} className="w-12 h-12 rounded flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-purple-700 truncate" title={p.nome}>{p.nome}</div>
                       <div className="text-sm text-muted-foreground">R$ {Number(p.preco || 0).toFixed(2)}</div>
                     </div>
 
-                    <div className="w-48">
+                    <div className="w-48 flex-shrink-0">
                       {p.variacoes && p.variacoes.length > 0 ? (
                         <select className="w-full border rounded p-2" value={variationSelectionsModal[p.id] || ''} onChange={(e) => setVariationSelectionsModal((s) => ({ ...s, [p.id]: e.target.value }))}>
                           {p.variacoes.map((v: any) => (
@@ -1349,14 +1360,49 @@ export default function Pedido() {
                       }}>+</Button>
                     </div>
                   </div>
-                ))}
+                      ))}
+                    </>
+                  );
+                })()}
+                </div>
+                <div className="flex items-center justify-between pt-3 mt-3 border-t flex-shrink-0">
+                  {(() => {
+                    const filtered = produtosListModal.filter(p => p.nome.toLowerCase().includes(searchModal.toLowerCase()));
+                    const totalPages = Math.max(1, Math.ceil(filtered.length / modalPageSize));
+                    return (
+                      <>
+                        <div className="text-sm text-muted-foreground">
+                          Página {modalPage} de {totalPages}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => setModalPage(p => Math.max(1, p - 1))} 
+                            disabled={modalPage <= 1}
+                          >
+                            Anterior
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={() => setModalPage(p => Math.min(totalPages, p + 1))} 
+                            disabled={modalPage >= totalPages}
+                          >
+                            Próximo
+                          </Button>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
               </div>
             </div>
 
-            <div>
+            <div className="flex flex-col h-full">
               <div className="text-lg font-semibold">ITENS DO CARRINHO</div>
               <div className="text-sm text-muted-foreground mb-4">{modalCart.length} R$ {modalCart.reduce((s, it) => s + (Number(it.preco || 0) * Number(it.quantidade || 1)), 0).toFixed(2)}</div>
-              <div className="space-y-3">
+              <div className="space-y-3 overflow-y-auto flex-1 pr-2">
                 {modalCart.map((item, idx) => (
                   <div key={item.id} className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -1374,7 +1420,7 @@ export default function Pedido() {
                 ))}
               </div>
 
-              <div className="mt-6 flex justify-end gap-3">
+              <div className="mt-6 flex justify-end gap-3 flex-shrink-0">
                 <Button variant="outline" onClick={() => setAddProductsVisible(false)}>Cancelar</Button>
                 <Button className="bg-purple-700 text-white" onClick={() => {
                   // Open the wizard (date/payment/value) before persisting

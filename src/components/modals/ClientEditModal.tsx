@@ -185,12 +185,12 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>Editar Cliente</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3">
+        <div className="space-y-3 overflow-y-auto pr-2 flex-1">
           <div>
             <label className="block text-sm text-muted-foreground">Nome *</label>
             <Input value={cliente?.nome || ''} onChange={(e) => updateField('nome', e.target.value)} />

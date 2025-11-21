@@ -89,12 +89,12 @@ export default function EmballagemModal({ open, onClose, onSave, embalagem }: Em
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{embalagem ? 'Editar' : 'Nova'} Embalagem</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 flex-1 flex flex-col">
           <div className="grid gap-4">
             <div className="space-y-2">
               <Label htmlFor="nome">Nome</Label>
