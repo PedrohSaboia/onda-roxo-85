@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,14 +16,35 @@ const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
 
 export function PedidosEnviados() {
   const navigate = useNavigate();
-  const [searchTerm, setSearchTerm] = useState('');
+  const location = useLocation();
+  
+  // Read current values from URL
+  const params = new URLSearchParams(location.search);
+  const urlPage = parseInt(params.get('page') || '1', 10);
+  const urlPageSize = parseInt(params.get('pageSize') || '10', 10);
+  const urlSearch = params.get('search') || '';
+  
+  // State using URL as source of truth
+  const [searchTerm, setSearchTerm] = useState(urlSearch);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [page, setPage] = useState(urlPage);
+  const [pageSize, setPageSize] = useState(urlPageSize);
   const [total, setTotal] = useState<number>(0);
   const { toast } = useToast();
+  
+  // Sync state from URL when location changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const newPage = parseInt(params.get('page') || '1', 10);
+    const newPageSize = parseInt(params.get('pageSize') || '10', 10);
+    const newSearch = params.get('search') || '';
+    
+    setPage(newPage);
+    setPageSize(newPageSize);
+    setSearchTerm(newSearch);
+  }, [location.search]);
 
   useEffect(() => {
     let mounted = true;
@@ -192,10 +213,6 @@ export function PedidosEnviados() {
     return () => { mounted = false };
   }, [page, pageSize, searchTerm]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm]);
-
   const normalize = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
   const digitsOnly = (s?: string) => (s || '').replace(/\D/g, '').trim();
 
@@ -220,8 +237,23 @@ export function PedidosEnviados() {
 
   const totalPages = Math.max(1, Math.ceil((total || filteredPedidos.length) / pageSize));
 
-  const handlePrev = () => setPage(p => Math.max(1, p - 1));
-  const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
+  const updatePageInUrl = (newPage: number) => {
+    const params = new URLSearchParams(location.search);
+    params.set('page', String(newPage));
+    params.set('pageSize', String(pageSize));
+    if (searchTerm) params.set('search', searchTerm);
+    navigate({ pathname: location.pathname, search: params.toString() });
+  };
+
+  const handlePrev = () => {
+    const newPage = Math.max(1, page - 1);
+    updatePageInUrl(newPage);
+  };
+  
+  const handleNext = () => {
+    const newPage = Math.min(totalPages, page + 1);
+    updatePageInUrl(newPage);
+  };
 
   const pageSizeOptions = [10, 20, 30, 50];
 
@@ -284,7 +316,12 @@ export function PedidosEnviados() {
                 )}
 
                 {filteredPedidos.map((pedido) => (
-                  <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => navigate(`/pedido/${pedido.id}?readonly=1`)}>
+                  <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => {
+                    const currentParams = new URLSearchParams();
+                    currentParams.set('readonly', '1');
+                    currentParams.set('returnTo', location.pathname + location.search);
+                    navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                  }}>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         {pedido.urgente && (
@@ -405,7 +442,13 @@ export function PedidosEnviados() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); navigate(`/pedido/${pedido.id}?readonly=1`); }}>
+                      <Button variant="ghost" size="sm" onClick={(e) => {
+                        e.stopPropagation();
+                        const currentParams = new URLSearchParams();
+                        currentParams.set('readonly', '1');
+                        currentParams.set('returnTo', location.pathname + location.search);
+                        navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                      }}>
                         <Eye className="h-4 w-4 mr-2" />
                         Visualizar
                       </Button>
@@ -425,7 +468,14 @@ export function PedidosEnviados() {
                 <label className="text-sm text-muted-foreground">Mostrar</label>
                 <select
                   value={pageSize}
-                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                  onChange={(e) => {
+                    const newSize = Number(e.target.value);
+                    const params = new URLSearchParams(location.search);
+                    params.set('page', '1');
+                    params.set('pageSize', String(newSize));
+                    if (searchTerm) params.set('search', searchTerm);
+                    navigate({ pathname: location.pathname, search: params.toString() });
+                  }}
                   className="border rounded px-2 py-1"
                 >
                   {pageSizeOptions.map(opt => (

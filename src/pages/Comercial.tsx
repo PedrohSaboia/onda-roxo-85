@@ -29,31 +29,55 @@ const etiquetaColors = {
 export function Comercial() {
   const navigate = useNavigate();
   const location = useLocation();
-  const view = new URLSearchParams(location.search).get('view') || 'pedidos';
-  const [searchTerm, setSearchTerm] = useState('');
+  
+  // Read current values from URL
+  const params = new URLSearchParams(location.search);
+  const view = params.get('view') || 'pedidos';
+  const urlPage = parseInt(params.get('page') || '1', 10);
+  const urlPageSize = parseInt(params.get('pageSize') || '10', 10);
+  const urlSearch = params.get('search') || '';
+  const urlEtiqueta = params.get('etiqueta_envio_id') || '';
+  const urlClienteForm = params.get('cliente_formulario_enviado') === 'false';
+  const urlLiberado = params.get('pedido_liberado') === 'false';
+  
+  // State using URL as source of truth
+  const [searchTerm, setSearchTerm] = useState(urlSearch);
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [page, setPage] = useState(urlPage);
+  const [pageSize, setPageSize] = useState(urlPageSize);
   const [total, setTotal] = useState<number>(0);
   const [totalExcludingEnviados, setTotalExcludingEnviados] = useState<number>(0);
   const [showFilters, setShowFilters] = useState(false);
   const ETIQUETA_FILTER_ID = '0c0ff1fc-1c3b-4eff-9dec-a505d33f3e18';
-  // etiqueta que representa "processado/impresso" — usada para remover do filtro de "Etiqueta Pendente"
   const PROCESSED_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
-  const initialEtiquetaParam = new URLSearchParams(location.search).get('etiqueta_envio_id') || '';
-  const [filterEtiquetaId, setFilterEtiquetaId] = useState<string | ''>(initialEtiquetaParam);
-  const initialClienteFormParam = new URLSearchParams(location.search).get('cliente_formulario_enviado');
-  const [filterClienteFormNotSent, setFilterClienteFormNotSent] = useState<boolean>(initialClienteFormParam === 'false');
+  const [filterEtiquetaId, setFilterEtiquetaId] = useState(urlEtiqueta);
+  const [filterClienteFormNotSent, setFilterClienteFormNotSent] = useState(urlClienteForm);
   const [etiquetaCount, setEtiquetaCount] = useState<number>(0);
   const { toast } = useToast();
   const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
   const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
-  // filter: when true, only show pedidos where pedido_liberado = FALSE
-  const initialLiberadoParam = new URLSearchParams(location.search).get('pedido_liberado');
-  const [filterNotLiberado, setFilterNotLiberado] = useState<boolean>(initialLiberadoParam === 'false');
+  const [filterNotLiberado, setFilterNotLiberado] = useState(urlLiberado);
+  
+  // Sync state from URL when location changes
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const newPage = parseInt(params.get('page') || '1', 10);
+    const newPageSize = parseInt(params.get('pageSize') || '10', 10);
+    const newSearch = params.get('search') || '';
+    const newEtiqueta = params.get('etiqueta_envio_id') || '';
+    const newClienteForm = params.get('cliente_formulario_enviado') === 'false';
+    const newLiberado = params.get('pedido_liberado') === 'false';
+    
+    setPage(newPage);
+    setPageSize(newPageSize);
+    setSearchTerm(newSearch);
+    setFilterEtiquetaId(newEtiqueta);
+    setFilterClienteFormNotSent(newClienteForm);
+    setFilterNotLiberado(newLiberado);
+  }, [location.search]);
 
   useEffect(() => {
     let mounted = true;
@@ -246,11 +270,6 @@ export function Comercial() {
 
     return () => { mounted = false };
   }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, searchTerm]);
-
-  // when the user types a search, reset to page 1 so results appear on the first page
-  useEffect(() => {
-    setPage(1);
-  }, [searchTerm]);
 
   // load count of pedidos with the specific etiqueta id (to show next to filter)
   useEffect(() => {
@@ -696,8 +715,28 @@ export function Comercial() {
 
   const totalPages = Math.max(1, Math.ceil((total || filteredPedidosWithClienteFilter.length) / pageSize));
 
-  const handlePrev = () => setPage(p => Math.max(1, p - 1));
-  const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
+  const updatePageInUrl = (newPage: number) => {
+    const params = new URLSearchParams(location.search);
+    if (!params.get('module')) params.set('module', 'comercial');
+    params.set('view', view);
+    params.set('page', String(newPage));
+    params.set('pageSize', String(pageSize));
+    if (searchTerm) params.set('search', searchTerm);
+    if (filterEtiquetaId) params.set('etiqueta_envio_id', filterEtiquetaId);
+    if (filterClienteFormNotSent) params.set('cliente_formulario_enviado', 'false');
+    if (filterNotLiberado) params.set('pedido_liberado', 'false');
+    navigate({ pathname: location.pathname, search: params.toString() });
+  };
+
+  const handlePrev = () => {
+    const newPage = Math.max(1, page - 1);
+    updatePageInUrl(newPage);
+  };
+  
+  const handleNext = () => {
+    const newPage = Math.min(totalPages, page + 1);
+    updatePageInUrl(newPage);
+  };
 
   const pageSizeOptions = [10, 20, 30, 50];
 
@@ -913,7 +952,12 @@ export function Comercial() {
               )}
 
               {filteredPedidosWithClienteFilter.map((pedido) => (
-                <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => navigate(`/pedido/${pedido.id}${view === 'enviados' ? '?readonly=1' : ''}`)}>
+                <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => {
+                  const currentParams = new URLSearchParams(location.search);
+                  if (view === 'enviados') currentParams.set('readonly', '1');
+                  currentParams.set('returnTo', location.pathname + location.search);
+                  navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                }}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       {pedido.urgente && (
@@ -1086,11 +1130,22 @@ export function Comercial() {
                           </Button>
                         </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          const currentParams = new URLSearchParams(location.search);
+                          if (view === 'enviados') currentParams.set('readonly', '1');
+                          currentParams.set('returnTo', location.pathname + location.search);
+                          navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                        }}>
                           <Eye className="h-4 w-4 mr-2" />
                           Visualizar
                         </DropdownMenuItem>
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={(e) => {
+                          e.stopPropagation();
+                          const currentParams = new URLSearchParams(location.search);
+                          currentParams.set('returnTo', location.pathname + location.search);
+                          navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                        }}>
                           <Edit className="h-4 w-4 mr-2" />
                           Editar
                         </DropdownMenuItem>
@@ -1148,7 +1203,19 @@ export function Comercial() {
               <label className="text-sm text-muted-foreground">Mostrar</label>
               <select
                 value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}
+                onChange={(e) => {
+                  const newSize = Number(e.target.value);
+                  const params = new URLSearchParams(location.search);
+                  if (!params.get('module')) params.set('module', 'comercial');
+                  params.set('view', view);
+                  params.set('page', '1');
+                  params.set('pageSize', String(newSize));
+                  if (searchTerm) params.set('search', searchTerm);
+                  if (filterEtiquetaId) params.set('etiqueta_envio_id', filterEtiquetaId);
+                  if (filterClienteFormNotSent) params.set('cliente_formulario_enviado', 'false');
+                  if (filterNotLiberado) params.set('pedido_liberado', 'false');
+                  navigate({ pathname: location.pathname, search: params.toString() });
+                }}
                 className="border rounded px-2 py-1"
               >
                 {pageSizeOptions.map(opt => (

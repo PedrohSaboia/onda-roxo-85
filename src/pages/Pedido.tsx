@@ -639,7 +639,17 @@ export default function Pedido() {
           )}
 
           <div>
-            <button onClick={() => navigate('/?module=comercial')} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
+            <button onClick={() => {
+              const returnTo = params.get('returnTo');
+              console.log('returnTo param:', returnTo);
+              if (returnTo) {
+                console.log('Navigating back to:', returnTo);
+                // Use replace: false to ensure the location change triggers properly
+                navigate(returnTo, { replace: false });
+              } else {
+                navigate('/?module=comercial');
+              }
+            }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
             <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
             <p className="text-sm text-muted-foreground">em {pedido?.criado_em ? new Date(pedido.criado_em).toLocaleString('pt-BR') : '—'}</p>
           </div>
