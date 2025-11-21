@@ -47,9 +47,9 @@ export function AppLayout() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       <AppHeader activeModule={activeModule} onModuleChange={setActiveModule} />
-      <main className="min-h-[calc(100vh-8rem)]">
+      <main className="flex-1 overflow-y-auto">
         {renderContent()}
       </main>
     </div>

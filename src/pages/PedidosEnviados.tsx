@@ -258,10 +258,13 @@ export function PedidosEnviados() {
   const pageSizeOptions = [10, 20, 30, 50];
 
   return (
-    <div className="flex items-start gap-6">
-      <ComercialSidebar />
+    <div className="flex h-full">
+      <div className="flex-shrink-0">
+        <ComercialSidebar />
+      </div>
 
-      <div className="flex-1 p-6 space-y-6">
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold">Pedidos Enviados</h1>
@@ -493,6 +496,7 @@ export function PedidosEnviados() {
             </div>
           </div>
         </Card>
+        </div>
       </div>
     </div>
   );
