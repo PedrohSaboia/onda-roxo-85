@@ -49,6 +49,9 @@ export default function Leads() {
   const [addDate, setAddDate] = useState<string>('');
   const [transportadoras, setTransportadoras] = useState<Array<{ id: string; nome: string }>>([]);
   const [loadingTransportadoras, setLoadingTransportadoras] = useState(false);
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pix' | 'carrinho'>('all');
+  const [pixCount, setPixCount] = useState<number>(0);
+  const [carrinhoCount, setCarrinhoCount] = useState<number>(0);
 
   // carregar transportadoras quando o modal abrir
   useEffect(() => {
@@ -84,11 +87,21 @@ export default function Leads() {
         const from = (page - 1) * pageSize;
         const to = page * pageSize - 1;
 
-        const { data: leadsData, error: leadsError, count } = await (supabase as any)
+        // Build query with filters
+        let query = (supabase as any)
           .from('leads')
           .select('*', { count: 'exact' })
-          .order('created_at', { ascending: false })
-          .range(from, to);
+          .or('vendido.is.null,vendido.eq.false')
+          .order('created_at', { ascending: false });
+
+        // Apply filter based on activeFilter
+        if (activeFilter === 'pix') {
+          query = query.eq('tipo_de_lead_id', 1).eq('status_lead_id', 1);
+        } else if (activeFilter === 'carrinho') {
+          query = query.eq('tipo_de_lead_id', 2).eq('status_lead_id', 1);
+        }
+
+        const { data: leadsData, error: leadsError, count } = await query.range(from, to);
         if (leadsError) throw leadsError;
 
         // collect product ids and user ids to fetch related names
@@ -129,13 +142,80 @@ export default function Leads() {
 
     load();
     return () => { mounted = false };
-  }, [page, pageSize]);
+  }, [page, pageSize, activeFilter]);
+
+  // Calculate counts for Pix and Carrinho filters from database (all records, not just current page)
+  useEffect(() => {
+    let mounted = true;
+    const loadCounts = async () => {
+      try {
+        // Count Pix leads (tipo_de_lead_id = 1, status_lead_id = 1, vendido = false or null)
+        const { count: pixTotal, error: pixError } = await (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 1)
+          .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false');
+        
+        if (pixError) throw pixError;
+
+        // Count Carrinho leads (tipo_de_lead_id = 2, status_lead_id = 1, vendido = false or null)
+        const { count: carrinhoTotal, error: carrinhoError } = await (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 2)
+          .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false');
+        
+        if (carrinhoError) throw carrinhoError;
+
+        if (!mounted) return;
+        setPixCount(pixTotal || 0);
+        setCarrinhoCount(carrinhoTotal || 0);
+      } catch (err: any) {
+        console.error('Erro ao carregar contagens:', err);
+      }
+    };
+    
+    loadCounts();
+    return () => { mounted = false };
+  }, [page, pageSize]); // Recarregar quando mudar de página para atualizar após mudanças de status
 
     const updateStatus = async (leadId: string, newStatus: number) => {
     try {
       const { error } = await (supabase as any).from('leads').update({ status_lead_id: newStatus }).eq('id', leadId);
       if (error) throw error;
-      setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status_lead_id: newStatus } : l));
+      
+      // Remove lead from list immediately if it no longer matches the filter
+      if (activeFilter === 'pix' || activeFilter === 'carrinho') {
+        // Lead with status !== 1 should be removed from filtered views
+        if (newStatus !== 1) {
+          setLeads(prev => prev.filter(l => l.id !== leadId));
+        }
+      } else {
+        // Update status in "all" view
+        setLeads(prev => prev.map(l => l.id === leadId ? { ...l, status_lead_id: newStatus } : l));
+      }
+      
+      // Reload counts to update badges in real-time
+      const [pixResp, carrinhoResp] = await Promise.all([
+        (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 1)
+          .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false'),
+        (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 2)
+          .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false')
+      ]);
+      
+      setPixCount(pixResp.count || 0);
+      setCarrinhoCount(carrinhoResp.count || 0);
+      
       toast({ title: 'Sucesso', description: 'Status atualizado' });
     } catch (err: any) {
       console.error('Erro ao atualizar status do lead:', err);
@@ -164,8 +244,7 @@ export default function Leads() {
     };
 
     const filtered = leads.filter(l => {
-      // hide leads already marked as sold
-      if (l.vendido === true) return false;
+      // Filters are now applied in the database query, so here we only apply search
       if (!search) return true;
       const q = search.toLowerCase();
       const prodName = l.produto_id ? (productsMap[l.produto_id]?.nome || '') : '';
@@ -217,9 +296,45 @@ export default function Leads() {
           <div className="flex-1 p-6">
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-2xl font-bold">Lista de Leads</h1>
-              <div className="flex items-center gap-2">
-                <Input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} />
-                <Button onClick={clearSearch} variant="secondary">Limpar</Button>
+              <div className="flex items-center gap-4">
+                {/* Filter buttons with counts */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant={activeFilter === 'all' ? 'default' : 'outline'}
+                    onClick={() => setActiveFilter('all')}
+                    className="relative"
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    variant={activeFilter === 'pix' ? 'default' : 'outline'}
+                    onClick={() => setActiveFilter('pix')}
+                    className="relative"
+                  >
+                    Pix
+                    {pixCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {pixCount}
+                      </span>
+                    )}
+                  </Button>
+                  <Button
+                    variant={activeFilter === 'carrinho' ? 'default' : 'outline'}
+                    onClick={() => setActiveFilter('carrinho')}
+                    className="relative"
+                  >
+                    Carrinho Ab.
+                    {carrinhoCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {carrinhoCount}
+                      </span>
+                    )}
+                  </Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} />
+                  <Button onClick={clearSearch} variant="secondary">Limpar</Button>
+                </div>
               </div>
             </div>
 
@@ -259,7 +374,18 @@ export default function Leads() {
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-between">
-                            <div className="font-medium text-purple-700">{lead.nome || '—'}</div>
+                            {lead.nome ? (
+                              <button
+                                className="font-medium text-purple-700 hover:underline cursor-pointer"
+                                onClick={() => copyContact(lead.nome)}
+                                title="Copiar nome"
+                                aria-label={`Copiar nome ${lead.nome}`}
+                              >
+                                {lead.nome}
+                              </button>
+                            ) : (
+                              <div className="font-medium text-purple-700">—</div>
+                            )}
                             <div className="flex items-center gap-2">
                               <button
                                 type="button"
