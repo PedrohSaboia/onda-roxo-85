@@ -101,6 +101,11 @@ export default function Leads() {
           query = query.eq('tipo_de_lead_id', 2).eq('status_lead_id', 1);
         }
 
+        // Apply search filter in database query
+        if (search) {
+          query = query.or(`nome.ilike.%${search}%,contato.ilike.%${search}%`);
+        }
+
         const { data: leadsData, error: leadsError, count } = await query.range(from, to);
         if (leadsError) throw leadsError;
 
@@ -112,7 +117,7 @@ export default function Leads() {
         const [productsResp, usersResp, tiposResp] = await Promise.all([
           productIds.length ? supabase.from('produtos').select('id,nome') : Promise.resolve({ data: [] }),
           userIds.length ? supabase.from('usuarios').select('id,nome,img_url') : Promise.resolve({ data: [] }),
-          tipoIds.length ? supabase.from('tipo_de_lead').select('id,nome,img_url') : Promise.resolve({ data: [] })
+          tipoIds.length ? (supabase as any).from('tipo_de_lead').select('id,nome,img_url') : Promise.resolve({ data: [] })
         ] as const);
 
         const products = (productsResp as any).data || [];
@@ -142,7 +147,7 @@ export default function Leads() {
 
     load();
     return () => { mounted = false };
-  }, [page, pageSize, activeFilter]);
+  }, [page, pageSize, activeFilter, search]);
 
   // Calculate counts for Pix and Carrinho filters from database (all records, not just current page)
   useEffect(() => {
@@ -243,15 +248,13 @@ export default function Leads() {
       }
     };
 
-    const filtered = leads.filter(l => {
-      // Filters are now applied in the database query, so here we only apply search
-      if (!search) return true;
-      const q = search.toLowerCase();
-      const prodName = l.produto_id ? (productsMap[l.produto_id]?.nome || '') : '';
-      return String(l.nome || '').toLowerCase().includes(q) || String(l.contato || '').toLowerCase().includes(q) || String(prodName).toLowerCase().includes(q);
-    });
+    // No frontend filtering needed - search is handled by database query
+    const filtered = leads;
 
-  const clearSearch = () => setSearch('');
+  const clearSearch = () => {
+    setSearch('');
+    setPage(1); // Reset to first page when clearing search
+  };
 
   const totalPages = Math.max(1, Math.ceil((total || leads.length) / pageSize));
   const handlePrev = () => setPage(p => Math.max(1, p - 1));
