@@ -350,6 +350,7 @@ export default function Leads() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Tipo</TableHead>
+                      <TableHead>Data</TableHead>
                       <TableHead>Nome do Cliente</TableHead>
                       <TableHead>Contato</TableHead>
                       <TableHead className="text-center">Valor</TableHead>
@@ -374,6 +375,9 @@ export default function Leads() {
                               );
                             }
                           })()}
+                        </TableCell>
+                        <TableCell>
+                          {lead.created_at ? new Date(lead.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '—'}
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-between">

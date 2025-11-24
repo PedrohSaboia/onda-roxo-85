@@ -353,7 +353,7 @@ export function Comercial() {
         .single();
 
       if (pedidoError) throw pedidoError;
-
+          
       // normalize cliente shape: PostgREST may return arrays for relations
       const pick = (val: any) => Array.isArray(val) ? val[0] : val;
       const cliente = pick((pedidoRow as any).clientes) || null;
