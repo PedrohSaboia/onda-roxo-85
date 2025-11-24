@@ -15,7 +15,7 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHeaderProps) {
-  const { user, signOut } = useAuth();
+  const { user, signOut, imgUrl } = useAuth();
 
   const [searchOpen, setSearchOpen] = useState(false);
 
@@ -116,7 +116,7 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="relative h-8 w-8 rounded-full">
               <Avatar className="h-8 w-8 border-2 border-white/20">
-                <AvatarImage src="/api/placeholder/32/32" />
+                <AvatarImage src={imgUrl || undefined} />
                 <AvatarFallback className="bg-white/20 text-white">{getUserInitials()}</AvatarFallback>
               </Avatar>
             </Button>
