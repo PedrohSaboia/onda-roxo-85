@@ -341,6 +341,27 @@ export function Comercial() {
   const [statusOptions, setStatusOptions] = useState<Array<{ id: string; nome: string; cor_hex?: string; ordem?: number }>>([]);
   const [loadingStatusOptions, setLoadingStatusOptions] = useState(false);
 
+  // Etiqueta edit modal state
+  const [etiquetaEditOpen, setEtiquetaEditOpen] = useState(false);
+  const [etiquetaEditPedidoId, setEtiquetaEditPedidoId] = useState<string | null>(null);
+  const [etiquetaEditValue, setEtiquetaEditValue] = useState<string | null>(null);
+  const [etiquetaOptions, setEtiquetaOptions] = useState<Array<{ id: string; nome: string; cor_hex?: string; ordem?: number }>>([]);
+  const [loadingEtiquetaOptions, setLoadingEtiquetaOptions] = useState(false);
+
+  // Plataforma edit modal state
+  const [plataformaEditOpen, setPlataformaEditOpen] = useState(false);
+  const [plataformaEditPedidoId, setPlataformaEditPedidoId] = useState<string | null>(null);
+  const [plataformaEditValue, setPlataformaEditValue] = useState<string | null>(null);
+  const [plataformaOptions, setPlataformaOptions] = useState<Array<{ id: string; nome: string; cor?: string; img_url?: string }>>([]);
+  const [loadingPlataformaOptions, setLoadingPlataformaOptions] = useState(false);
+
+  // Responsavel edit modal state
+  const [responsavelEditOpen, setResponsavelEditOpen] = useState(false);
+  const [responsavelEditPedidoId, setResponsavelEditPedidoId] = useState<string | null>(null);
+  const [responsavelEditValue, setResponsavelEditValue] = useState<string | null>(null);
+  const [responsavelOptions, setResponsavelOptions] = useState<Array<{ id: string; nome: string; img_url?: string }>>([]);
+  const [loadingResponsavelOptions, setLoadingResponsavelOptions] = useState(false);
+
   const handleEnvioRapido = async (pedidoId: string) => {
     if (!pedidoId) return;
     setProcessingRapid(prev => ({ ...prev, [pedidoId]: true }));
@@ -353,7 +374,7 @@ export function Comercial() {
         .single();
 
       if (pedidoError) throw pedidoError;
-          
+
       // normalize cliente shape: PostgREST may return arrays for relations
       const pick = (val: any) => Array.isArray(val) ? val[0] : val;
       const cliente = pick((pedidoRow as any).clientes) || null;
@@ -1021,7 +1042,31 @@ export function Comercial() {
                     </div>
                   </TableCell>
                   <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-2">
+                      <div 
+                        className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-80"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPlataformaEditPedidoId(pedido.id);
+                          setPlataformaEditValue(pedido.plataformaId || null);
+                          setPlataformaEditOpen(true);
+                          // load options if not loaded
+                          if (!plataformaOptions.length) {
+                            (async () => {
+                              setLoadingPlataformaOptions(true);
+                              try {
+                                const { data, error } = await supabase.from('plataformas').select('*').order('nome');
+                                if (error) throw error;
+                                setPlataformaOptions((data || []).map((p: any) => ({ id: p.id, nome: p.nome, cor: p.cor, img_url: p.img_url })));
+                              } catch (err: any) {
+                                console.error('Erro ao carregar plataformas:', err);
+                                toast({ title: 'Erro', description: 'Não foi possível carregar plataformas', variant: 'destructive' });
+                              } finally {
+                                setLoadingPlataformaOptions(false);
+                              }
+                            })();
+                          }
+                        }}
+                      >
                         {pedido.plataforma?.imagemUrl ? (
                           <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-6 h-6 rounded" />
                         ) : (
@@ -1052,7 +1097,31 @@ export function Comercial() {
                   </TableCell>
 
                   <TableCell>
-                    <div className="flex items-center gap-2 justify-center">
+                    <div 
+                      className="flex items-center gap-2 justify-center cursor-pointer hover:opacity-80"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setResponsavelEditPedidoId(pedido.id);
+                        setResponsavelEditValue(pedido.responsavelId || null);
+                        setResponsavelEditOpen(true);
+                        // load options if not loaded
+                        if (!responsavelOptions.length) {
+                          (async () => {
+                            setLoadingResponsavelOptions(true);
+                            try {
+                              const { data, error } = await supabase.from('usuarios').select('id,nome,img_url').order('nome');
+                              if (error) throw error;
+                              setResponsavelOptions((data || []).map((u: any) => ({ id: u.id, nome: u.nome, img_url: u.img_url })));
+                            } catch (err: any) {
+                              console.error('Erro ao carregar usuários:', err);
+                              toast({ title: 'Erro', description: 'Não foi possível carregar usuários', variant: 'destructive' });
+                            } finally {
+                              setLoadingResponsavelOptions(false);
+                            }
+                          })();
+                        }
+                      }}
+                    >
                       <Avatar className="h-6 w-6">
                         <AvatarImage src={pedido.responsavel?.avatar} />
                         <AvatarFallback className="text-xs">
@@ -1118,7 +1187,29 @@ export function Comercial() {
                       <div className="flex items-center justify-center">
                         <Badge 
                           variant="outline" 
-                          className={etiquetaColors[pedido.etiquetaEnvio]}
+                          className={`${etiquetaColors[pedido.etiquetaEnvio]} cursor-pointer hover:opacity-80`}
+                          onClick={(e) => { 
+                            e.stopPropagation();
+                            setEtiquetaEditPedidoId(pedido.id);
+                            setEtiquetaEditValue((pedido as any).etiquetaEnvioId || null);
+                            setEtiquetaEditOpen(true);
+                            // load options if not loaded
+                            if (!etiquetaOptions.length) {
+                              (async () => {
+                                setLoadingEtiquetaOptions(true);
+                                try {
+                                  const { data, error } = await supabase.from('tipos_etiqueta').select('*').order('ordem', { ascending: true });
+                                  if (error) throw error;
+                                  setEtiquetaOptions((data || []).map((t: any) => ({ id: t.id, nome: t.nome, cor_hex: t.cor_hex, ordem: t.ordem ?? 0 })));
+                                } catch (err: any) {
+                                  console.error('Erro ao carregar tipos de etiqueta:', err);
+                                  toast({ title: 'Erro', description: 'Não foi possível carregar tipos de etiqueta', variant: 'destructive' });
+                                } finally {
+                                  setLoadingEtiquetaOptions(false);
+                                }
+                              })();
+                            }
+                          }}
                         >
                           {etiquetaLabels[pedido.etiquetaEnvio]}
                         </Badge>
@@ -1193,6 +1284,147 @@ export function Comercial() {
                   setStatusEditOpen(false);
                 } catch (err: any) {
                   console.error('Erro ao atualizar status do pedido:', err);
+                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                }
+              }}
+            />
+            {/* Etiqueta edit modal */}
+            <EditSelectModal
+              open={etiquetaEditOpen}
+              onOpenChange={(open) => setEtiquetaEditOpen(open)}
+              title="Atualizar Etiqueta de Envio"
+              options={etiquetaOptions.map(t => ({ id: t.id, nome: t.nome, cor: t.cor_hex }))}
+              value={etiquetaEditValue}
+              onSave={async (selectedId) => {
+                if (!etiquetaEditPedidoId) {
+                  toast({ title: 'Erro', description: 'Pedido não selecionado', variant: 'destructive' });
+                  return;
+                }
+                try {
+                  const updateData: any = { atualizado_em: new Date().toISOString(), etiqueta_envio_id: selectedId || null };
+                  const { error } = await supabase.from('pedidos').update(updateData).eq('id', etiquetaEditPedidoId);
+                  if (error) throw error;
+
+                  // update local state: replace etiquetaEnvioId and etiqueta object
+                  const selectedEtiqueta = etiquetaOptions.find(t => t.id === selectedId) || null;
+                  const normalizeEtiqueta = (nome?: string) => {
+                    if (!nome) return 'NAO_LIBERADO' as const;
+                    const key = nome.toUpperCase();
+                    if (key.includes('PEND')) return 'PENDENTE' as const;
+                    if (key.includes('DISP')) return 'DISPONIVEL' as const;
+                    return 'NAO_LIBERADO' as const;
+                  };
+                  setPedidos(prev => prev.map(p => {
+                    if (p.id === etiquetaEditPedidoId) {
+                      const newEtiqueta = selectedEtiqueta ? { id: selectedEtiqueta.id, nome: selectedEtiqueta.nome, corHex: selectedEtiqueta.cor_hex, ordem: selectedEtiqueta.ordem ?? 0, criadoEm: '', atualizadoEm: '' } : p.etiqueta;
+                      return { 
+                        ...p, 
+                        etiquetaEnvio: normalizeEtiqueta(selectedEtiqueta?.nome),
+                        etiqueta: newEtiqueta,
+                        ...(p as any).etiquetaEnvioId !== undefined && { etiquetaEnvioId: selectedId || '' }
+                      };
+                    }
+                    return p;
+                  }));
+
+                  toast({ title: 'Atualizado', description: 'Etiqueta atualizada com sucesso' });
+                  setEtiquetaEditOpen(false);
+                } catch (err: any) {
+                  console.error('Erro ao atualizar etiqueta do pedido:', err);
+                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                }
+              }}
+            />
+            {/* Plataforma edit modal */}
+            <EditSelectModal
+              open={plataformaEditOpen}
+              onOpenChange={(open) => setPlataformaEditOpen(open)}
+              title="Atualizar Plataforma"
+              options={plataformaOptions.map(p => ({ id: p.id, nome: p.nome, cor: p.cor }))}
+              value={plataformaEditValue}
+              onSave={async (selectedId) => {
+                if (!plataformaEditPedidoId) {
+                  toast({ title: 'Erro', description: 'Pedido não selecionado', variant: 'destructive' });
+                  return;
+                }
+                try {
+                  const updateData: any = { atualizado_em: new Date().toISOString(), plataforma_id: selectedId || null };
+                  const { error } = await supabase.from('pedidos').update(updateData).eq('id', plataformaEditPedidoId);
+                  if (error) throw error;
+
+                  // update local state: replace plataformaId and plataforma object
+                  const selectedPlataforma = plataformaOptions.find(p => p.id === selectedId) || null;
+                  setPedidos(prev => prev.map(p => {
+                    if (p.id === plataformaEditPedidoId) {
+                      const newPlataforma = selectedPlataforma ? {
+                        id: selectedPlataforma.id,
+                        nome: selectedPlataforma.nome,
+                        cor: selectedPlataforma.cor,
+                        imagemUrl: selectedPlataforma.img_url || undefined,
+                        criadoEm: '',
+                        atualizadoEm: ''
+                      } : p.plataforma;
+                      return { 
+                        ...p, 
+                        plataformaId: selectedId || '',
+                        plataforma: newPlataforma
+                      };
+                    }
+                    return p;
+                  }));
+
+                  toast({ title: 'Atualizado', description: 'Plataforma atualizada com sucesso' });
+                  setPlataformaEditOpen(false);
+                } catch (err: any) {
+                  console.error('Erro ao atualizar plataforma do pedido:', err);
+                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+                }
+              }}
+            />
+            {/* Responsavel edit modal */}
+            <EditSelectModal
+              open={responsavelEditOpen}
+              onOpenChange={(open) => setResponsavelEditOpen(open)}
+              title="Atualizar Responsável"
+              options={responsavelOptions.map(u => ({ id: u.id, nome: u.nome }))}
+              value={responsavelEditValue}
+              onSave={async (selectedId) => {
+                if (!responsavelEditPedidoId) {
+                  toast({ title: 'Erro', description: 'Pedido não selecionado', variant: 'destructive' });
+                  return;
+                }
+                try {
+                  const updateData: any = { atualizado_em: new Date().toISOString(), responsavel_id: selectedId || null };
+                  const { error } = await supabase.from('pedidos').update(updateData).eq('id', responsavelEditPedidoId);
+                  if (error) throw error;
+
+                  // update local state: replace responsavelId and responsavel object
+                  const selectedResponsavel = responsavelOptions.find(u => u.id === selectedId) || null;
+                  setPedidos(prev => prev.map(p => {
+                    if (p.id === responsavelEditPedidoId) {
+                      const newResponsavel = selectedResponsavel ? {
+                        id: selectedResponsavel.id,
+                        nome: selectedResponsavel.nome,
+                        email: '',
+                        papel: 'operador' as const,
+                        avatar: selectedResponsavel.img_url || undefined,
+                        ativo: true,
+                        criadoEm: '',
+                        atualizadoEm: ''
+                      } : p.responsavel;
+                      return { 
+                        ...p, 
+                        responsavelId: selectedId || '',
+                        responsavel: newResponsavel
+                      };
+                    }
+                    return p;
+                  }));
+
+                  toast({ title: 'Atualizado', description: 'Responsável atualizado com sucesso' });
+                  setResponsavelEditOpen(false);
+                } catch (err: any) {
+                  console.error('Erro ao atualizar responsável do pedido:', err);
                   toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
                 }
               }}
