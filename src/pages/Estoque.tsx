@@ -93,25 +93,25 @@ export function Estoque() {
   );
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold">Estoque</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold">Estoque</h1>
+          <p className="text-sm text-muted-foreground">
             {filteredProdutos.length} produtos cadastrados
           </p>
         </div>
-  <Button className="bg-purple-600 hover:bg-purple-700" onClick={()=>{ setEditingProduct(null); setShowNewProduct(true); }}>
+        <Button className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto" onClick={()=>{ setEditingProduct(null); setShowNewProduct(true); }}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Produto
         </Button>
       </div>
 
       {/* Métricas resumidas */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total de Produtos</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Total de Produtos</CardTitle>
             <Package className="h-4 w-4 text-purple-600" />
           </CardHeader>
             <CardContent>
@@ -119,7 +119,7 @@ export function Estoque() {
                 <div className="text-sm text-muted-foreground">Carregando...</div>
               ) : (
                 <>
-                  <div className="text-2xl font-bold">{produtos.length}</div>
+                  <div className="text-xl sm:text-2xl font-bold">{produtos.length}</div>
                   <p className="text-xs text-muted-foreground">produtos ativos</p>
                 </>
               )}
@@ -128,7 +128,7 @@ export function Estoque() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Categorias</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Categorias</CardTitle>
             <BarChart3 className="h-4 w-4 text-blue-600" />
           </CardHeader>
           <CardContent>
@@ -136,7 +136,7 @@ export function Estoque() {
               <div className="text-sm text-muted-foreground">Carregando...</div>
             ) : (
               <>
-                <div className="text-2xl font-bold">
+                <div className="text-xl sm:text-2xl font-bold">
                   {new Set(produtos.map(p => p.categoria)).size}
                 </div>
                 <p className="text-xs text-muted-foreground">categorias diferentes</p>
@@ -147,7 +147,7 @@ export function Estoque() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Médio</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium">Valor Médio</CardTitle>
             <Package className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
@@ -155,7 +155,7 @@ export function Estoque() {
               <div className="text-sm text-muted-foreground">Carregando...</div>
             ) : (
               <>
-                <div className="text-2xl font-bold">
+                <div className="text-xl sm:text-2xl font-bold">
                   R$ {produtos.length > 0 ? (produtos.reduce((acc, p) => acc + p.preco, 0) / produtos.length).toFixed(2) : '0.00'}
                 </div>
                 <p className="text-xs text-muted-foreground">preço médio</p>
@@ -168,8 +168,8 @@ export function Estoque() {
       {/* Filtros e busca */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1 max-w-md">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
+            <div className="relative flex-1 max-w-full sm:max-w-md">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Buscar produtos..."
@@ -178,7 +178,7 @@ export function Estoque() {
                 className="pl-10"
               />
             </div>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <Filter className="h-4 w-4 mr-2" />
               Filtrar
             </Button>
@@ -188,8 +188,8 @@ export function Estoque() {
 
   <ProductForm key={editingProduct?.id ?? 'new'} open={showNewProduct} onClose={handleModalClose} product={editingProduct} />
 
-      {/* Tabela de produtos */}
-      <Card>
+      {/* Tabela de produtos - Desktop */}
+      <Card className="hidden md:block">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -265,6 +265,76 @@ export function Estoque() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Lista de produtos - Mobile */}
+      <div className="md:hidden space-y-3">
+        {loading && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Carregando produtos...
+            </CardContent>
+          </Card>
+        )}
+        {error && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-red-600">
+              {error}
+            </CardContent>
+          </Card>
+        )}
+        {!loading && !error && filteredProdutos.map((produto) => (
+          <Card key={produto.id} className="overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex gap-3">
+                <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                  {produto.imagemUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={produto.imagemUrl} alt={produto.nome} className="w-full h-full object-cover" />
+                  ) : (
+                    <Package className="h-6 w-6 text-purple-600" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-base truncate">{produto.nome}</h3>
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
+                    <Badge variant="secondary" className="text-xs">
+                      {produto.categoria}
+                    </Badge>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      SKU: {produto.sku}
+                    </span>
+                  </div>
+                  {produto.variacoes && produto.variacoes.length > 0 && (
+                    <div className="text-xs text-muted-foreground mt-1">
+                      <strong>{produto.nomeVariacao || 'Variação'}:</strong> {produto.variacoes[0].nome}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between mt-3">
+                    <div>
+                      <div className="text-xs text-muted-foreground">Quantidade</div>
+                      <div className="font-semibold">{Number((produto as any).qntd ?? 0)}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs text-muted-foreground">Preço</div>
+                      <div className="font-semibold text-green-600">
+                        R$ {produto.preco.toFixed(2)}
+                      </div>
+                    </div>
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full mt-3"
+                    onClick={() => { setEditingProduct(produto); setShowNewProduct(true); }}
+                  >
+                    Editar Produto
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }
