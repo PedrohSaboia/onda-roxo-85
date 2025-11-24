@@ -348,7 +348,7 @@ export function Comercial() {
       // load full pedido with cliente and itens
       const { data: pedidoRow, error: pedidoError } = await supabase
         .from('pedidos')
-        .select(`*, clientes(*), itens_pedido(id,quantidade,preco_unitario, produto:produtos(id,nome,sku,preco), variacao:variacoes_produto(id,nome,sku))`)
+        .select(`*, clientes(*), itens_pedido(id,quantidade,preco_unitario, produto:produtos(id,nome,sku,preco), variacao:variacoes_produto(id,nome,sku,ordem))`)
         .eq('id', pedidoId)
         .single();
 

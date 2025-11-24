@@ -52,7 +52,7 @@ export function Producao() {
 
         const { data, error: supaError } = await supabase
           .from('pedidos')
-          .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`) 
+          .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url,ordem))`) 
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -124,7 +124,7 @@ export function Producao() {
                 // INSERT or UPDATE: buscar dados do pedido atualizado com itens embarcados
                 const { data: pedidoRow, error } = await supabase
                   .from('pedidos')
-                  .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`)
+                  .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url,ordem))`)
                   .eq('id', row.id)
                   .single();
                 if (error || !pedidoRow) return;
@@ -154,7 +154,7 @@ export function Producao() {
               (async () => {
                 const { data: pedidoRow, error } = await supabase
                   .from('pedidos')
-                  .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url))`)
+                  .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url,ordem))`)
                   .eq('id', pedidoId)
                   .single();
                 if (error || !pedidoRow) return;

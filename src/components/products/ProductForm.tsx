@@ -18,6 +18,7 @@ type Variation = {
   img_url?: string;
   qntd?: number;
   codigo_barras_v?: string;
+  ordem?: number;
 }
 
 export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
@@ -55,7 +56,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
     setOriginalVariationIds([]);
   }
 
-  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '' }]);
+  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length }]);
   const updateVariation = (idx: number, patch: Partial<Variation>) => setVariations(v => v.map((it,i)=> i===idx ? { ...it, ...patch } : it));
   const removeVariation = (idx: number) => setVariations(v => v.filter((_,i)=> i!==idx));
 
@@ -119,14 +120,13 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
         const existing = variations.filter(v => v.id);
         for (const v of existing) {
-          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null }).eq('id', v.id);
+          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 0 }).eq('id', v.id);
           if (vUpdErr) throw vUpdErr;
         }
 
-        const news = variations.filter(v => !v.id).map(v => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0 }));
+        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx }));
         if (news.length > 0) {
-          const newsWithBarcode = news.map((n, i) => ({ ...n, codigo_barras_v: (variations.filter(v => !v.id)[i].codigo_barras_v) || null }));
-          const { error: insErr } = await supabase.from('variacoes_produto').insert(newsWithBarcode);
+          const { error: insErr } = await supabase.from('variacoes_produto').insert(news);
           if (insErr) throw insErr;
         }
 
@@ -143,7 +143,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         produtoId = prodData.id as string;
 
         if (hasVariations && variations.length > 0) {
-          const toInsert = variations.map(v => ({
+          const toInsert = variations.map((v, idx) => ({
             produto_id: produtoId,
             nome: v.nome,
             sku: v.sku,
@@ -151,6 +151,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             img_url: v.img_url || null,
             qntd: v.qntd ?? 0,
             codigo_barras_v: v.codigo_barras_v || null,
+            ordem: v.ordem ?? idx,
           }));
 
           const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
@@ -229,7 +230,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         valor: String(v.valor ?? '0.00'),
         img_url: v.img_url || '',
         qntd: v.qntd ?? 0,
-        codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || ''
+        codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || '',
+        ordem: v.ordem ?? 0
       }));
       setVariations(seed);
       setOriginalVariationIds(seed.map((v: any) => v.id).filter(Boolean));
@@ -237,7 +239,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
       // Also fetch the latest variations directly from the DB to ensure barcode fields are present
       (async () => {
         try {
-          const { data: varData, error: varErr } = await supabase.from('variacoes_produto').select('*').eq('produto_id', p.id);
+          const { data: varData, error: varErr } = await supabase.from('variacoes_produto').select('*').eq('produto_id', p.id).order('ordem', { ascending: true });
           if (!varErr && varData && Array.isArray(varData) && varData.length > 0) {
             const mappedDb = varData.map((v: any) => ({
               id: v.id,
@@ -246,7 +248,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
               valor: String(v.valor ?? '0.00'),
               img_url: v.img_url || '',
               qntd: v.qntd ?? 0,
-              codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || ''
+              codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || '',
+              ordem: v.ordem ?? 0
             }));
             setVariations(mappedDb);
             setOriginalVariationIds(mappedDb.map((v: any) => v.id).filter(Boolean));
@@ -407,6 +410,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         <div>
                           <Label>Código de Barras</Label>
                           <Input value={v.codigo_barras_v || ''} onChange={(e)=>updateVariation(idx, { codigo_barras_v: e.target.value })} />
+                        </div>
+                        <div>
+                          <Label>Ordem</Label>
+                          <Input type="number" value={v.ordem ?? idx} onChange={(e)=>updateVariation(idx, { ordem: Number(e.target.value) })} />
                         </div>
                         <div>
                           <Label>Imagem URL</Label>

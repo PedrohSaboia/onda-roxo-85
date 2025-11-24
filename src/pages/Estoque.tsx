@@ -24,7 +24,7 @@ export function Estoque() {
       try {
         const { data, error: supaError } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -38,7 +38,9 @@ export function Estoque() {
           unidade: p.unidade || 'un',
           categoria: p.categoria || '',
           imagemUrl: p.img_url || undefined,
-          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+          variacoes: (p.variacoes_produto || [])
+            .map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor), qntd: v.qntd ?? 0, img_url: v.img_url || null, ordem: v.ordem ?? 999 }))
+            .sort((a: any, b: any) => a.ordem - b.ordem),
           nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
           criadoEm: p.criado_em,
@@ -67,7 +69,7 @@ export function Estoque() {
     // refetch produtos after modal close
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url)').order('criado_em', { ascending: false });
+      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('criado_em', { ascending: false });
       if (data) setProdutos(data.map((p: any) => ({
         id: p.id,
         nome: p.nome,
@@ -76,7 +78,9 @@ export function Estoque() {
         unidade: p.unidade || 'un',
         categoria: p.categoria || '',
         imagemUrl: p.img_url || undefined,
-        variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor), qntd: v.qntd ?? 0, img_url: v.img_url || null })),
+        variacoes: (p.variacoes_produto || [])
+          .map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor), qntd: v.qntd ?? 0, img_url: v.img_url || null, ordem: v.ordem ?? 999 }))
+          .sort((a: any, b: any) => a.ordem - b.ordem),
         nomeVariacao: p.nome_variacao || null,
         qntd: p.qntd ?? 0,
         criadoEm: p.criado_em,

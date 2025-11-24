@@ -261,7 +261,7 @@ export default function NovoPedido() {
       try {
         const { data, error } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v,ordem)')
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
@@ -276,7 +276,9 @@ export default function NovoPedido() {
           categoria: p.categoria || '',
           imagemUrl: p.img_url || undefined,
           codigo_barras: p.codigo_barras || null,
-          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null, codigo_barras_v: v.codigo_barras_v || null })),
+          variacoes: (p.variacoes_produto || [])
+            .map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 999 }))
+            .sort((a: any, b: any) => a.ordem - b.ordem),
           nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
           criadoEm: p.criado_em,
