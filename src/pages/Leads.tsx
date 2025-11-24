@@ -523,8 +523,7 @@ export default function Leads() {
                               responsavel_id: activeLead.responsavel || null,
                               plataforma_id: plataformaId,
                               status_id: '3ca23a64-cb1e-480c-8efa-0468ebc18097',
-                              data_prevista: addDate || null,
-                              valor_total: typeof activeLead.valor_total !== 'undefined' ? activeLead.valor_total : null
+                              data_prevista: addDate || null
                             };
 
                             const { data: pedidoData, error: pedidoError } = await (supabase as any)
