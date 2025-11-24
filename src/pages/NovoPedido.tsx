@@ -37,6 +37,8 @@ export default function NovoPedido() {
   // currency strings for inputs (pt-BR), store as strings to allow comma typing
   const [valorInvestidoStr, setValorInvestidoStr] = useState<string>('0,00');
   const [freteVendaStr, setFreteVendaStr] = useState<string>('0,00');
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
   const parsePtBR = (v: string) => {
     if (!v) return 0;
@@ -89,7 +91,11 @@ export default function NovoPedido() {
   };
   
 
-  const produtos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
+  const filteredProdutos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
+  const totalPages = Math.ceil(filteredProdutos.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const produtos = filteredProdutos.slice(startIndex, endIndex);
 
   const addToCart = (produto: any, variacaoId?: string, brinde?: boolean) => {
     const variacoes = produto.variacoes || [];
@@ -184,8 +190,8 @@ export default function NovoPedido() {
         plataforma_id: plataforma,
         status_id: status || null,
         responsavel_id: user?.id || null,
-        // valor_total column (sum of cart items)
-        valor_total: total,
+        // valor_total é o valor investido (já inclui o frete)
+        valor_total: parsePtBR(valorInvestidoStr),
         // frete_venda column (parsed from pt-BR input)
         frete_venda: parsePtBR(freteVendaStr),
         criado_em: criadoEm
@@ -422,7 +428,7 @@ export default function NovoPedido() {
         <div className="grid grid-cols-2 gap-6">
           <div>
             <div className="mb-4">
-              <Input placeholder="Buscar produto" value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input placeholder="Buscar produto" value={search} onChange={(e) => { setSearch(e.target.value); setCurrentPage(1); }} />
             </div>
 
             <div className="space-y-4">
@@ -461,6 +467,33 @@ export default function NovoPedido() {
                 </div>
               ))}
             </div>
+
+            {/* Pagination controls */}
+            {!loadingProdutos && !produtosError && filteredProdutos.length > 0 && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  Página {currentPage} de {totalPages} ({filteredProdutos.length} produtos)
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Próximo
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
