@@ -123,10 +123,10 @@ export function OrderCard({ pedido, onClick, draggable = false }: OrderCardProps
                       </div>
                       <div className="flex-1 text-sm">
                         <div className="flex items-center gap-2">
-                          <div className="font-medium truncate">{name}</div>
                           {it.item_faltante && (
-                            <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full">Faltante</span>
+                            <span className="text-[10px] bg-red-100 text-red-700 px-2 py-0.5 rounded-full flex-shrink-0">Faltante</span>
                           )}
+                          <div className="font-medium truncate">{name}</div>
                         </div>
                         <div className="text-xs text-muted-foreground">Qtd: {it.quantidade}</div>
                       </div>
