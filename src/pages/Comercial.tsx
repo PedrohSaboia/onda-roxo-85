@@ -709,7 +709,18 @@ export function Comercial() {
           const clientePayload: any = {
             nome: cliente.nome || (pedidoRow as any).cliente_nome || null,
             telefone: cliente.telefone ? String(cliente.telefone).replace(/\D/g, '') : (cliente.contato ? String(cliente.contato).replace(/\D/g, '') : null),
+            email: cliente.email || null,
+            cpf: cliente.cpf || null,
+            cnpj: cliente.cnpj || null,
+            endereco: cliente.endereco || null,
+            numero: cliente.numero || null,
+            complemento: cliente.complemento || null,
+            bairro: cliente.bairro || null,
+            cidade: cliente.cidade || null,
+            estado: cliente.estado || null,
+            cep: cliente.cep || null,
             link_formulario: `/${newPedidoId}`,
+            formulario_enviado: false,
             pedido_id: newPedidoId,
             criado_em: new Date().toISOString()
           };
