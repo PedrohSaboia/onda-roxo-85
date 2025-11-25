@@ -39,6 +39,7 @@ export function Comercial() {
   const urlEtiqueta = params.get('etiqueta_envio_id') || '';
   const urlClienteForm = params.get('cliente_formulario_enviado') === 'false';
   const urlLiberado = params.get('pedido_liberado') === 'false';
+  const urlResponsavel = params.get('responsavel_id') || '';
   
   // State using URL as source of truth
   const [searchTerm, setSearchTerm] = useState(urlSearch);
@@ -60,6 +61,13 @@ export function Comercial() {
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
   const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
   const [filterNotLiberado, setFilterNotLiberado] = useState(urlLiberado);
+  const [filterResponsavelId, setFilterResponsavelId] = useState(urlResponsavel);
+  const [usuariosList, setUsuariosList] = useState<Array<{ id: string; nome: string }>>([]);
+  
+  // Estados temporários para o modal de filtros (antes de aplicar)
+  const [tempFilterNotLiberado, setTempFilterNotLiberado] = useState(urlLiberado);
+  const [tempFilterClienteFormNotSent, setTempFilterClienteFormNotSent] = useState(urlClienteForm);
+  const [tempFilterResponsavelId, setTempFilterResponsavelId] = useState(urlResponsavel);
   
   // Sync state from URL when location changes
   useEffect(() => {
@@ -70,6 +78,7 @@ export function Comercial() {
     const newEtiqueta = params.get('etiqueta_envio_id') || '';
     const newClienteForm = params.get('cliente_formulario_enviado') === 'false';
     const newLiberado = params.get('pedido_liberado') === 'false';
+    const newResponsavel = params.get('responsavel_id') || '';
     
     setPage(newPage);
     setPageSize(newPageSize);
@@ -77,6 +86,12 @@ export function Comercial() {
     setFilterEtiquetaId(newEtiqueta);
     setFilterClienteFormNotSent(newClienteForm);
     setFilterNotLiberado(newLiberado);
+    setFilterResponsavelId(newResponsavel);
+    
+    // Sincronizar estados temporários
+    setTempFilterNotLiberado(newLiberado);
+    setTempFilterClienteFormNotSent(newClienteForm);
+    setTempFilterResponsavelId(newResponsavel);
   }, [location.search]);
 
   useEffect(() => {
@@ -128,6 +143,11 @@ export function Comercial() {
         // apply etiqueta_envio_id filter when requested
         if (filterEtiquetaId) {
           (query as any).eq('etiqueta_envio_id', filterEtiquetaId);
+        }
+
+        // apply responsavel_id filter when requested
+        if (filterResponsavelId) {
+          (query as any).eq('responsavel_id', filterResponsavelId);
         }
 
         // fetch small lookup tables in parallel so we can map ids to display rows
@@ -269,7 +289,24 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, searchTerm]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, searchTerm]);
+
+  // load list of usuarios for filter dropdown
+  useEffect(() => {
+    let mounted = true;
+    const loadUsuarios = async () => {
+      try {
+        const { data, error } = await supabase.from('usuarios').select('id, nome').order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        setUsuariosList(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar usuários:', err);
+      }
+    };
+    loadUsuarios();
+    return () => { mounted = false };
+  }, []);
 
   // load count of pedidos with the specific etiqueta id (to show next to filter)
   useEffect(() => {
@@ -811,7 +848,7 @@ export function Comercial() {
 
               {/* Active filter tags (appear directly below the search input) */}
               <div className="mt-2">
-                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId) && (
+                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId || !!filterResponsavelId) && (
                   <div className="flex flex-wrap items-center gap-2">
                     {filterNotLiberado && (
                       <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
@@ -872,6 +909,26 @@ export function Comercial() {
                         </button>
                       </div>
                     )}
+
+                    {filterResponsavelId && (
+                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                        <span className="text-sm">Responsável: {usuariosList.find(u => u.id === filterResponsavelId)?.nome || 'Selecionado'}</span>
+                        <button
+                          className="text-gray-500 hover:text-gray-700"
+                          onClick={() => {
+                            setFilterResponsavelId('');
+                            setPage(1);
+                            const next = new URLSearchParams(location.search);
+                            next.delete('responsavel_id');
+                            if (!next.get('module')) next.set('module', 'comercial');
+                            navigate({ pathname: location.pathname, search: next.toString() });
+                          }}
+                          aria-label="Remover filtro responsável"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -879,7 +936,13 @@ export function Comercial() {
               <div className="flex items-center gap-2 relative">
                 <div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setShowFilters(s => !s)}>
+                    <Button variant="outline" size="sm" onClick={() => {
+                      // Sincronizar estados temporários com os filtros atuais ao abrir
+                      setTempFilterNotLiberado(filterNotLiberado);
+                      setTempFilterClienteFormNotSent(filterClienteFormNotSent);
+                      setTempFilterResponsavelId(filterResponsavelId);
+                      setShowFilters(s => !s);
+                    }}>
                       <Filter className="h-4 w-4 mr-2" />
                       Filtrar
                     </Button>
@@ -914,29 +977,40 @@ export function Comercial() {
                         <button className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
                       </div>
                       <div className="flex items-center gap-2 mb-3">
-                        <input id="filter-not-liberado" type="checkbox" checked={filterNotLiberado} onChange={(e) => setFilterNotLiberado(e.target.checked)} />
+                        <input id="filter-not-liberado" type="checkbox" checked={tempFilterNotLiberado} onChange={(e) => setTempFilterNotLiberado(e.target.checked)} />
                         <label htmlFor="filter-not-liberado" className="text-sm">Somente pedidos não liberados</label>
                       </div>
                       <div className="flex items-center gap-2 mb-3">
-                        <input id="filter-cliente-formulario" type="checkbox" checked={filterClienteFormNotSent} onChange={(e) => setFilterClienteFormNotSent(e.target.checked)} />
+                        <input id="filter-cliente-formulario" type="checkbox" checked={tempFilterClienteFormNotSent} onChange={(e) => setTempFilterClienteFormNotSent(e.target.checked)} />
                         <label htmlFor="filter-cliente-formulario" className="text-sm">Somente pedidos com formulário não enviado</label>
+                      </div>
+                      <div className="mb-3">
+                        <label htmlFor="filter-responsavel" className="text-sm block mb-1">Filtrar por responsável</label>
+                        <select 
+                          id="filter-responsavel" 
+                          value={tempFilterResponsavelId} 
+                          onChange={(e) => setTempFilterResponsavelId(e.target.value)}
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        >
+                          <option value="">Todos</option>
+                          {usuariosList.map(user => (
+                            <option key={user.id} value={user.id}>{user.nome}</option>
+                          ))}
+                        </select>
                       </div>
                       <div className="flex items-center justify-end gap-2">
                         <Button variant="outline" size="sm" onClick={() => {
-                          // clear filters
-                          setFilterNotLiberado(false);
-                          setFilterClienteFormNotSent(false);
-                          const next = new URLSearchParams(location.search);
-                          next.delete('pedido_liberado');
-                          next.delete('cliente_formulario_enviado');
-                          navigate({ pathname: location.pathname, search: next.toString() });
-                          setShowFilters(false);
+                          // clear temporary filters
+                          setTempFilterNotLiberado(false);
+                          setTempFilterClienteFormNotSent(false);
+                          setTempFilterResponsavelId('');
                         }}>Limpar</Button>
                         <Button size="sm" onClick={() => {
-                          // apply filters via query params so they're shareable
+                          // apply temporary filters to actual filters via query params
                           const next = new URLSearchParams(location.search);
-                          if (filterNotLiberado) next.set('pedido_liberado', 'false'); else next.delete('pedido_liberado');
-                          if (filterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
+                          if (tempFilterNotLiberado) next.set('pedido_liberado', 'false'); else next.delete('pedido_liberado');
+                          if (tempFilterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
+                          if (tempFilterResponsavelId) next.set('responsavel_id', tempFilterResponsavelId); else next.delete('responsavel_id');
                           // ensure module param remains
                           if (!next.get('module')) next.set('module', 'comercial');
                           navigate({ pathname: location.pathname, search: next.toString() });
