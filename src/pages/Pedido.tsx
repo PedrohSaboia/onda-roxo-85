@@ -82,6 +82,8 @@ export default function Pedido() {
   const [modalCart, setModalCart] = useState<any[]>([]);
   const [savingModal, setSavingModal] = useState(false);
   const [clientEditOpen, setClientEditOpen] = useState(false);
+  const [editValorTotalOpen, setEditValorTotalOpen] = useState(false);
+  const [tempValorTotal, setTempValorTotal] = useState<string>('');
   // Remove item modal state
   const [productToRemove, setProductToRemove] = useState<any | null>(null);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
@@ -777,7 +779,21 @@ export default function Pedido() {
             </div>
 
             <div className="border-l pl-6 flex-shrink-0 w-full lg:w-64 h-full">
-                <div className="text-sm text-muted-foreground">VALOR TOTAL</div>
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">VALOR TOTAL</div>
+                  {!readonly && (
+                    <button
+                      onClick={() => {
+                        setTempValorTotal(((pedido?.valor_total ?? pedido?.total) || 0).toFixed(2));
+                        setEditValorTotalOpen(true);
+                      }}
+                      className="text-gray-500 hover:text-purple-700 transition-colors"
+                      title="Editar valor total"
+                    >
+                      <Edit className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <div className="text-2xl font-bold">R$ {((pedido?.valor_total ?? pedido?.total) ? Number(pedido?.valor_total ?? pedido?.total).toFixed(2) : '0,00')}</div>
 
               <div className="mt-4">
@@ -1625,6 +1641,64 @@ export default function Pedido() {
           unitary_value: Number(it.preco_unitario || it.preco || 0)
         }))}
       />
+
+      {/* Modal para editar valor total */}
+      <Dialog open={editValorTotalOpen} onOpenChange={setEditValorTotalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Valor Total</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Valor Total (R$)</label>
+              <Input
+                type="number"
+                step="0.01"
+                value={tempValorTotal}
+                onChange={(e) => setTempValorTotal(e.target.value)}
+                placeholder="0.00"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditValorTotalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={async () => {
+                try {
+                  const novoValor = parseFloat(tempValorTotal) || 0;
+                  const { error } = await supabase
+                    .from('pedidos')
+                    .update({ 
+                      valor_total: novoValor,
+                      atualizado_em: new Date().toISOString() 
+                    })
+                    .eq('id', pedido?.id);
+
+                  if (error) throw error;
+
+                  toast({ 
+                    title: 'Sucesso', 
+                    description: 'Valor total atualizado com sucesso' 
+                  });
+                  setEditValorTotalOpen(false);
+                  navigate(0); // Recarrega a página
+                } catch (err: any) {
+                  console.error('Erro ao atualizar valor total:', err);
+                  toast({ 
+                    title: 'Erro', 
+                    description: err?.message || 'Não foi possível atualizar o valor total', 
+                    variant: 'destructive' 
+                  });
+                }
+              }}
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
     </>
   );
