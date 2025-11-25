@@ -380,7 +380,10 @@ export function Logistica() {
                           setLoadingScan(true);
                           const { data, error } = await supabase
                             .from('pedidos')
-                            .update({ status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25' })
+                            .update({ 
+                              status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
+                              data_enviado: new Date().toISOString()
+                            })
                             .eq('id', foundPedido?.id)
                             .select()
                             .single();

@@ -1277,7 +1277,14 @@ export function Comercial() {
                   return;
                 }
                 try {
+                  const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
                   const updateData: any = { atualizado_em: new Date().toISOString(), status_id: selectedId || null };
+                  
+                  // Se o status for alterado para "Enviado", popula data_enviado
+                  if (selectedId === ENVIADO_STATUS_ID) {
+                    updateData.data_enviado = new Date().toISOString();
+                  }
+                  
                   const { error } = await supabase.from('pedidos').update(updateData).eq('id', statusEditPedidoId);
                   if (error) throw error;
 

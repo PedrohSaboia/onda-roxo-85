@@ -205,9 +205,17 @@ export function Producao() {
     // persist change to Supabase
     (async () => {
       try {
+        const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
+        const updateData: any = { status_id: newStatusId, atualizado_em: new Date().toISOString() };
+        
+        // Se o status for alterado para "Enviado", popula data_enviado
+        if (newStatusId === ENVIADO_STATUS_ID) {
+          updateData.data_enviado = new Date().toISOString();
+        }
+        
         const { data: updated, error: updateError } = await supabase
           .from('pedidos')
-          .update({ status_id: newStatusId, atualizado_em: new Date().toISOString() })
+          .update(updateData)
           .eq('id', pedidoId)
           .select()
           .single();

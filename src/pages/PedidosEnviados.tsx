@@ -100,17 +100,19 @@ export function PedidosEnviados() {
         const statusMap = (statusResp?.data || statusResp) ? (statusResp.data || statusResp).reduce((acc: any, s: any) => (acc[s.id] = s, acc), {}) : {};
         const etiquetaMap = (etiquetaResp?.data || etiquetaResp) ? (etiquetaResp.data || etiquetaResp).reduce((acc: any, t: any) => (acc[t.id] = t, acc), {}) : {};
 
-        // Fetch cor_do_pedido separately if needed
+        // Fetch cor_do_pedido and data_enviado separately if needed
         const pedidoIds = (data || []).map((r: any) => r.pedido_id).filter(Boolean);
         let corMap: Record<string, string | undefined> = {};
+        let dataEnviadoMap: Record<string, string | undefined> = {};
         if (pedidoIds.length) {
           try {
-            const { data: corData, error: corErr } = await supabase.from('pedidos').select('id, cor_do_pedido').in('id', pedidoIds as any[]);
-            if (!corErr && corData) {
-              corMap = (corData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.cor_do_pedido || undefined, acc), {} as Record<string, string>);
+            const { data: pedidosData, error: pedidosErr } = await supabase.from('pedidos').select('id, cor_do_pedido, data_enviado').in('id', pedidoIds as any[]);
+            if (!pedidosErr && pedidosData) {
+              corMap = (pedidosData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.cor_do_pedido || undefined, acc), {} as Record<string, string>);
+              dataEnviadoMap = (pedidosData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.data_enviado || undefined, acc), {} as Record<string, string>);
             }
-          } catch (fetchCorErr) {
-            console.warn('Não foi possível carregar cor_do_pedido separadamente:', fetchCorErr);
+          } catch (fetchErr) {
+            console.warn('Não foi possível carregar dados adicionais dos pedidos:', fetchErr);
           }
         }
 
@@ -200,6 +202,7 @@ export function PedidosEnviados() {
             foiDuplicado: !!row.foi_duplicado,
             criadoEm: row.pedido_criado_em,
             atualizadoEm: row.pedido_atualizado_em,
+            dataEnviado: dataEnviadoMap[row.pedido_id] || undefined,
           };
         });
 
@@ -422,7 +425,8 @@ export function PedidosEnviados() {
               <TableHeader>
                 <TableRow>
                   <TableHead>ID do Pedido</TableHead>
-                  <TableHead className="text-center">Data</TableHead>
+                  <TableHead className="text-center">Data Criado</TableHead>
+                  <TableHead className="text-center">Data Enviado</TableHead>
                   <TableHead>Cliente</TableHead>
                   <TableHead className="text-center">Plataforma</TableHead>
                   <TableHead className="text-center">Transportadora</TableHead>
@@ -434,7 +438,7 @@ export function PedidosEnviados() {
               <TableBody>
                 {error && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-red-600">
+                    <TableCell colSpan={9} className="text-center text-red-600">
                       {error}
                     </TableCell>
                   </TableRow>
@@ -493,6 +497,9 @@ export function PedidosEnviados() {
                     </TableCell>
                     <TableCell className="text-center">
                       {new Date(pedido.criadoEm).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {(pedido as any).dataEnviado ? new Date((pedido as any).dataEnviado).toLocaleDateString('pt-BR') : '—'}
                     </TableCell>
                     <TableCell>
                       <div>
