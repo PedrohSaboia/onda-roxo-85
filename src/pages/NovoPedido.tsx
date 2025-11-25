@@ -39,6 +39,7 @@ export default function NovoPedido() {
   const [freteVendaStr, setFreteVendaStr] = useState<string>('0,00');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
+  const [formaPagamento, setFormaPagamento] = useState<string>('Pix');
 
   const parsePtBR = (v: string) => {
     if (!v) return 0;
@@ -194,6 +195,7 @@ export default function NovoPedido() {
         valor_total: parsePtBR(valorInvestidoStr),
         // frete_venda column (parsed from pt-BR input)
         frete_venda: parsePtBR(freteVendaStr),
+        pagamento: formaPagamento || null,
         criado_em: criadoEm
       };
 
@@ -385,7 +387,28 @@ export default function NovoPedido() {
                 />
               </div>
 
-              
+              <div>
+                <label className="text-sm">Forma de Pagamento</label>
+                <div className="flex gap-2 mt-1">
+                  {['Pix', 'Boleto', 'Cartão', 'Outro'].map((forma) => (
+                    <button
+                      key={forma}
+                      type="button"
+                      onClick={() => setFormaPagamento(forma)}
+                      className={`flex-1 px-3 py-2 rounded border transition-colors ${
+                        formaPagamento === forma
+                          ? 'bg-purple-700 text-white border-purple-700'
+                          : 'bg-white text-gray-700 border-gray-300 hover:border-purple-700'
+                      }`}
+                    >
+                      {forma}
+                    </button>
+                  ))}
+                </div>
+                {formaPagamento && (
+                  <p className="text-xs text-gray-600 mt-1">Você selecionou {formaPagamento}</p>
+                )}
+              </div>
 
               <div>
                 <label className="text-sm">Plataforma de venda</label>
