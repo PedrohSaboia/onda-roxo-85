@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { AppHeader } from '@/components/layout/AppHeader';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
@@ -376,12 +377,15 @@ export function PedidosEnviados() {
   };
 
   return (
-    <div className="flex h-full">
-      <div className="flex-shrink-0">
-        <ComercialSidebar />
-      </div>
+    <div className="flex flex-col h-screen">
+      <AppHeader activeModule="comercial" onModuleChange={(m) => navigate('/?module=' + m)} />
+      
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-shrink-0">
+          <ComercialSidebar />
+        </div>
 
-      <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-y-auto">
         <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -623,6 +627,7 @@ export function PedidosEnviados() {
             </div>
           </div>
         </Card>
+        </div>
         </div>
       </div>
 
