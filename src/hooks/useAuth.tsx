@@ -211,17 +211,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { error } = await supabase.auth.signOut();
       
-      if (error) {
+      // Ignore session_not_found error - just clear local state
+      if (error && error.message !== 'Session from session_id claim in JWT does not exist' && error.code !== 'session_not_found') {
         toast({
           title: "Erro",
           description: "Erro ao fazer logout",
           variant: "destructive",
         });
+        return { error };
       }
 
-      return { error };
-    } catch (error) {
+      // Clear local state regardless of error
+      setUser(null);
+      setAcesso(null);
+      setImgUrl(null);
+      
+      return { error: null };
+    } catch (error: any) {
       console.error('Erro no logout:', error);
+      
+      // If it's a session_not_found error, clear local state and treat as success
+      if (error?.message?.includes('session_id claim') || error?.code === 'session_not_found') {
+        setUser(null);
+        setAcesso(null);
+        setImgUrl(null);
+        return { error: null };
+      }
+      
       return { error };
     }
   };
