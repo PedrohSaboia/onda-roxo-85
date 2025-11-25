@@ -96,7 +96,7 @@ export function Comercial() {
         const view = new URLSearchParams(location.search).get('view') || 'pedidos';
 
         // Query the vw_clientes_pedidos view which flattens cliente+pedido fields
-        const query = supabase
+        const query = (supabase as any)
           .from('vw_clientes_pedidos')
           .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio`, { count: 'exact' })
           .order('pedido_criado_em', { ascending: false });
@@ -146,10 +146,10 @@ export function Comercial() {
         if (supaError) throw supaError;
         if (!mounted) return;
 
-        const plataformasMap = (platResp?.data || platResp) ? (platResp.data || platResp).reduce((acc: any, p: any) => (acc[p.id] = p, acc), {}) : {};
-        const usuariosMap = (userResp?.data || userResp) ? (userResp.data || userResp).reduce((acc: any, u: any) => (acc[u.id] = u, acc), {}) : {};
-        const statusMap = (statusResp?.data || statusResp) ? (statusResp.data || statusResp).reduce((acc: any, s: any) => (acc[s.id] = s, acc), {}) : {};
-        const etiquetaMap = (etiquetaResp?.data || etiquetaResp) ? (etiquetaResp.data || etiquetaResp).reduce((acc: any, t: any) => (acc[t.id] = t, acc), {}) : {};
+        const plataformasMap = (platResp?.data || (platResp as any)) ? ((platResp as any).data || (platResp as any)).reduce((acc: any, p: any) => (acc[p.id] = p, acc), {}) : {};
+        const usuariosMap = (userResp?.data || (userResp as any)) ? ((userResp as any).data || (userResp as any)).reduce((acc: any, u: any) => (acc[u.id] = u, acc), {}) : {};
+        const statusMap = (statusResp?.data || (statusResp as any)) ? ((statusResp as any).data || (statusResp as any)).reduce((acc: any, s: any) => (acc[s.id] = s, acc), {}) : {};
+        const etiquetaMap = (etiquetaResp?.data || (etiquetaResp as any)) ? ((etiquetaResp as any).data || (etiquetaResp as any)).reduce((acc: any, t: any) => (acc[t.id] = t, acc), {}) : {};
 
         // If the view doesn't expose cor_do_pedido, fetch it directly from pedidos table
         const pedidoIds = (data || []).map((r: any) => r.pedido_id).filter(Boolean);
@@ -276,7 +276,12 @@ export function Comercial() {
     let mounted = true;
     const loadEtiquetaCount = async () => {
       try {
-        const { count, error } = await supabase.from('pedidos').select('id', { count: 'exact' }).eq('etiqueta_envio_id', ETIQUETA_FILTER_ID).limit(1);
+        const { count, error } = await supabase
+          .from('pedidos')
+          .select('id', { count: 'exact' })
+          .eq('etiqueta_envio_id', ETIQUETA_FILTER_ID)
+          .neq('status_id', ENVIADO_STATUS_ID)
+          .limit(1);
         if (error) throw error;
         if (!mounted) return;
         setEtiquetaCount(count || 0);
