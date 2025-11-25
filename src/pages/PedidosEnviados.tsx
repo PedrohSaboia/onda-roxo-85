@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Eye } from 'lucide-react';
+import { Search, Eye, Copy } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -13,6 +14,7 @@ import { Pedido } from '@/types';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 
 const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
+const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
 
 export function PedidosEnviados() {
   const navigate = useNavigate();
@@ -33,6 +35,8 @@ export function PedidosEnviados() {
   const [pageSize, setPageSize] = useState(urlPageSize);
   const [total, setTotal] = useState<number>(0);
   const { toast } = useToast();
+  const [confirmDuplicateOpen, setConfirmDuplicateOpen] = useState(false);
+  const [pedidoToDuplicate, setPedidoToDuplicate] = useState<string | null>(null);
   
   // Sync state from URL when location changes
   useEffect(() => {
@@ -58,7 +62,7 @@ export function PedidosEnviados() {
         const to = actualPage * pageSize - 1;
 
         // Query the vw_clientes_pedidos view which flattens cliente+pedido fields
-        const query = supabase
+        const query = (supabase as any)
           .from('vw_clientes_pedidos')
           .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio`, { count: 'exact' })
           .eq('status_id', ENVIADO_STATUS_ID)
@@ -257,6 +261,120 @@ export function PedidosEnviados() {
 
   const pageSizeOptions = [10, 20, 30, 50];
 
+  const duplicatePedido = async () => {
+    const pedidoId = pedidoToDuplicate;
+    if (!pedidoId) return;
+    
+    setConfirmDuplicateOpen(false);
+    setPedidoToDuplicate(null);
+    
+    try {
+      const { data: pedidoRow, error: pedidoError } = await supabase
+        .from('pedidos')
+        .select(`*, clientes(*), itens_pedido(*)`)
+        .eq('id', pedidoId)
+        .single();
+
+      if (pedidoError) throw pedidoError;
+
+      const pick = (val: any) => Array.isArray(val) ? val[0] : val;
+      const cliente = pick((pedidoRow as any).clientes) || null;
+
+      // build new pedido payload copying relevant fields
+      const now = new Date().toISOString();
+      const computeNewIdExterno = (orig: any) => {
+        const idExt = orig || '';
+        if (!idExt) return null;
+        const m = idExt.match(/^(.*)\/(\d+)$/);
+        if (m) {
+          // increment suffix
+          const base = m[1];
+          const num = Number(m[2] || 0) + 1;
+          return `${base}/${num}`;
+        }
+        return `${idExt}/1`;
+      };
+
+      const newPedidoPayload: any = {
+        id_externo: computeNewIdExterno((pedidoRow as any).id_externo),
+        cliente_nome: (pedidoRow as any).cliente_nome || (cliente && cliente.nome) || null,
+        contato: (pedidoRow as any).contato ? String((pedidoRow as any).contato).replace(/\D/g, '') : (cliente ? String(cliente.telefone || cliente.contato || '').replace(/\D/g, '') : null),
+        plataforma_id: (pedidoRow as any).plataforma_id || null,
+        status_id: COMERCIAL_STATUS_ID,
+        responsavel_id: (pedidoRow as any).responsavel_id || null,
+        valor_total: (pedidoRow as any).valor_total || null,
+        frete_venda: (pedidoRow as any).frete_venda || null,
+        cor_do_pedido: '#FF0000',
+        criado_em: now
+      };
+
+      // mark the inserted record as a duplicata
+      newPedidoPayload.duplicata = true;
+
+      const { data: newPedidoData, error: newPedidoError } = await supabase.from('pedidos').insert(newPedidoPayload).select('id').single();
+      if (newPedidoError) throw newPedidoError;
+
+      const newPedidoId = (newPedidoData as any).id;
+
+      // mark original pedido as foi_duplicado = true
+      try {
+        const { error: markErr } = await supabase.from('pedidos').update({ foi_duplicado: true, atualizado_em: new Date().toISOString() } as any).eq('id', pedidoId);
+        if (markErr) console.error('Erro ao marcar pedido original como duplicado:', markErr);
+        else {
+          // update local state to reflect original foiDuplicado
+          setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, foiDuplicado: true } : p));
+        }
+      } catch (markEx) {
+        console.error('Exceção ao marcar pedido original como duplicado:', markEx);
+      }
+
+      // create a cliente record linked to the new pedido (if original cliente exists)
+      if (cliente) {
+        try {
+          const clientePayload: any = {
+            nome: cliente.nome || (pedidoRow as any).cliente_nome || null,
+            telefone: cliente.telefone ? String(cliente.telefone).replace(/\D/g, '') : (cliente.contato ? String(cliente.contato).replace(/\D/g, '') : null),
+            link_formulario: `/${newPedidoId}`,
+            pedido_id: newPedidoId,
+            criado_em: new Date().toISOString()
+          };
+          const { error: clienteError } = await supabase.from('clientes').insert(clientePayload as any);
+          if (clienteError) console.error('Erro ao duplicar cliente:', clienteError);
+        } catch (cliErr) {
+          console.error('Exceção ao criar cliente duplicado:', cliErr);
+        }
+      }
+
+      // duplicate itens_pedido if present
+      const itens = (pedidoRow as any).itens_pedido || [];
+      if (itens && itens.length) {
+        try {
+          const itensPayload = itens.map((it: any) => ({
+            pedido_id: newPedidoId,
+            produto_id: it.produto_id,
+            variacao_id: it.variacao_id || null,
+            quantidade: it.quantidade || 1,
+            preco_unitario: it.preco_unitario || it.preco || 0,
+            codigo_barras: it.codigo_barras || null,
+            criado_em: new Date().toISOString()
+          }));
+          const { error: itensError } = await supabase.from('itens_pedido').insert(itensPayload as any);
+          if (itensError) console.error('Erro ao duplicar itens do pedido:', itensError);
+        } catch (itErr) {
+          console.error('Exceção ao duplicar itens:', itErr);
+        }
+      }
+
+      toast({ title: 'Duplicado', description: 'Pedido duplicado com sucesso' });
+
+      // Navigate to the new order page
+      navigate(`/pedido/${newPedidoId}`);
+    } catch (err: any) {
+      console.error('Erro ao duplicar pedido:', err);
+      toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
+    }
+  };
+
   return (
     <div className="flex h-full">
       <div className="flex-shrink-0">
@@ -445,16 +563,25 @@ export function PedidosEnviados() {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={(e) => {
-                        e.stopPropagation();
-                        const currentParams = new URLSearchParams();
-                        currentParams.set('readonly', '1');
-                        currentParams.set('returnTo', location.pathname + location.search);
-                        navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
-                      }}>
-                        <Eye className="h-4 w-4 mr-2" />
-                        Visualizar
-                      </Button>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={(e) => {
+                          e.stopPropagation();
+                          const currentParams = new URLSearchParams();
+                          currentParams.set('readonly', '1');
+                          currentParams.set('returnTo', location.pathname + location.search);
+                          navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                        }}>
+                          <Eye className="h-4 w-4 mr-2" />
+                          Visualizar
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={(e) => {
+                          e.stopPropagation();
+                          setPedidoToDuplicate(pedido.id);
+                          setConfirmDuplicateOpen(true);
+                        }} title="Duplicar pedido">
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -498,6 +625,24 @@ export function PedidosEnviados() {
         </Card>
         </div>
       </div>
+
+      <AlertDialog open={confirmDuplicateOpen} onOpenChange={setConfirmDuplicateOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Duplicar Pedido</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja duplicar este pedido? Um novo pedido será criado com status "Comercial" e você será redirecionado para editá-lo.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setConfirmDuplicateOpen(false);
+              setPedidoToDuplicate(null);
+            }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={duplicatePedido}>Duplicar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
