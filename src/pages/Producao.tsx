@@ -8,15 +8,6 @@ import { Pedido } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-const diasSemana = [
-  { id: 'segunda', nome: 'Segunda-feira' },
-  { id: 'terca', nome: 'Terça-feira' },
-  { id: 'quarta', nome: 'Quarta-feira' },
-  { id: 'quinta', nome: 'Quinta-feira' },
-  { id: 'sexta', nome: 'Sexta-feira' },
-  { id: 'sabado', nome: 'Sábado' },
-];
-
 export function Producao() {
   const [pedidos, setPedidos] = useState<Pedido[]>(mockPedidos);
   const [statusList, setStatusList] = useState<any[]>([]);
@@ -242,12 +233,54 @@ export function Producao() {
     })();
   };
 
-  const getPedidosPorDia = (diaIndex: number) => {
-    return pedidos.filter(pedido => {
-      if (!pedido.dataPrevista) return false;
-      const data = new Date(pedido.dataPrevista);
-      return data.getDay() === diaIndex;
+  // Status IDs que representam produção
+  const PRODUCAO_STATUS_IDS = statusList
+    .filter(s => s.nome === 'Produção')
+    .map(s => s.id);
+  
+  const ENTRADA_LOGISTICA_STATUS_IDS = statusList
+    .filter(s => s.nome === 'Entrada Logística')
+    .map(s => s.id);
+  
+  const LOGISTICA_STATUS_IDS = statusList
+    .filter(s => s.nome === 'Logística')
+    .map(s => s.id);
+
+  const getItensAgrupados = (statusIds: string[]) => {
+    const pedidosFiltrados = pedidos.filter(p => statusIds.includes(p.statusId));
+    
+    // Agrupar itens por produto/variação
+    const agrupamento: Record<string, {
+      produtoId: string;
+      produtoNome: string;
+      variacaoId?: string;
+      variacaoNome?: string;
+      imagem?: string;
+      quantidade: number;
+    }> = {};
+
+    pedidosFiltrados.forEach(pedido => {
+      pedido.itens.forEach((item: any) => {
+        const key = item.variacao 
+          ? `${item.produto?.id}-${item.variacao.id}`
+          : `${item.produto?.id}`;
+        
+        if (!agrupamento[key]) {
+          agrupamento[key] = {
+            produtoId: item.produto?.id || '',
+            produtoNome: item.produto?.nome || 'Produto desconhecido',
+            variacaoId: item.variacao?.id,
+            variacaoNome: item.variacao?.nome,
+            imagem: item.variacao?.imagem || item.produto?.imagem,
+            quantidade: 0,
+          };
+        }
+        
+        agrupamento[key].quantidade += item.quantidade;
+      });
     });
+
+    return Object.values(agrupamento).sort((a, b) => b.quantidade - a.quantidade);
   };
 
   return (
@@ -262,7 +295,7 @@ export function Producao() {
       <Tabs defaultValue="status" className="space-y-4">
         <TabsList>
           <TabsTrigger value="status">Por Status</TabsTrigger>
-          <TabsTrigger value="calendario">Por Dia da Semana</TabsTrigger>
+          <TabsTrigger value="itens">Itens a serem produzidos</TabsTrigger>
         </TabsList>
 
         <TabsContent value="status">
@@ -275,50 +308,172 @@ export function Producao() {
           />
         </TabsContent>
 
-        <TabsContent value="calendario">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {diasSemana.map((dia, index) => {
-              const pedidosDoDia = getPedidosPorDia(index + 1);
+        <TabsContent value="itens">
+          <div className="space-y-6">
+            {/* Produção */}
+            {PRODUCAO_STATUS_IDS.length > 0 && (() => {
+              const itens = getItensAgrupados(PRODUCAO_STATUS_IDS);
+              const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
               
               return (
-                <Card key={dia.id}>
+                <Card>
                   <CardHeader>
-                    <CardTitle className="flex items-center justify-between text-sm">
-                      <span>{dia.nome}</span>
-                      <Badge variant="secondary">{pedidosDoDia.length}</Badge>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Produção</span>
+                      <Badge variant="secondary" className="text-base">
+                        {totalItens} {totalItens === 1 ? 'item' : 'itens'}
+                      </Badge>
                     </CardTitle>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    {pedidosDoDia.length === 0 ? (
+                  <CardContent>
+                    {itens.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
-                        Nenhum pedido planejado
+                        Nenhum item em produção
                       </p>
                     ) : (
-                      pedidosDoDia.map(pedido => (
-                        <div key={pedido.id} className="p-3 border rounded-lg bg-card">
-                          <div className="flex items-center justify-between">
-                            <span className="font-medium text-sm">{pedido.idExterno}</span>
-                            <Badge 
-                              variant="outline"
-                              style={{ 
-                                backgroundColor: `${pedido.status?.corHex}15`,
-                                borderColor: pedido.status?.corHex,
-                                color: pedido.status?.corHex
-                              }}
-                            >
-                              {pedido.status?.nome}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {itens.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {item.imagem ? (
+                                  <img 
+                                    src={item.imagem} 
+                                    alt={item.produtoNome}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Sem foto</span>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{item.produtoNome}</p>
+                                {item.variacaoNome && (
+                                  <p className="text-xs text-muted-foreground truncate">{item.variacaoNome}</p>
+                                )}
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-base font-semibold px-3 py-1 flex-shrink-0">
+                              {item.quantidade}×
                             </Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {pedido.clienteNome}
-                          </p>
-                        </div>
-                      ))
+                        ))}
+                      </div>
                     )}
                   </CardContent>
                 </Card>
               );
-            })}
+            })()}
+
+            {/* Entrada Logística */}
+            {ENTRADA_LOGISTICA_STATUS_IDS.length > 0 && (() => {
+              const itens = getItensAgrupados(ENTRADA_LOGISTICA_STATUS_IDS);
+              const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+              
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Entrada Logística</span>
+                      <Badge variant="secondary" className="text-base">
+                        {totalItens} {totalItens === 1 ? 'item' : 'itens'}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {itens.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Nenhum item em entrada logística
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {itens.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {item.imagem ? (
+                                  <img 
+                                    src={item.imagem} 
+                                    alt={item.produtoNome}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Sem foto</span>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{item.produtoNome}</p>
+                                {item.variacaoNome && (
+                                  <p className="text-xs text-muted-foreground truncate">{item.variacaoNome}</p>
+                                )}
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-base font-semibold px-3 py-1 flex-shrink-0">
+                              {item.quantidade}×
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
+
+            {/* Logística */}
+            {LOGISTICA_STATUS_IDS.length > 0 && (() => {
+              const itens = getItensAgrupados(LOGISTICA_STATUS_IDS);
+              const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+              
+              return (
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Logística</span>
+                      <Badge variant="secondary" className="text-base">
+                        {totalItens} {totalItens === 1 ? 'item' : 'itens'}
+                      </Badge>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {itens.length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-4">
+                        Nenhum item em logística
+                      </p>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {itens.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                {item.imagem ? (
+                                  <img 
+                                    src={item.imagem} 
+                                    alt={item.produtoNome}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">Sem foto</span>
+                                )}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm truncate">{item.produtoNome}</p>
+                                {item.variacaoNome && (
+                                  <p className="text-xs text-muted-foreground truncate">{item.variacaoNome}</p>
+                                )}
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-base font-semibold px-3 py-1 flex-shrink-0">
+                              {item.quantidade}×
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })()}
           </div>
         </TabsContent>
       </Tabs>
