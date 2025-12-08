@@ -261,14 +261,20 @@ export function Producao() {
 
     pedidosFiltrados.forEach(pedido => {
       pedido.itens.forEach((item: any) => {
+        // Pula itens sem produto vinculado
+        if (!item.produto || !item.produto.id) {
+          console.warn('Item sem produto vinculado encontrado:', item);
+          return;
+        }
+
         const key = item.variacao 
-          ? `${item.produto?.id}-${item.variacao.id}`
-          : `${item.produto?.id}`;
+          ? `${item.produto.id}-${item.variacao.id}`
+          : `${item.produto.id}`;
         
         if (!agrupamento[key]) {
           agrupamento[key] = {
-            produtoId: item.produto?.id || '',
-            produtoNome: item.produto?.nome || 'Produto desconhecido',
+            produtoId: item.produto.id,
+            produtoNome: item.produto.nome || 'Produto sem nome',
             variacaoId: item.variacao?.id,
             variacaoNome: item.variacao?.nome,
             imagem: item.variacao?.imagem || item.produto?.imagem,
