@@ -81,8 +81,11 @@ export function Dashboard() {
         const produtosMap: Record<string, { quantidade: number; receita: number; img_url: string | null }> = {};
         pedidosData.forEach(p => {
           (p.itens_pedido || []).forEach((item: any) => {
-            const nome = item.produto?.nome || 'Produto Desconhecido';
-            const img_url = item.produto?.img_url || null;
+            // Ignorar itens sem produto associado
+            if (!item.produto?.nome) return;
+            
+            const nome = item.produto.nome;
+            const img_url = item.produto.img_url || null;
             if (!produtosMap[nome]) {
               produtosMap[nome] = { quantidade: 0, receita: 0, img_url };
             }
