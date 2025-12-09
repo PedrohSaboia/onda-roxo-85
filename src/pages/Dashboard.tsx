@@ -2,6 +2,7 @@ import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
@@ -11,7 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
 
 interface DashboardMetrics {
   totalPedidos: number;
@@ -24,6 +25,7 @@ interface DashboardMetrics {
   vendasPorPlataforma: { nome: string; total: number; pedidos: number; cor: string }[];
   vendasPorPlataformaPorPeriodo: { periodo: string; plataformas: { nome: string; valor: number; cor: string }[] }[];
   vendasPorStatus: { nome: string; pedidos: number; cor: string }[];
+  vendasTotaisPorDia: { data: string; valor: number }[];
   isPeriodoCurto: boolean;
 }
 
@@ -159,6 +161,19 @@ export function Dashboard() {
         });
         const vendasPorStatus = Object.entries(statusMap).map(([nome, data]) => ({ nome, ...data }));
 
+        // Vendas totais por dia (para gráfico de linha)
+        const vendasPorDiaMap: Record<string, number> = {};
+        pedidosData.forEach(p => {
+          const dia = format(parseISO(p.criado_em), 'yyyy-MM-dd');
+          if (!vendasPorDiaMap[dia]) {
+            vendasPorDiaMap[dia] = 0;
+          }
+          vendasPorDiaMap[dia] += Number(p.valor_total) || 0;
+        });
+        const vendasTotaisPorDia = Object.entries(vendasPorDiaMap)
+          .map(([data, valor]) => ({ data, valor }))
+          .sort((a, b) => a.data.localeCompare(b.data));
+
         setMetrics({
           totalPedidos,
           vendasTotal,
@@ -170,6 +185,7 @@ export function Dashboard() {
           vendasPorPlataforma,
           vendasPorPlataformaPorPeriodo,
           vendasPorStatus,
+          vendasTotaisPorDia,
           isPeriodoCurto,
         });
 
@@ -326,52 +342,104 @@ export function Dashboard() {
                 return (
                   <div key={periodo.periodo} className="grid gap-6 md:grid-cols-2">
                     <Card>
-                      <CardHeader>
-                        <CardTitle>Vendas por Plataforma</CardTitle>
-                        <CardDescription>
-                          {format(parseISO(periodo.periodo), "dd 'de' MMMM", { locale: ptBR })}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="pt-6">
-                        <ResponsiveContainer width="100%" height={300}>
-                          <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis 
-                              dataKey="nome" 
-                              angle={0}
-                              textAnchor="middle"
-                              height={60}
-                              tick={{ fill: '#6b7280', fontSize: 12 }}
-                            />
-                            <YAxis 
-                              tick={{ fill: '#6b7280', fontSize: 12 }}
-                              tickFormatter={(value) => formatCurrency(value)}
-                            />
-                            <Tooltip 
-                              formatter={(value: any) => formatCurrency(Number(value))}
-                              contentStyle={{ 
-                                backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                                border: '1px solid #e5e7eb',
-                                borderRadius: '8px',
-                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                              }}
-                            />
-                            <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
-                              {chartData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.cor} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                        <div className="flex flex-wrap gap-4 justify-center mt-6">
-                          {periodo.plataformas.map((plat) => (
-                            <div key={plat.nome} className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
-                              <span className="text-sm font-medium">{plat.nome}</span>
+                      <Tabs defaultValue="plataformas" className="w-full">
+                        <CardHeader>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <CardTitle>Vendas por Plataforma</CardTitle>
+                              <CardDescription>
+                                {format(parseISO(periodo.periodo), "dd 'de' MMMM", { locale: ptBR })}
+                              </CardDescription>
                             </div>
-                          ))}
-                        </div>
-                      </CardContent>
+                            <TabsList>
+                              <TabsTrigger value="plataformas">Por Plataforma</TabsTrigger>
+                              <TabsTrigger value="total">Total</TabsTrigger>
+                            </TabsList>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-6">
+                          <TabsContent value="plataformas" className="mt-0">
+                            <ResponsiveContainer width="100%" height={300}>
+                              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                <XAxis 
+                                  dataKey="nome" 
+                                  angle={0}
+                                  textAnchor="middle"
+                                  height={60}
+                                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                                />
+                                <YAxis 
+                                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                                  tickFormatter={(value) => formatCurrency(value)}
+                                />
+                                <Tooltip 
+                                  formatter={(value: any) => formatCurrency(Number(value))}
+                                  contentStyle={{ 
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                  }}
+                                />
+                                <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
+                                  {chartData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.cor} />
+                                  ))}
+                                </Bar>
+                              </BarChart>
+                            </ResponsiveContainer>
+                            <div className="flex flex-wrap gap-4 justify-center mt-6">
+                              {periodo.plataformas.map((plat) => (
+                                <div key={plat.nome} className="flex items-center gap-2">
+                                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
+                                  <span className="text-sm font-medium">{plat.nome}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </TabsContent>
+                          <TabsContent value="total" className="mt-0">
+                            <ResponsiveContainer width="100%" height={300}>
+                              <LineChart 
+                                data={metrics.vendasTotaisPorDia}
+                                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                <XAxis 
+                                  dataKey="data"
+                                  angle={0}
+                                  textAnchor="middle"
+                                  height={60}
+                                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                                  tickFormatter={(value) => format(parseISO(value), 'dd/MM', { locale: ptBR })}
+                                />
+                                <YAxis 
+                                  tick={{ fill: '#6b7280', fontSize: 12 }}
+                                  tickFormatter={(value) => formatCurrency(value)}
+                                />
+                                <Tooltip 
+                                  labelFormatter={(value) => format(parseISO(value as string), "dd 'de' MMMM", { locale: ptBR })}
+                                  formatter={(value: any) => [formatCurrency(Number(value)), 'Vendas']}
+                                  contentStyle={{ 
+                                    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                    border: '1px solid #e5e7eb',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                                  }}
+                                />
+                                <Line 
+                                  type="monotone" 
+                                  dataKey="valor" 
+                                  stroke="#8b5cf6" 
+                                  strokeWidth={3}
+                                  dot={{ fill: '#8b5cf6', r: 5 }}
+                                  activeDot={{ r: 7 }}
+                                />
+                              </LineChart>
+                            </ResponsiveContainer>
+                          </TabsContent>
+                        </CardContent>
+                      </Tabs>
                     </Card>
 
                     <Card>
@@ -438,65 +506,117 @@ export function Dashboard() {
             // Layout para período longo - gráficos lado a lado
             <div className="grid gap-6 md:grid-cols-2">
               <Card>
-                <CardHeader>
-                  <CardTitle>Vendas por Plataforma</CardTitle>
-                  <CardDescription>Total de vendas por plataforma no período</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart 
-                      data={metrics.vendasPorPlataforma.map(p => ({
-                        nome: p.nome,
-                        valor: p.total,
-                        pedidos: p.pedidos,
-                        cor: p.cor
-                      }))}
-                      margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis 
-                        dataKey="nome"
-                        angle={0}
-                        textAnchor="middle"
-                        height={80}
-                        tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
-                      />
-                      <YAxis 
-                        tick={{ fill: '#6b7280', fontSize: 12 }}
-                        tickFormatter={(value) => formatCurrency(value)}
-                      />
-                      <Tooltip 
-                        formatter={(value: any, name: string, props: any) => {
-                          if (name === 'valor') {
-                            return [formatCurrency(Number(value)), 'Valor'];
-                          }
-                          return [value, name];
-                        }}
-                        labelFormatter={(label) => `${label}`}
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                        }}
-                      />
-                      <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
-                        {metrics.vendasPorPlataforma.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.cor} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <div className="flex flex-wrap gap-4 justify-center mt-6">
-                    {metrics.vendasPorPlataforma.map((plat) => (
-                      <div key={plat.nome} className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
-                        <span className="text-sm font-medium">{plat.nome}</span>
-                        <Badge variant="secondary" className="text-xs">{plat.pedidos} pedidos</Badge>
+                <Tabs defaultValue="plataformas" className="w-full">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Vendas por Plataforma</CardTitle>
+                        <CardDescription>Total de vendas por plataforma no período</CardDescription>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
+                      <TabsList>
+                        <TabsTrigger value="plataformas">Por Plataforma</TabsTrigger>
+                        <TabsTrigger value="total">Total</TabsTrigger>
+                      </TabsList>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <TabsContent value="plataformas" className="mt-0">
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart 
+                          data={metrics.vendasPorPlataforma.map(p => ({
+                            nome: p.nome,
+                            valor: p.total,
+                            pedidos: p.pedidos,
+                            cor: p.cor
+                          }))}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="nome"
+                            angle={0}
+                            textAnchor="middle"
+                            height={80}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                          />
+                          <YAxis 
+                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            tickFormatter={(value) => formatCurrency(value)}
+                          />
+                          <Tooltip 
+                            formatter={(value: any, name: string, props: any) => {
+                              if (name === 'valor') {
+                                return [formatCurrency(Number(value)), 'Valor'];
+                              }
+                              return [value, name];
+                            }}
+                            labelFormatter={(label) => `${label}`}
+                            contentStyle={{ 
+                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                            }}
+                          />
+                          <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
+                            {metrics.vendasPorPlataforma.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.cor} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <div className="flex flex-wrap gap-4 justify-center mt-6">
+                        {metrics.vendasPorPlataforma.map((plat) => (
+                          <div key={plat.nome} className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
+                            <span className="text-sm font-medium">{plat.nome}</span>
+                            <Badge variant="secondary" className="text-xs">{plat.pedidos} pedidos</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="total" className="mt-0">
+                      <ResponsiveContainer width="100%" height={400}>
+                        <LineChart 
+                          data={metrics.vendasTotaisPorDia}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="data"
+                            angle={0}
+                            textAnchor="middle"
+                            height={80}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                            tickFormatter={(value) => format(parseISO(value), 'dd/MM')}
+                          />
+                          <YAxis 
+                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            tickFormatter={(value) => formatCurrency(value)}
+                          />
+                          <Tooltip 
+                            formatter={(value: any) => [formatCurrency(Number(value)), 'Vendas']}
+                            labelFormatter={(label) => format(parseISO(label), 'dd/MM/yyyy')}
+                            contentStyle={{ 
+                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                            }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="valor" 
+                            stroke="#8b5cf6" 
+                            strokeWidth={3}
+                            dot={{ fill: '#8b5cf6', r: 5 }}
+                            activeDot={{ r: 7 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </TabsContent>
+                  </CardContent>
+                </Tabs>
               </Card>
 
               <Card>
