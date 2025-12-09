@@ -13,10 +13,22 @@ import NovoPedido from "./pages/NovoPedido";
 import InformacoesEntrega from "./pages/InformacoesEntrega";
 import Leads from "./pages/Leads";
 import PedidosEnviados from "./pages/PedidosEnviados";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
-const App = () => (
+const App = () => {
+  // Initialize dark mode from localStorage on app load
+  useEffect(() => {
+    const darkMode = localStorage.getItem('darkMode') === 'true';
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, []);
+
+  return (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
       <TooltipProvider>
@@ -60,6 +72,7 @@ const App = () => (
       </TooltipProvider>
     </AuthProvider>
   </QueryClientProvider>
-);
+  );
+};
 
 export default App;

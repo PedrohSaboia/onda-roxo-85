@@ -16,8 +16,23 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 export function Configuracoes() {
-  const [darkMode, setDarkMode] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    // Load dark mode preference from localStorage
+    const stored = localStorage.getItem('darkMode');
+    return stored === 'true';
+  });
   const { toast } = useToast();
+
+  // Apply dark mode to document
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+    }
+  }, [darkMode]);
 
   // new user modal state
   const [openNewUser, setOpenNewUser] = useState(false);
