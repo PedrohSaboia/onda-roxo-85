@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Users, Tag, Palette, Building } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Trash } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,8 @@ import { mockUsuarios, mockStatus, mockPlataformas } from '@/data/mockData';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 
 export function Configuracoes() {
   const [darkMode, setDarkMode] = useState(false);
@@ -27,7 +29,7 @@ export function Configuracoes() {
   const [newFile, setNewFile] = useState<File | null>(null);
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
   // users list state
-  type Usuario = { id?: string; nome: string; email?: string; acesso?: string; ativo?: boolean };
+  type Usuario = { id?: string; nome: string; email?: string; acesso?: string; ativo?: boolean; img_url?: string };
   const [users, setUsers] = useState<Usuario[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -42,6 +44,11 @@ export function Configuracoes() {
   const [editing, setEditing] = useState(false);
   const [editFile, setEditFile] = useState<File | null>(null);
   const editFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // delete user state
+  const [deleteUserId, setDeleteUserId] = useState<string | undefined>(undefined);
+  const [deleteUserName, setDeleteUserName] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   // helper to upload a user's image to Supabase Storage and return public URL
   const uploadUserImage = async (file: File, userId: string) => {
@@ -82,7 +89,7 @@ export function Configuracoes() {
     setLoadingUsers(true);
     setUsersError(null);
     try {
-      const { data, error } = await supabase.from('usuarios').select('id, nome, email, acesso, ativo').order('nome', { ascending: true });
+      const { data, error } = await supabase.from('usuarios').select('id, nome, email, acesso, ativo, img_url').order('nome', { ascending: true });
       if (error) throw error;
       setUsers((data ?? []) as Usuario[]);
     } catch (err) {
@@ -140,6 +147,78 @@ export function Configuracoes() {
   const [editStatusCor, setEditStatusCor] = useState('#000000');
   const [editStatusOrdem, setEditStatusOrdem] = useState<number>(1);
   const [editingStatus, setEditingStatus] = useState(false);
+
+  // plataformas state
+  type Plataforma = { id?: string; nome: string; cor: string; img_url?: string };
+  const [plataformas, setPlataformas] = useState<Plataforma[]>([]);
+  const [loadingPlataformas, setLoadingPlataformas] = useState(false);
+  const [plataformasError, setPlataformasError] = useState<string | null>(null);
+
+  const fetchPlataformas = async () => {
+    setLoadingPlataformas(true);
+    setPlataformasError(null);
+    try {
+      const { data, error } = await supabase.from('plataformas').select('id, nome, cor, img_url').order('nome', { ascending: true });
+      if (error) throw error;
+      setPlataformas((data ?? []) as Plataforma[]);
+    } catch (err) {
+      console.error('Erro ao buscar plataformas:', err);
+      setPlataformasError(String(err));
+      setPlataformas([]);
+    } finally {
+      setLoadingPlataformas(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPlataformas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // create plataforma state
+  const [createPlataformaOpen, setCreatePlataformaOpen] = useState(false);
+  const [createPlataformaNome, setCreatePlataformaNome] = useState('');
+  const [createPlataformaCor, setCreatePlataformaCor] = useState('#000000');
+  const [createPlataformaFile, setCreatePlataformaFile] = useState<File | null>(null);
+  const createPlataformaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [creatingPlataforma, setCreatingPlataforma] = useState(false);
+
+  // edit plataforma state
+  const [editPlataformaOpen, setEditPlataformaOpen] = useState(false);
+  const [editPlataformaId, setEditPlataformaId] = useState<string | undefined>(undefined);
+  const [editPlataformaNome, setEditPlataformaNome] = useState('');
+  const [editPlataformaCor, setEditPlataformaCor] = useState('#000000');
+  const [editPlataformaFile, setEditPlataformaFile] = useState<File | null>(null);
+  const editPlataformaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [editingPlataforma, setEditingPlataforma] = useState(false);
+
+  // delete plataforma state
+  const [deletePlataformaId, setDeletePlataformaId] = useState<string | undefined>(undefined);
+  const [deletePlataformaNome, setDeletePlataformaNome] = useState('');
+  const [deletingPlataforma, setDeletingPlataforma] = useState(false);
+
+  // helper to upload plataforma image
+  const uploadPlataformaImage = async (file: File, plataformaId: string) => {
+    try {
+      const parts = file.name.split('.');
+      const ext = parts.length > 1 ? parts.pop() : 'jpg';
+      const filename = `${Date.now()}.${ext}`;
+      const path = `Plataformas/${plataformaId}/${filename}`;
+
+      const { error: uploadErr } = await supabase.storage.from('Usuarios').upload(path, file, { upsert: true });
+      if (uploadErr) {
+        console.error('Erro upload imagem:', uploadErr);
+        return null;
+      }
+
+      const pub = supabase.storage.from('Usuarios').getPublicUrl(path as string) as any;
+      const publicUrl = pub?.data?.publicUrl ?? pub?.publicUrl ?? null;
+      return publicUrl;
+    } catch (err) {
+      console.error('Erro ao enviar imagem:', err);
+      return null;
+    }
+  };
 
   return (
     <div className="space-y-6 p-6">
@@ -340,7 +419,15 @@ export function Configuracoes() {
                   ) : (
                     users.map((usuario) => (
                       <TableRow key={usuario.id ?? usuario.email ?? usuario.nome}>
-                        <TableCell className="font-medium">{usuario.nome}</TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-3">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={usuario.img_url} alt={usuario.nome} />
+                              <AvatarFallback>{usuario.nome.charAt(0).toUpperCase()}</AvatarFallback>
+                            </Avatar>
+                            <span>{usuario.nome}</span>
+                          </div>
+                        </TableCell>
                         <TableCell>{usuario.email}</TableCell>
                         <TableCell>
                           <Badge variant={usuario.acesso === 'admin' ? 'default' : 'secondary'}>
@@ -353,17 +440,67 @@ export function Configuracoes() {
                           </Badge>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => {
-                            // open edit modal with user data
-                            setEditUserId(usuario.id);
-                            setEditNome(usuario.nome ?? '');
-                            setEditEmail(usuario.email ?? '');
-                            setEditPapel((usuario.acesso as 'admin'|'operador'|'visualizador') ?? 'operador');
-                            setEditAtivo(usuario.ativo ?? true);
-                            setEditOpen(true);
-                          }}>
-                            Editar
-                          </Button>
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => {
+                              // open edit modal with user data
+                              setEditUserId(usuario.id);
+                              setEditNome(usuario.nome ?? '');
+                              setEditEmail(usuario.email ?? '');
+                              setEditPapel((usuario.acesso as 'admin'|'operador'|'visualizador') ?? 'operador');
+                              setEditAtivo(usuario.ativo ?? true);
+                              setEditOpen(true);
+                            }}>
+                              Editar
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => {
+                                  setDeleteUserId(usuario.id);
+                                  setDeleteUserName(usuario.nome);
+                                }}>
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Tem certeza que deseja deletar o usuário <strong>{usuario.nome}</strong>? Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive hover:bg-destructive/90"
+                                    onClick={async () => {
+                                      try {
+                                        if (!usuario.id) {
+                                          toast({ title: 'Erro', description: 'Usuário sem ID não pode ser deletado', variant: 'destructive' });
+                                          return;
+                                        }
+                                        setDeleting(true);
+                                        const { error } = await supabase.from('usuarios').delete().eq('id', usuario.id);
+                                        if (error) {
+                                          toast({ title: 'Erro ao deletar usuário', description: error.message || String(error), variant: 'destructive' });
+                                        } else {
+                                          toast({ title: 'Usuário deletado', description: `${usuario.nome} foi removido do sistema.` });
+                                          await fetchUsuarios();
+                                        }
+                                      } catch (err) {
+                                        console.error('Erro ao deletar usuário:', err);
+                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                      } finally {
+                                        setDeleting(false);
+                                      }
+                                    }}
+                                    disabled={deleting}
+                                  >
+                                    {deleting ? 'Deletando...' : 'Deletar'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -551,8 +688,11 @@ export function Configuracoes() {
                         <Input id="novo-status-nome" value={createNome} onChange={(e) => setCreateNome(e.target.value)} />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="novo-status-cor">Cor (hex)</Label>
-                        <Input id="novo-status-cor" value={createCor} onChange={(e) => setCreateCor(e.target.value)} />
+                        <Label htmlFor="novo-status-cor">Cor</Label>
+                        <div className="flex items-center gap-2">
+                          <input id="novo-status-cor" type="color" value={createCor} onChange={(e) => setCreateCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
+                          <Input value={createCor} onChange={(e) => setCreateCor(e.target.value)} />
+                        </div>
                       </div>
                       <div className="space-y-1">
                         <Label htmlFor="novo-status-ordem">Ordem</Label>
@@ -629,14 +769,57 @@ export function Configuracoes() {
                           </div>
                         </TableCell>
                         <TableCell className="text-right">
-                          <Button variant="outline" size="sm" onClick={() => {
-                            // open edit status modal
-                            setEditStatusId(status.id);
-                            setEditStatusNome(status.nome);
-                            setEditStatusCor(status.cor_hex);
-                            setEditStatusOrdem(status.ordem);
-                            setEditStatusOpen(true);
-                          }}>Editar</Button>
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => {
+                              // open edit status modal
+                              setEditStatusId(status.id);
+                              setEditStatusNome(status.nome);
+                              setEditStatusCor(status.cor_hex);
+                              setEditStatusOrdem(status.ordem);
+                              setEditStatusOpen(true);
+                            }}>Editar</Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Tem certeza que deseja deletar o status <strong>{status.nome}</strong>? Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive hover:bg-destructive/90"
+                                    onClick={async () => {
+                                      try {
+                                        if (!status.id) {
+                                          toast({ title: 'Erro', description: 'Status sem ID não pode ser deletado', variant: 'destructive' });
+                                          return;
+                                        }
+                                        const { error } = await supabase.from('status').delete().eq('id', status.id);
+                                        if (error) {
+                                          toast({ title: 'Erro ao deletar status', description: error.message || String(error), variant: 'destructive' });
+                                        } else {
+                                          toast({ title: 'Status deletado', description: `${status.nome} foi removido do sistema.` });
+                                          await fetchStatuses();
+                                        }
+                                      } catch (err) {
+                                        console.error('Erro ao deletar status:', err);
+                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                      }
+                                    }}
+                                  >
+                                    Deletar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))
@@ -652,9 +835,110 @@ export function Configuracoes() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Plataformas de Venda</CardTitle>
-                <Button className="bg-purple-600 hover:bg-purple-700">
-                  Nova Plataforma
-                </Button>
+                <Dialog open={createPlataformaOpen} onOpenChange={setCreatePlataformaOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-purple-600 hover:bg-purple-700">
+                      Nova Plataforma
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Nova Plataforma</DialogTitle>
+                      <DialogDescription>Crie uma nova plataforma de venda.</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="nova-plataforma-nome">Nome</Label>
+                        <Input id="nova-plataforma-nome" value={createPlataformaNome} onChange={(e) => setCreatePlataformaNome(e.target.value)} />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="nova-plataforma-cor">Cor</Label>
+                        <div className="flex items-center gap-2">
+                          <input id="nova-plataforma-cor" type="color" value={createPlataformaCor} onChange={(e) => setCreatePlataformaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
+                          <Input value={createPlataformaCor} onChange={(e) => setCreatePlataformaCor(e.target.value)} />
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label>Logo (opcional)</Label>
+                        <div
+                          onClick={() => createPlataformaFileInputRef.current?.click()}
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            const f = e.dataTransfer?.files?.[0];
+                            if (f) setCreatePlataformaFile(f);
+                          }}
+                          className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                        >
+                          {!createPlataformaFile ? (
+                            <div className="text-center text-sm text-muted-foreground">
+                              Clique ou arraste uma imagem aqui
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-4">
+                              <img src={createPreviewUrl(createPlataformaFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
+                              <div className="flex flex-col gap-2">
+                                <Button variant="outline" onClick={(e) => { e.stopPropagation(); createPlataformaFileInputRef.current?.click(); }}>Trocar</Button>
+                                <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setCreatePlataformaFile(null); }}>Remover</Button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        <input ref={createPlataformaFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setCreatePlataformaFile(e.target.files?.[0] ?? null)} />
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <div className="flex gap-2">
+                        <Button variant="ghost" onClick={() => setCreatePlataformaOpen(false)}>Cancelar</Button>
+                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                          try {
+                            if (!createPlataformaNome || !createPlataformaCor) {
+                              toast({ title: 'Preencha os campos', variant: 'destructive' });
+                              return;
+                            }
+                            setCreatingPlataforma(true);
+
+                            // Insert plataforma first to get ID
+                            const { data: insertData, error: insertError } = await supabase
+                              .from('plataformas')
+                              .insert({ nome: createPlataformaNome, cor: createPlataformaCor })
+                              .select()
+                              .single();
+
+                            if (insertError) {
+                              toast({ title: 'Erro ao criar plataforma', description: insertError.message || String(insertError), variant: 'destructive' });
+                              return;
+                            }
+
+                            const plataformaId = insertData?.id;
+
+                            // Upload image if provided
+                            if (createPlataformaFile && plataformaId) {
+                              const imgUrl = await uploadPlataformaImage(createPlataformaFile, plataformaId);
+                              if (imgUrl) {
+                                await supabase.from('plataformas').update({ img_url: imgUrl }).eq('id', plataformaId);
+                              }
+                            }
+
+                            toast({ title: 'Plataforma criada' });
+                            await fetchPlataformas();
+                            setCreatePlataformaNome('');
+                            setCreatePlataformaCor('#000000');
+                            setCreatePlataformaFile(null);
+                            setCreatePlataformaOpen(false);
+                          } catch (err) {
+                            console.error('Erro criar plataforma:', err);
+                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                          } finally {
+                            setCreatingPlataforma(false);
+                          }
+                        }} disabled={creatingPlataforma}>{creatingPlataforma ? 'Criando...' : 'Criar'}</Button>
+                      </div>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             </CardHeader>
             <CardContent>
@@ -667,30 +951,201 @@ export function Configuracoes() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {mockPlataformas.map((plataforma) => (
-                    <TableRow key={plataforma.id}>
-                      <TableCell className="font-medium">{plataforma.nome}</TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-4 h-4 rounded-full"
-                            style={{ backgroundColor: plataforma.cor }}
-                          />
-                          <span className="font-mono text-sm">{plataforma.cor}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="outline" size="sm">
-                          Editar
-                        </Button>
-                      </TableCell>
+                  {loadingPlataformas ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-sm text-muted-foreground">Carregando plataformas...</TableCell>
                     </TableRow>
-                  ))}
+                  ) : plataformasError ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-sm text-destructive">Erro: {plataformasError}</TableCell>
+                    </TableRow>
+                  ) : plataformas.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-sm text-muted-foreground">Nenhuma plataforma encontrada.</TableCell>
+                    </TableRow>
+                  ) : (
+                    plataformas.map((plataforma) => (
+                      <TableRow key={plataforma.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-3">
+                            {plataforma.img_url && (
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage src={plataforma.img_url} alt={plataforma.nome} />
+                                <AvatarFallback>{plataforma.nome.charAt(0).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                            )}
+                            <span>{plataforma.nome}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <div 
+                              className="w-4 h-4 rounded-full"
+                              style={{ backgroundColor: plataforma.cor }}
+                            />
+                            <span className="font-mono text-sm">{plataforma.cor}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button variant="outline" size="sm" onClick={() => {
+                              setEditPlataformaId(plataforma.id);
+                              setEditPlataformaNome(plataforma.nome);
+                              setEditPlataformaCor(plataforma.cor);
+                              setEditPlataformaOpen(true);
+                            }}>
+                              Editar
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => {
+                                  setDeletePlataformaId(plataforma.id);
+                                  setDeletePlataformaNome(plataforma.nome);
+                                }}>
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Tem certeza que deseja deletar a plataforma <strong>{plataforma.nome}</strong>? Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive hover:bg-destructive/90"
+                                    onClick={async () => {
+                                      try {
+                                        if (!plataforma.id) {
+                                          toast({ title: 'Erro', description: 'Plataforma sem ID não pode ser deletada', variant: 'destructive' });
+                                          return;
+                                        }
+                                        setDeletingPlataforma(true);
+                                        const { error } = await supabase.from('plataformas').delete().eq('id', plataforma.id);
+                                        if (error) {
+                                          toast({ title: 'Erro ao deletar plataforma', description: error.message || String(error), variant: 'destructive' });
+                                        } else {
+                                          toast({ title: 'Plataforma deletada', description: `${plataforma.nome} foi removida do sistema.` });
+                                          await fetchPlataformas();
+                                        }
+                                      } catch (err) {
+                                        console.error('Erro ao deletar plataforma:', err);
+                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                      } finally {
+                                        setDeletingPlataforma(false);
+                                      }
+                                    }}
+                                    disabled={deletingPlataforma}
+                                  >
+                                    {deletingPlataforma ? 'Deletando...' : 'Deletar'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Edit Plataforma Dialog */}
+        <Dialog open={editPlataformaOpen} onOpenChange={setEditPlataformaOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Plataforma</DialogTitle>
+              <DialogDescription>Atualize as informações da plataforma.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="edit-plataforma-nome">Nome</Label>
+                <Input id="edit-plataforma-nome" value={editPlataformaNome} onChange={(e) => setEditPlataformaNome(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-plataforma-cor">Cor</Label>
+                <div className="flex items-center gap-2">
+                  <input id="edit-plataforma-cor" type="color" value={editPlataformaCor} onChange={(e) => setEditPlataformaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
+                  <Input value={editPlataformaCor} onChange={(e) => setEditPlataformaCor(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Logo (opcional)</Label>
+                <div
+                  onClick={() => editPlataformaFileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer?.files?.[0];
+                    if (f) setEditPlataformaFile(f);
+                  }}
+                  className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                >
+                  {!editPlataformaFile ? (
+                    <div className="text-center text-sm text-muted-foreground">
+                      Clique ou arraste uma imagem aqui
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <img src={createPreviewUrl(editPlataformaFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
+                      <div className="flex flex-col gap-2">
+                        <Button variant="outline" onClick={(e) => { e.stopPropagation(); editPlataformaFileInputRef.current?.click(); }}>Trocar</Button>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setEditPlataformaFile(null); }}>Remover</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <input ref={editPlataformaFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setEditPlataformaFile(e.target.files?.[0] ?? null)} />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <div className="flex gap-2">
+                <Button variant="ghost" onClick={() => setEditPlataformaOpen(false)}>Cancelar</Button>
+                <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                  try {
+                    if (!editPlataformaId) {
+                      toast({ title: 'Erro', description: 'Plataforma sem id não pode ser editada', variant: 'destructive' });
+                      return;
+                    }
+                    setEditingPlataforma(true);
+
+                    const updateObj: any = { nome: editPlataformaNome, cor: editPlataformaCor };
+
+                    // Upload new image if provided
+                    if (editPlataformaFile) {
+                      const imgUrl = await uploadPlataformaImage(editPlataformaFile, editPlataformaId);
+                      if (imgUrl) {
+                        updateObj.img_url = imgUrl;
+                      }
+                    }
+
+                    const { error } = await supabase.from('plataformas').update(updateObj).eq('id', editPlataformaId).select();
+                    if (error) {
+                      toast({ title: 'Erro ao atualizar plataforma', description: error.message || String(error), variant: 'destructive' });
+                    } else {
+                      toast({ title: 'Plataforma atualizada' });
+                      await fetchPlataformas();
+                      setEditPlataformaOpen(false);
+                      setEditPlataformaFile(null);
+                    }
+                  } catch (err) {
+                    console.error('Erro ao atualizar plataforma:', err);
+                    toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                  } finally {
+                    setEditingPlataforma(false);
+                  }
+                }} disabled={editingPlataforma}>{editingPlataforma ? 'Salvando...' : 'Salvar alterações'}</Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <TabsContent value="setores">
           <Card>
