@@ -313,30 +313,26 @@ export function Dashboard() {
             />
           </div>
 
-          {/* Vendas por Plataforma - Gráfico Dinâmico */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Vendas por Plataforma</CardTitle>
-              <CardDescription>
-                {metrics.isPeriodoCurto 
-                  ? 'Vendas separadas por plataforma em cada período' 
-                  : 'Total de vendas por plataforma no período'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              {metrics.isPeriodoCurto ? (
-                <div className="space-y-12">
-                  {metrics.vendasPorPlataformaPorPeriodo.map((periodo) => {
-                    const chartData = periodo.plataformas.map(p => ({
-                      nome: p.nome,
-                      valor: p.valor,
-                      cor: p.cor
-                    }));
-                    return (
-                      <div key={periodo.periodo} className="space-y-4">
-                        <div className="font-semibold text-base text-foreground">
+          {/* Gráficos de Vendas por Plataforma e Pedidos por Status */}
+          {metrics.isPeriodoCurto ? (
+            // Layout para período curto - cada dia em card separado com ambos gráficos
+            <div className="space-y-6">
+              {metrics.vendasPorPlataformaPorPeriodo.map((periodo) => {
+                const chartData = periodo.plataformas.map(p => ({
+                  nome: p.nome,
+                  valor: p.valor,
+                  cor: p.cor
+                }));
+                return (
+                  <div key={periodo.periodo} className="grid gap-6 md:grid-cols-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Vendas por Plataforma</CardTitle>
+                        <CardDescription>
                           {format(parseISO(periodo.periodo), "dd 'de' MMMM", { locale: ptBR })}
-                        </div>
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-6">
                         <ResponsiveContainer width="100%" height={300}>
                           <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
@@ -367,128 +363,198 @@ export function Dashboard() {
                             </Bar>
                           </BarChart>
                         </ResponsiveContainer>
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart 
-                    data={metrics.vendasPorPlataforma.map(p => ({
-                      nome: p.nome,
-                      valor: p.total,
-                      pedidos: p.pedidos,
-                      cor: p.cor
-                    }))}
-                    margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
-                  >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                    <XAxis 
-                      dataKey="nome"
-                      angle={0}
-                      textAnchor="middle"
-                      height={80}
-                      tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
-                    />
-                    <YAxis 
-                      tick={{ fill: '#6b7280', fontSize: 12 }}
-                      tickFormatter={(value) => formatCurrency(value)}
-                    />
-                    <Tooltip 
-                      formatter={(value: any, name: string, props: any) => {
-                        if (name === 'valor') {
-                          return [formatCurrency(Number(value)), 'Valor'];
-                        }
-                        return [value, name];
-                      }}
-                      labelFormatter={(label) => `${label}`}
-                      contentStyle={{ 
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                      }}
-                    />
-                    <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
-                      {metrics.vendasPorPlataforma.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.cor} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-              <div className="flex flex-wrap gap-4 justify-center mt-6">
-                {(metrics.isPeriodoCurto && metrics.vendasPorPlataformaPorPeriodo.length > 0 
-                  ? metrics.vendasPorPlataformaPorPeriodo[0].plataformas 
-                  : metrics.vendasPorPlataforma
-                ).map((plat) => (
-                  <div key={plat.nome} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
-                    <span className="text-sm font-medium">{plat.nome}</span>
-                    {!metrics.isPeriodoCurto && 'pedidos' in plat && (
-                      <Badge variant="secondary" className="text-xs">{plat.pedidos} pedidos</Badge>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                        <div className="flex flex-wrap gap-4 justify-center mt-6">
+                          {periodo.plataformas.map((plat) => (
+                            <div key={plat.nome} className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
+                              <span className="text-sm font-medium">{plat.nome}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
 
-          {/* Pedidos por Status */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Pedidos por Status</CardTitle>
-              <CardDescription>Distribuição atual dos pedidos</CardDescription>
-            </CardHeader>
-            <CardContent className="pt-6">
-              <ResponsiveContainer width="100%" height={400}>
-                <BarChart 
-                  data={metrics.vendasPorStatus.map(s => ({
-                    nome: s.nome,
-                    pedidos: s.pedidos,
-                    cor: s.cor
-                  }))}
-                  margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis 
-                    dataKey="nome"
-                    angle={0}
-                    textAnchor="middle"
-                    height={80}
-                    tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
-                  />
-                  <YAxis 
-                    tick={{ fill: '#6b7280', fontSize: 12 }}
-                    allowDecimals={false}
-                  />
-                  <Tooltip 
-                    formatter={(value: any) => [value, 'Pedidos']}
-                    contentStyle={{ 
-                      backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                      border: '1px solid #e5e7eb',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                    }}
-                  />
-                  <Bar dataKey="pedidos" radius={[8, 8, 0, 0]}>
-                    {metrics.vendasPorStatus.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.cor} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              <div className="flex flex-wrap gap-4 justify-center mt-6">
-                {metrics.vendasPorStatus.map((status) => (
-                  <div key={status.nome} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.cor }} />
-                    <span className="text-sm font-medium">{status.nome}</span>
-                    <Badge variant="secondary" className="text-xs">{status.pedidos} pedidos</Badge>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Pedidos por Status</CardTitle>
+                        <CardDescription>
+                          {format(parseISO(periodo.periodo), "dd 'de' MMMM", { locale: ptBR })}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="pt-6">
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart 
+                            data={metrics.vendasPorStatus.map(s => ({
+                              nome: s.nome,
+                              pedidos: s.pedidos,
+                              cor: s.cor
+                            }))}
+                            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                          >
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis 
+                              dataKey="nome"
+                              angle={0}
+                              textAnchor="middle"
+                              height={60}
+                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                            />
+                            <YAxis 
+                              tick={{ fill: '#6b7280', fontSize: 12 }}
+                              allowDecimals={false}
+                            />
+                            <Tooltip 
+                              formatter={(value: any) => [value, 'Pedidos']}
+                              contentStyle={{ 
+                                backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                border: '1px solid #e5e7eb',
+                                borderRadius: '8px',
+                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                              }}
+                            />
+                            <Bar dataKey="pedidos" radius={[8, 8, 0, 0]}>
+                              {metrics.vendasPorStatus.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.cor} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                        <div className="flex flex-wrap gap-4 justify-center mt-6">
+                          {metrics.vendasPorStatus.map((status) => (
+                            <div key={status.nome} className="flex items-center gap-2">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.cor }} />
+                              <span className="text-sm font-medium">{status.nome}</span>
+                              <Badge variant="secondary" className="text-xs">{status.pedidos} pedidos</Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                );
+              })}
+            </div>
+          ) : (
+            // Layout para período longo - gráficos lado a lado
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Vendas por Plataforma</CardTitle>
+                  <CardDescription>Total de vendas por plataforma no período</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart 
+                      data={metrics.vendasPorPlataforma.map(p => ({
+                        nome: p.nome,
+                        valor: p.total,
+                        pedidos: p.pedidos,
+                        cor: p.cor
+                      }))}
+                      margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="nome"
+                        angle={0}
+                        textAnchor="middle"
+                        height={80}
+                        tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                      />
+                      <YAxis 
+                        tick={{ fill: '#6b7280', fontSize: 12 }}
+                        tickFormatter={(value) => formatCurrency(value)}
+                      />
+                      <Tooltip 
+                        formatter={(value: any, name: string, props: any) => {
+                          if (name === 'valor') {
+                            return [formatCurrency(Number(value)), 'Valor'];
+                          }
+                          return [value, name];
+                        }}
+                        labelFormatter={(label) => `${label}`}
+                        contentStyle={{ 
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                        }}
+                      />
+                      <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
+                        {metrics.vendasPorPlataforma.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.cor} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap gap-4 justify-center mt-6">
+                    {metrics.vendasPorPlataforma.map((plat) => (
+                      <div key={plat.nome} className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
+                        <span className="text-sm font-medium">{plat.nome}</span>
+                        <Badge variant="secondary" className="text-xs">{plat.pedidos} pedidos</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Pedidos por Status</CardTitle>
+                  <CardDescription>Distribuição atual dos pedidos</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-6">
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart 
+                      data={metrics.vendasPorStatus.map(s => ({
+                        nome: s.nome,
+                        pedidos: s.pedidos,
+                        cor: s.cor
+                      }))}
+                      margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        dataKey="nome"
+                        angle={0}
+                        textAnchor="middle"
+                        height={80}
+                        tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                      />
+                      <YAxis 
+                        tick={{ fill: '#6b7280', fontSize: 12 }}
+                        allowDecimals={false}
+                      />
+                      <Tooltip 
+                        formatter={(value: any) => [value, 'Pedidos']}
+                        contentStyle={{ 
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                        }}
+                      />
+                      <Bar dataKey="pedidos" radius={[8, 8, 0, 0]}>
+                        {metrics.vendasPorStatus.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.cor} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                  <div className="flex flex-wrap gap-4 justify-center mt-6">
+                    {metrics.vendasPorStatus.map((status) => (
+                      <div key={status.nome} className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.cor }} />
+                        <span className="text-sm font-medium">{status.nome}</span>
+                        <Badge variant="secondary" className="text-xs">{status.pedidos} pedidos</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
 
           {/* Top Produtos e Produtos com Maior Ticket Médio */}
           <div className="grid gap-6 md:grid-cols-2">
