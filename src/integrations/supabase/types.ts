@@ -221,6 +221,7 @@ export type Database = {
           cor: string
           criado_em: string
           id: string
+          img_url: string | null
           nome: string
         }
         Insert: {
@@ -228,6 +229,7 @@ export type Database = {
           cor: string
           criado_em?: string
           id?: string
+          img_url?: string | null
           nome: string
         }
         Update: {
@@ -235,6 +237,7 @@ export type Database = {
           cor?: string
           criado_em?: string
           id?: string
+          img_url?: string | null
           nome?: string
         }
         Relationships: []
