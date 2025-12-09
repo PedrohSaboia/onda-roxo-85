@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Users, Tag, Palette, Building, Trash } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Trash, GripVertical, Plus } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -196,6 +196,97 @@ export function Configuracoes() {
   const [deletePlataformaId, setDeletePlataformaId] = useState<string | undefined>(undefined);
   const [deletePlataformaNome, setDeletePlataformaNome] = useState('');
   const [deletingPlataforma, setDeletingPlataforma] = useState(false);
+
+  // setores state
+  type Setor = { id: string; nome: string; rota: string; ordem: number };
+  const [setores, setSetores] = useState<Setor[]>([]);
+  const [editOrderMode, setEditOrderMode] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  // create setor state
+  const [createSetorOpen, setCreateSetorOpen] = useState(false);
+  const [createSetorNome, setCreateSetorNome] = useState('');
+  const [createSetorRota, setCreateSetorRota] = useState('');
+
+  // edit setor state
+  const [editSetorOpen, setEditSetorOpen] = useState(false);
+  const [editSetorId, setEditSetorId] = useState<string>('');
+  const [editSetorNome, setEditSetorNome] = useState('');
+  const [editSetorRota, setEditSetorRota] = useState('');
+
+  // Load setores from localStorage
+  const loadSetores = () => {
+    try {
+      const stored = localStorage.getItem('setores');
+      if (stored) {
+        const parsed = JSON.parse(stored) as Setor[];
+        setSetores(parsed.sort((a, b) => a.ordem - b.ordem));
+      } else {
+        // Default setores
+        const defaultSetores: Setor[] = [
+          { id: 'home', nome: 'Home', rota: '/', ordem: 0 },
+          { id: 'comercial', nome: 'Comercial', rota: '/comercial', ordem: 1 },
+          { id: 'producao', nome: 'Produ\u00e7\u00e3o', rota: '/producao', ordem: 2 },
+          { id: 'logistica', nome: 'Log\u00edstica', rota: '/logistica', ordem: 3 },
+          { id: 'estoque', nome: 'Estoque', rota: '/estoque', ordem: 4 },
+          { id: 'configuracoes', nome: 'Configura\u00e7\u00f5es', rota: '/configuracoes', ordem: 5 },
+        ];
+        setSetores(defaultSetores);
+        localStorage.setItem('setores', JSON.stringify(defaultSetores));
+      }
+    } catch (err) {
+      console.error('Erro ao carregar setores:', err);
+    }
+  };
+
+  // Save setores to localStorage
+  const saveSetores = (newSetores: Setor[]) => {
+    try {
+      localStorage.setItem('setores', JSON.stringify(newSetores));
+      setSetores(newSetores);
+      // Dispatch custom event to update header in same tab
+      window.dispatchEvent(new Event('setores-updated'));
+      toast({ title: 'Setores salvos com sucesso' });
+    } catch (err) {
+      console.error('Erro ao salvar setores:', err);
+      toast({ title: 'Erro ao salvar setores', variant: 'destructive' });
+    }
+  };
+
+  useEffect(() => {
+    loadSetores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Drag and drop handlers
+  const handleDragStart = (index: number) => {
+    setDraggedIndex(index);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === index) return;
+
+    const newSetores = [...setores];
+    const draggedItem = newSetores[draggedIndex];
+    newSetores.splice(draggedIndex, 1);
+    newSetores.splice(index, 0, draggedItem);
+
+    // Update ordem
+    newSetores.forEach((setor, idx) => {
+      setor.ordem = idx;
+    });
+
+    setSetores(newSetores);
+    setDraggedIndex(index);
+  };
+
+  const handleDragEnd = () => {
+    if (draggedIndex !== null) {
+      saveSetores(setores);
+    }
+    setDraggedIndex(null);
+  };
 
   // helper to upload plataforma image
   const uploadPlataformaImage = async (file: File, plataformaId: string) => {
@@ -1150,33 +1241,225 @@ export function Configuracoes() {
         <TabsContent value="setores">
           <Card>
             <CardHeader>
-              <CardTitle>Rótulos dos Setores</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="comercial">Setor Comercial</Label>
-                  <Input id="comercial" defaultValue="Comercial" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Setores do Sistema</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Gerencie os setores que aparecem no header de navegação
+                  </p>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="design">Setor Design</Label>
-                  <Input id="design" defaultValue="Design" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="producao">Setor Produção</Label>
-                  <Input id="producao" defaultValue="Produção" />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="logistica">Setor Logística</Label>
-                  <Input id="logistica" defaultValue="Logística" />
+                <div className="flex gap-2">
+                  <Button
+                    variant={editOrderMode ? 'default' : 'outline'}
+                    onClick={() => setEditOrderMode(!editOrderMode)}
+                    className={editOrderMode ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                  >
+                    <GripVertical className="h-4 w-4 mr-2" />
+                    {editOrderMode ? 'Finalizar Ordenação' : 'Editar Ordem'}
+                  </Button>
+                  <Dialog open={createSetorOpen} onOpenChange={setCreateSetorOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-purple-600 hover:bg-purple-700">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Novo Setor
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Novo Setor</DialogTitle>
+                        <DialogDescription>Adicione um novo setor ao sistema.</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-setor-nome">Nome do Setor</Label>
+                          <Input
+                            id="novo-setor-nome"
+                            placeholder="Ex: Design"
+                            value={createSetorNome}
+                            onChange={(e) => setCreateSetorNome(e.target.value)}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-setor-rota">Rota (URL)</Label>
+                          <Input
+                            id="novo-setor-rota"
+                            placeholder="Ex: /design"
+                            value={createSetorRota}
+                            onChange={(e) => setCreateSetorRota(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button variant="ghost" onClick={() => setCreateSetorOpen(false)}>Cancelar</Button>
+                        <Button
+                          className="bg-purple-600 hover:bg-purple-700"
+                          onClick={() => {
+                            if (!createSetorNome || !createSetorRota) {
+                              toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+                              return;
+                            }
+                            const newSetor: Setor = {
+                              id: createSetorRota.replace('/', '').toLowerCase(),
+                              nome: createSetorNome,
+                              rota: createSetorRota,
+                              ordem: setores.length,
+                            };
+                            const newSetores = [...setores, newSetor];
+                            saveSetores(newSetores);
+                            setCreateSetorNome('');
+                            setCreateSetorRota('');
+                            setCreateSetorOpen(false);
+                          }}
+                        >
+                          Criar Setor
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
-              <Button className="bg-purple-600 hover:bg-purple-700">
-                Salvar Alterações
-              </Button>
+            </CardHeader>
+            <CardContent>
+              {editOrderMode && (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <p className="text-sm text-blue-800">
+                    <strong>Modo de Ordenação:</strong> Arraste os setores para reorganizar a ordem no header.
+                  </p>
+                </div>
+              )}
+              <div className="space-y-2">
+                {setores.map((setor, index) => (
+                  <div
+                    key={setor.id}
+                    draggable={editOrderMode}
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragEnd={handleDragEnd}
+                    className={`flex items-center gap-3 p-4 border rounded-lg transition-all ${
+                      editOrderMode
+                        ? 'cursor-move hover:border-purple-400 hover:bg-purple-50'
+                        : 'bg-card'
+                    } ${draggedIndex === index ? 'opacity-50' : ''}`}
+                  >
+                    {editOrderMode && (
+                      <GripVertical className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    )}
+                    <div className="flex-1 grid grid-cols-3 gap-4 items-center">
+                      <div>
+                        <div className="text-sm text-muted-foreground">Ordem</div>
+                        <div className="font-medium">{index + 1}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">Nome</div>
+                        <div className="font-medium">{setor.nome}</div>
+                      </div>
+                      <div>
+                        <div className="text-sm text-muted-foreground">Rota</div>
+                        <div className="font-mono text-sm">{setor.rota}</div>
+                      </div>
+                    </div>
+                    {!editOrderMode && (
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setEditSetorId(setor.id);
+                            setEditSetorNome(setor.nome);
+                            setEditSetorRota(setor.rota);
+                            setEditSetorOpen(true);
+                          }}
+                        >
+                          Editar
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                              <Trash className="h-4 w-4" />
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                Tem certeza que deseja deletar o setor <strong>{setor.nome}</strong>? Esta ação não pode ser desfeita.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive hover:bg-destructive/90"
+                                onClick={() => {
+                                  const newSetores = setores.filter((s) => s.id !== setor.id);
+                                  newSetores.forEach((s, idx) => {
+                                    s.ordem = idx;
+                                  });
+                                  saveSetores(newSetores);
+                                  toast({ title: 'Setor deletado', description: `${setor.nome} foi removido.` });
+                                }}
+                              >
+                                Deletar
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Edit Setor Dialog */}
+        <Dialog open={editSetorOpen} onOpenChange={setEditSetorOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Setor</DialogTitle>
+              <DialogDescription>Atualize as informações do setor.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-setor-nome">Nome do Setor</Label>
+                <Input
+                  id="edit-setor-nome"
+                  value={editSetorNome}
+                  onChange={(e) => setEditSetorNome(e.target.value)}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-setor-rota">Rota (URL)</Label>
+                <Input
+                  id="edit-setor-rota"
+                  value={editSetorRota}
+                  onChange={(e) => setEditSetorRota(e.target.value)}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setEditSetorOpen(false)}>Cancelar</Button>
+              <Button
+                className="bg-purple-600 hover:bg-purple-700"
+                onClick={() => {
+                  if (!editSetorNome || !editSetorRota) {
+                    toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+                    return;
+                  }
+                  const newSetores = setores.map((s) =>
+                    s.id === editSetorId
+                      ? { ...s, nome: editSetorNome, rota: editSetorRota }
+                      : s
+                  );
+                  saveSetores(newSetores);
+                  setEditSetorOpen(false);
+                }}
+              >
+                Salvar Alterações
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         <TabsContent value="preferencias">
           <Card>

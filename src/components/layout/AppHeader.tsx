@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { useAuth } from '@/hooks/useAuth';
 import type { SyntheticEvent } from 'react';
 import SearchPanel from '@/components/layout/SearchPanel';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface AppHeaderProps {
   onMenuClick?: () => void;
@@ -18,6 +18,67 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
   const { user, signOut, imgUrl } = useAuth();
 
   const [searchOpen, setSearchOpen] = useState(false);
+  const [navigationItems, setNavigationItems] = useState<Array<{ id: string; label: string }>>([]);
+
+  // Load setores from localStorage
+  useEffect(() => {
+    const loadSetores = () => {
+      try {
+        const stored = localStorage.getItem('setores');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const items = parsed
+            .sort((a: any, b: any) => a.ordem - b.ordem)
+            .map((s: any) => ({ id: s.id, label: s.nome }));
+          setNavigationItems(items);
+        } else {
+          // Default navigation items
+          const defaultItems = [
+            { id: 'home', label: 'Home' },
+            { id: 'comercial', label: 'Comercial' },
+            { id: 'producao', label: 'Produção' },
+            { id: 'logistica', label: 'Logística' },
+            { id: 'estoque', label: 'Estoque' },
+            { id: 'configuracoes', label: 'Configurações' },
+          ];
+          setNavigationItems(defaultItems);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar setores:', err);
+        // Fallback to default
+        setNavigationItems([
+          { id: 'home', label: 'Home' },
+          { id: 'comercial', label: 'Comercial' },
+          { id: 'producao', label: 'Produção' },
+          { id: 'logistica', label: 'Logística' },
+          { id: 'estoque', label: 'Estoque' },
+          { id: 'configuracoes', label: 'Configurações' },
+        ]);
+      }
+    };
+
+    loadSetores();
+
+    // Listen for storage changes (when setores are updated)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'setores') {
+        loadSetores();
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    
+    // Custom event for same-tab updates
+    const handleSetoresUpdate = () => {
+      loadSetores();
+    };
+    window.addEventListener('setores-updated', handleSetoresUpdate);
+
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('setores-updated', handleSetoresUpdate);
+    };
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
@@ -34,15 +95,6 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
     const name = getUserName();
     return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
   };
-
-  const navigationItems = [
-    { id: 'home', label: 'Home' },
-    { id: 'comercial', label: 'Comercial' },
-    { id: 'producao', label: 'Produção' },
-    { id: 'logistica', label: 'Logística' },
-    { id: 'estoque', label: 'Estoque' },
-    { id: 'configuracoes', label: 'Configurações' },
-  ];
 
   return (
     <header
