@@ -8,7 +8,7 @@ export function TermosServico() {
           <section>
             <h2 className="text-2xl font-semibold text-foreground mb-4">1. Aceitação dos Termos</h2>
             <p>
-              Ao acessar e usar o sistema Zeelux, você concorda em cumprir e estar vinculado aos seguintes 
+              Ao acessar e usar o sistema ERP Zeelux, você concorda em cumprir e estar vinculado aos seguintes 
               termos e condições de uso. Se você não concordar com qualquer parte destes termos, não deverá 
               usar nosso sistema.
             </p>
