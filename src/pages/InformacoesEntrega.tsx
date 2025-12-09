@@ -155,6 +155,8 @@ export default function InformacoesEntrega() {
     return true;
   };
 
+  const [cepBuscado, setCepBuscado] = useState(false);
+
   const handleBuscarCep = async () => {
     if (!cliente) return;
     const cepLimpo = (cliente.cep || '').replace(/\D/g, '');
@@ -174,7 +176,15 @@ export default function InformacoesEntrega() {
       updateField('bairro', data.bairro || '');
       updateField('cidade', data.localidade || '');
       updateField('estado', data.uf || '');
-      toast({ title: 'Sucesso', description: 'Endereço preenchido automaticamente' });
+      
+      // Marca que o CEP foi buscado para mostrar os campos
+      setCepBuscado(true);
+      
+      if (data.logradouro && data.bairro) {
+        toast({ title: 'Sucesso', description: 'Endereço preenchido automaticamente' });
+      } else {
+        toast({ title: 'Atenção', description: 'CEP encontrado. Preencha os campos manualmente.', variant: 'default' });
+      }
       // advance to step 2 so the user can fill number/complement and save
       setStep(2);
     } catch (err) {
@@ -318,8 +328,8 @@ export default function InformacoesEntrega() {
               </button>
             </div>
             {fieldErrors['cep'] && <div className="text-sm text-red-600 mb-2">{fieldErrors['cep']}</div>}
-            {/* Only show rest of fields after CEP lookup (endereco populated) */}
-            {cliente.endereco ? (
+            {/* Show fields after CEP is searched, regardless of what data was returned */}
+            {cepBuscado ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700">Cidade / UF</label>
                 <input className="w-full p-3 border rounded-md mb-3" value={`${cliente.cidade || ''} / ${cliente.estado || ''}`} readOnly />
@@ -344,7 +354,7 @@ export default function InformacoesEntrega() {
                 <input className="w-full p-3 border rounded-md mb-4" value={cliente.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
 
                 <div className="flex flex-col sm:flex-row justify-between gap-3">
-                  <button type="button" onClick={() => { setSubmitted(false); setStep(1); }} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>
+                  <button type="button" onClick={() => { setSubmitted(false); setCepBuscado(false); setStep(1); }} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>
                   <button type="button" onClick={handleSalvar} disabled={salvando} className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto">
                     {salvando ? 'Salvando...' : 'Enviar Formulário'}
                   </button>
