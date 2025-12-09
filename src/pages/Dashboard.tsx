@@ -19,8 +19,8 @@ interface DashboardMetrics {
   ticketMedio: number;
   pedidosHoje: number;
   pedidosEnviados: number;
-  topProdutos: { nome: string; quantidade: number; receita: number }[];
-  produtosPoucoVendidos: { nome: string; quantidade: number; receita: number }[];
+  topProdutos: { nome: string; quantidade: number; receita: number; img_url: string | null }[];
+  produtosMaiorTicket: { nome: string; quantidade: number; ticketMedio: number; receita: number; img_url: string | null }[];
   vendasPorPlataforma: { nome: string; total: number; pedidos: number; cor: string }[];
   vendasPorPlataformaPorPeriodo: { periodo: string; plataformas: { nome: string; valor: number; cor: string }[] }[];
   vendasPorStatus: { nome: string; pedidos: number; cor: string }[];
@@ -52,7 +52,7 @@ export function Dashboard() {
             id, criado_em, valor_total, data_enviado, id_melhor_envio, carrinho_me,
             plataformas(nome, cor),
             status(nome, cor_hex),
-            itens_pedido(quantidade, preco_unitario, produto:produtos(nome, sku))
+            itens_pedido(quantidade, preco_unitario, produto:produtos(nome, sku, img_url))
           `)
           .gte('criado_em', startISO)
           .lte('criado_em', endISO)
@@ -77,13 +77,14 @@ export function Dashboard() {
         const diffDays = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
         const isPeriodoCurto = diffDays <= 7;
 
-        // Top produtos e produtos pouco vendidos
-        const produtosMap: Record<string, { quantidade: number; receita: number }> = {};
+        // Top produtos e produtos com maior ticket médio
+        const produtosMap: Record<string, { quantidade: number; receita: number; img_url: string | null }> = {};
         pedidosData.forEach(p => {
           (p.itens_pedido || []).forEach((item: any) => {
             const nome = item.produto?.nome || 'Produto Desconhecido';
+            const img_url = item.produto?.img_url || null;
             if (!produtosMap[nome]) {
-              produtosMap[nome] = { quantidade: 0, receita: 0 };
+              produtosMap[nome] = { quantidade: 0, receita: 0, img_url };
             }
             produtosMap[nome].quantidade += Number(item.quantidade) || 0;
             produtosMap[nome].receita += (Number(item.quantidade) || 0) * (Number(item.preco_unitario) || 0);
@@ -91,8 +92,20 @@ export function Dashboard() {
         });
 
         const produtosArray = Object.entries(produtosMap).map(([nome, data]) => ({ nome, ...data }));
-        const topProdutos = produtosArray.sort((a, b) => b.quantidade - a.quantidade).slice(0, 10);
-        const produtosPoucoVendidos = produtosArray.sort((a, b) => a.quantidade - b.quantidade).slice(0, 10);
+        const topProdutos = produtosArray.sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
+        
+        // Produtos com maior ticket médio
+        const produtosMaiorTicket = produtosArray
+          .filter(p => p.quantidade > 0)
+          .map(p => ({
+            nome: p.nome,
+            quantidade: p.quantidade,
+            receita: p.receita,
+            ticketMedio: p.receita / p.quantidade,
+            img_url: p.img_url
+          }))
+          .sort((a, b) => b.ticketMedio - a.ticketMedio)
+          .slice(0, 5);
 
         // Vendas por plataforma (total)
         const plataformasMap: Record<string, { total: number; pedidos: number; cor: string }> = {};
@@ -150,7 +163,7 @@ export function Dashboard() {
           pedidosHoje,
           pedidosEnviados,
           topProdutos,
-          produtosPoucoVendidos,
+          produtosMaiorTicket,
           vendasPorPlataforma,
           vendasPorPlataformaPorPeriodo,
           vendasPorStatus,
@@ -474,25 +487,36 @@ export function Dashboard() {
             </CardContent>
           </Card>
 
-          {/* Top Produtos e Produtos Pouco Vendidos */}
+          {/* Top Produtos e Produtos com Maior Ticket Médio */}
           <div className="grid gap-6 md:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-green-600" />
-                  Top 10 Produtos Mais Vendidos
+                  Top 5 Produtos Mais Vendidos
                 </CardTitle>
-                <CardDescription>Produtos com melhor performance</CardDescription>
+                <CardDescription>Produtos com melhor performance em quantidade</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   {metrics.topProdutos.map((produto, idx) => (
-                    <div key={produto.nome} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                    <div key={produto.nome} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg hover:bg-accent/70 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-bold text-sm">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary text-primary-foreground font-bold text-sm shrink-0">
                           {idx + 1}
                         </div>
-                        <div>
+                        {produto.img_url ? (
+                          <img 
+                            src={produto.img_url} 
+                            alt={produto.nome}
+                            className="w-12 h-12 object-cover rounded-md shrink-0"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div className={produto.img_url ? '' : 'ml-0'}>
                           <p className="font-medium text-sm">{produto.nome}</p>
                           <p className="text-xs text-muted-foreground">{produto.quantidade} unidades</p>
                         </div>
@@ -507,22 +531,33 @@ export function Dashboard() {
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <TrendingDown className="h-5 w-5 text-orange-600" />
-                  Produtos Menos Vendidos
+                  <DollarSign className="h-5 w-5 text-blue-600" />
+                  Top 5 Produtos com Maior Ticket Médio
                 </CardTitle>
-                <CardDescription>Produtos que precisam de atenção</CardDescription>
+                <CardDescription>Produtos com maior valor médio por unidade</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {metrics.produtosPoucoVendidos.map((produto, idx) => (
-                    <div key={produto.nome} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg">
+                  {metrics.produtosMaiorTicket.map((produto, idx) => (
+                    <div key={produto.nome} className="flex items-center justify-between p-3 bg-accent/50 rounded-lg hover:bg-accent/70 transition-colors">
                       <div className="flex items-center gap-3">
-                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted text-muted-foreground font-bold text-sm">
+                        <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white font-bold text-sm shrink-0">
                           {idx + 1}
                         </div>
-                        <div>
+                        {produto.img_url ? (
+                          <img 
+                            src={produto.img_url} 
+                            alt={produto.nome}
+                            className="w-12 h-12 object-cover rounded-md shrink-0"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div className={produto.img_url ? '' : 'ml-0'}>
                           <p className="font-medium text-sm">{produto.nome}</p>
-                          <p className="text-xs text-muted-foreground">{produto.quantidade} unidades</p>
+                          <p className="text-xs text-muted-foreground">{produto.quantidade} unidades • Ticket: {formatCurrency(produto.ticketMedio)}</p>
                         </div>
                       </div>
                       <span className="font-semibold text-sm">{formatCurrency(produto.receita)}</span>
