@@ -1,0 +1,226 @@
+{
+  "event": "cart.reminder",
+  "time": "2025-01-01 10:40:38",
+  "merchant": {
+    "id": 123,
+    "alias": "lojaexemplo"
+  },
+  "resource": {
+    "id": 111111111,
+    "merchant_id": 123,
+    "customer_id": 999999,
+    "token": "cart-token-exemplo",
+    "payment_alias": null,
+    "has_recommendation": false,
+    "is_upsell": false,
+    "totalizers": {
+      "total_items": 1,
+      "subtotal": 20,
+      "discount": 0,
+      "shipment": 9.16,
+      "shipment_original_value": 9.16,
+      "shipment_discount_value": 0,
+      "shipment_discount_percent": 0,
+      "progressive_discount_value": 0,
+      "combos_discount_value": 0,
+      "total": 29.16,
+      "shipment_formated": "R$ 9,16",
+      "subtotal_formated": "R$ 20,00",
+      "discount_formated": "R$ 0,00",
+      "total_formated": "R$ 29,16"
+    },
+    "shipping_service": "CORREIOS_PAC",
+    "tracking_data": {
+      "name": "João da Silva",
+      "email": "joao@email.com"
+    },
+    "total_transactions": 0,
+    "simulate_url": "https://lojaexemplo.com.br/cart?cart_token=cart-token-exemplo&customerToken=cliente-token",
+    "unauth_simulate_url": "https://lojaexemplo.com.br/cart?cart_token=cart-token-exemplo&forceLogout=1",
+    "utm_source": null,
+    "utm_campaign": null,
+    "utm_content": null,
+    "utm_term": null,
+    "utm_medium": null,
+    "last_transaction_status": null,
+    "created_at": {
+      "date": "2025-01-01 10:37:31.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "updated_at": {
+      "date": "2025-01-01 10:37:35.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "customer": {
+      "data": {
+        "id": 999999,
+        "merchant_id": 123,
+        "active": true,
+        "type": "f",
+        "name": "João da Silva",
+        "first_name": "João",
+        "last_name": "Silva",
+        "generic_name": "João da Silva",
+        "email": "joao@email.com",
+        "cpf": "59849445025",
+        "birthday": "1990-01-01",
+        "phone": {
+          "full_number": "5500000000000",
+          "area_code": "00",
+          "number": "000000000",
+          "formated_number": "(00) 00000-0000",
+          "whatsapp_link": "https://api.whatsapp.com/send?phone=5500000000000"
+        },
+        "newsletter": false,
+        "whatsapp": false,
+        "ip": "192.168.0.1",
+        "notes": "Observação exemplo",
+        "token": "cliente-token",
+        "login_url": "https://lojaexemplo.com.br/auth/login/force?token=cliente-token",
+        "anonymized": false,
+        "created_at": {
+          "date": "2022-01-01 10:00:00.000000",
+          "timezone_type": 3,
+          "timezone": "America/Sao_Paulo"
+        },
+        "updated_at": {
+          "date": "2025-01-01 10:37:49.000000",
+          "timezone_type": 3,
+          "timezone": "America/Sao_Paulo"
+        }
+      }
+    },
+    "items": {
+      "data": [
+        {
+          "id": 555555,
+          "product_id": 111111,
+          "sku_id": 222222,
+          "quantity": 1,
+          "price": 20,
+          "gift": false,
+          "has_recomm": false,
+          "customizations": [],
+          "created_at": {
+            "date": "2025-01-01 10:37:32.000000",
+            "timezone_type": 3,
+            "timezone": "America/Sao_Paulo"
+          },
+          "updated_at": {
+            "date": "2025-01-01 10:37:32.000000",
+            "timezone_type": 3,
+            "timezone": "America/Sao_Paulo"
+          },
+          "sku": {
+            "data": {
+              "id": 222222,
+              "product_id": 111111,
+              "sku": "SKU123456",
+              "token": "sku-token-exemplo",
+              "title": "Produto Exemplo",
+              "price_cost": 17,
+              "price_sale": 8,
+              "price_discount": 20,
+              "quantity_managed": true,
+              "total_in_stock": 20,
+              "purchase_url": "https://lojaexemplo.com.br/r/sku-token-exemplo",
+              "created_at": {
+                "date": "2025-01-01 09:24:15.000000",
+                "timezone_type": 3,
+                "timezone": "America/Sao_Paulo"
+              },
+              "updated_at": {
+                "date": "2025-01-01 10:13:00.000000",
+                "timezone_type": 3,
+                "timezone": "America/Sao_Paulo"
+              },
+              "customizations": { "data": [] }
+            }
+          }
+        }
+      ]
+    },
+    "transactions": { "data": [] },
+    "spreadsheet": {
+      "data": {
+        "customer_phone": "00000000000",
+        "last_order_date": "2025-01-01",
+        "products": "Produto Exemplo",
+        "products_skus": "SKU123456",
+        "categories": "Categoria Exemplo",
+        "brands": "Marca Exemplo",
+        "purchase_url": "https://lojaexemplo.com.br/cart?cart_token=cart-token-exemplo&forceLogout=1",
+        "abandoned_step": "shippment",
+        "count_recover_mail_sent": "0/4"
+      }
+    },
+    "metadata": {
+      "data": [
+        { "key": "discount_highlight", "value": "deposit" },
+        { "key": "source_platform", "value": "purchase_link" }
+      ]
+    },
+    "search": {
+      "data": {
+        "has_shipment_service": true,
+        "has_address": true,
+        "has_customer": true,
+        "has_refused_payment": false,
+        "abandoned_step": "shippment",
+        "count_recover_mail_sent": 0,
+        "created_at": "2025-01-01",
+        "updated_at": "2025-01-01"
+      }
+    },
+    "emails": {
+      "data": [
+        {
+          "id": 1,
+          "cart_id": 111111111,
+          "promocode_id": null,
+          "turn": 1,
+          "email": "joao@email.com",
+          "fire_date": "2025-01-01 10:52:35",
+          "sent_at": null,
+          "created_at": "2025-01-01 10:38:52",
+          "updated_at": "2025-01-01 10:38:52"
+        },
+        {
+          "id": 2,
+          "cart_id": 111111111,
+          "promocode_id": null,
+          "turn": 2,
+          "email": "joao@email.com",
+          "fire_date": "2025-01-01 12:37:35",
+          "sent_at": null,
+          "created_at": "2025-01-01 10:38:52",
+          "updated_at": "2025-01-01 10:38:52"
+        },
+        {
+          "id": 3,
+          "cart_id": 111111111,
+          "promocode_id": null,
+          "turn": 3,
+          "email": "joao@email.com",
+          "fire_date": "2025-01-02 10:37:35",
+          "sent_at": null,
+          "created_at": "2025-01-01 10:38:52",
+          "updated_at": "2025-01-01 10:38:52"
+        },
+        {
+          "id": 4,
+          "cart_id": 111111111,
+          "promocode_id": null,
+          "turn": 4,
+          "email": "joao@email.com",
+          "fire_date": "2025-01-03 10:37:35",
+          "sent_at": null,
+          "created_at": "2025-01-01 10:38:52",
+          "updated_at": "2025-01-01 10:38:52"
+        }
+      ]
+    }
+  }
+}

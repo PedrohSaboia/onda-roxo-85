@@ -1,0 +1,249 @@
+{
+  "event": "order.paid",
+  "time": "2025-01-01 12:00:00",
+  "merchant": {
+    "id": 123,
+    "alias": "lojaexemplo"
+  },
+  "resource": {
+    "id": 1000001,
+    "merchant_id": 123,
+    "customer_id": 987654,
+    "status_id": 4,
+    "desire_status_id": [8, 4, 9],
+    "desire_status": ["cancelled", "paid", "refused"],
+    "promocode_id": null,
+    "marketplace_id": null,
+    "marketplace_account_id": null,
+    "authorized": false,
+    "sync_by_erp": false,
+    "has_recomm": false,
+    "has_upsell": false,
+    "has_freebie": false,
+    "has_order_bump": false,
+    "order_bump_types": [],
+    "has_payment": true,
+    "is_upsell": false,
+    "delivered": false,
+    "number": 123456789012,
+    "value_total": 199.90,
+    "buyer_value_total": 199.90,
+    "value_products": 180,
+    "value_shipment": 19.90,
+    "value_tax": 0,
+    "buyer_value_tax": 0,
+    "value_discount": 10,
+    "value_wallet_discount": 0,
+    "shipment_cost": 19.90,
+    "shipment_service": "CORREIOS_PAC",
+    "shipment_service_id": "12345",
+    "shipment_icon_url": null,
+    "shipment_quote_id": "abc123",
+    "track_code": null,
+    "track_url": null,
+    "days_delivery": 7,
+    "date_delivery": {
+      "date": "2025-01-08 00:00:00.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "cart_token": "cart-token-exemplo",
+    "utm_source": null,
+    "utm_campaign": null,
+    "utm_content": null,
+    "utm_term": null,
+    "utm_medium": null,
+    "total_comments": 0,
+    "payments": [
+      {
+        "alias": "credit_card",
+        "name": "Cartão de Crédito",
+        "icon_url": "https://icons.exemplo.com/svg/credit-card.svg"
+      }
+    ],
+    "ip": "192.168.0.1",
+    "device": "desktop",
+    "reorder_url": "https://lojaexemplo.com.br/checkout?token=cliente123",
+    "content_statement_url": "https://api.exemplo.com.br/orders/content-statement/abc123",
+    "billet_whatsapp_link": "https://api.whatsapp.com/send?phone=5500000000000&text=",
+    "billet_whatsapp_app_link": "whatsapp://send?phone=5500000000000&text=",
+    "public_url": "https://api.exemplo.com.br/public/orders/abc123",
+    "created_at": {
+      "date": "2025-01-01 12:00:00.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "updated_at": {
+      "date": "2025-01-01 12:00:00.000000",
+      "timezone_type": 3,
+      "timezone": "America/Sao_Paulo"
+    },
+    "status": {
+      "data": {
+        "id": 3,
+        "alias": "waiting_payment",
+        "name": "Aguardando pagamento",
+        "description": "Aguardando confirmação de pagamento"
+      }
+    },
+    "customer": {
+      "data": {
+        "id": 987654,
+        "merchant_id": 123,
+        "type": "f",
+        "name": "Cliente Exemplo",
+        "first_name": "Cliente",
+        "last_name": "Exemplo",
+        "email": "cliente@exemplo.com",
+        "cpf": "00000000000",
+        "birthday": "1990-01-01",
+        "phone": {
+          "full_number": "5500000000000",
+          "area_code": "00",
+          "number": "000000000",
+          "formated_number": "(00) 00000-0000",
+          "whatsapp_link": "https://api.whatsapp.com/send?phone=5500000000000"
+        },
+        "ip": "192.168.0.1",
+        "token": "cliente-token-exemplo",
+        "login_url": "https://lojaexemplo.com.br/auth/login?token=cliente-token-exemplo",
+        "anonymized": false,
+        "created_at": {
+          "date": "2022-01-01 10:00:00.000000",
+          "timezone_type": 3,
+          "timezone": "America/Sao_Paulo"
+        },
+        "updated_at": {
+          "date": "2025-01-01 11:59:59.000000",
+          "timezone_type": 3,
+          "timezone": "America/Sao_Paulo"
+        }
+      }
+    },
+    "items": {
+      "data": [
+        {
+          "id": 111,
+          "product_id": 5555,
+          "sku_id": 7777,
+          "price_cost": 150,
+          "price": 180,
+          "item_sku": "SKU123456",
+          "quantity": 1,
+          "shipment_cost": 19.90,
+          "gift": false,
+          "customizations": [],
+          "is_digital": false,
+          "sku": {
+            "data": {
+              "id": 7777,
+              "product_id": 5555,
+              "sku": "SKU123456",
+              "token": "sku-token-exemplo",
+              "title": "Produto Exemplo",
+              "price_cost": 150,
+              "price_sale": 180,
+              "price_discount": 10,
+              "purchase_url": "https://lojaexemplo.com.br/produto/sku-token-exemplo",
+              "customizations": { "data": [] }
+            }
+          }
+        }
+      ]
+    },
+    "transactions": {
+      "data": [
+        {
+          "id": 9999,
+          "customer_id": 987654,
+          "payment_id": 1,
+          "authorized": true,
+          "captured": true,
+          "amount": 199.90,
+          "installments": 1,
+          "installment_value": 199.90,
+          "status": "paid",
+          "created_at": {
+            "date": "2025-01-01 12:00:00.000000",
+            "timezone_type": 3,
+            "timezone": "America/Sao_Paulo"
+          },
+          "updated_at": {
+            "date": "2025-01-01 12:00:00.000000",
+            "timezone_type": 3,
+            "timezone": "America/Sao_Paulo"
+          },
+          "payment": {
+            "data": {
+              "id": 1,
+              "alias": "credit_card",
+              "name": "Cartão de Crédito",
+              "is_credit_card": true,
+              "is_pix": true,
+              "icon_url": "https://icons.exemplo.com/svg/credit-card.svg"
+            }
+          }
+        }
+      ]
+    },
+    "shipping_address": {
+      "data": {
+        "receiver": "Cliente Exemplo",
+        "zipcode": "00000000",
+        "street": "Rua Exemplo",
+        "number": "123",
+        "neighborhood": "Bairro Exemplo",
+        "city": "Cidade Exemplo",
+        "state": "EX",
+        "country": "BR"
+      }
+    },
+    "statuses": {
+      "data": [
+        {
+          "id": 3,
+          "alias": "waiting_payment",
+          "name": "Aguardando pagamento",
+          "description": "Aguardando confirmação de pagamento",
+          "created_at": {
+            "date": "2025-01-01 12:00:00.000000",
+            "timezone_type": 3,
+            "timezone": "America/Sao_Paulo"
+          },
+          "updated_at": {
+            "date": "2025-01-01 12:00:00.000000",
+            "timezone_type": 3,
+            "timezone": "America/Sao_Paulo"
+          }
+        }
+      ]
+    },
+    "metadata": {
+      "data": [
+        { "key": "cart_id", "value": "123456" },
+        { "key": "source_platform", "value": "checkout_link" }
+      ]
+    },
+    "spreadsheet": {
+      "data": [
+        {
+          "product": "Produto Exemplo",
+          "sku": "SKU123456",
+          "quantity": 1,
+          "total_cost": 150,
+          "total_item": 180,
+          "payment_date": "01/01/2025 12:00",
+          "customer": "Cliente Exemplo",
+          "customer_email": "cliente@exemplo.com",
+          "customer_phone": "00000000000",
+          "status": "Pagamento aprovado",
+          "payment": "Cartão de Crédito",
+          "shipping_address": "Rua Exemplo, 123 - Bairro Exemplo",
+          "shipping_city": "Cidade Exemplo",
+          "shipping_state": "Estado Exemplo",
+          "shipping_zip_code": "00000000"
+        }
+      ]
+    }
+  }
+}
