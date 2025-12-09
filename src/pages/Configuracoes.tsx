@@ -288,6 +288,97 @@ export function Configuracoes() {
     setDraggedIndex(null);
   };
 
+  // empresas state
+  type Empresa = { id?: number; nome: string; cnpj?: string; cor?: string; logo?: string };
+  const [empresas, setEmpresas] = useState<Empresa[]>([]);
+  const [loadingEmpresas, setLoadingEmpresas] = useState(false);
+  const [empresasError, setEmpresasError] = useState<string | null>(null);
+
+  const fetchEmpresas = async () => {
+    setLoadingEmpresas(true);
+    setEmpresasError(null);
+    try {
+      const { data, error } = await supabase.from('empresas').select('id, nome, cnpj, cor, logo').order('nome', { ascending: true });
+      if (error) throw error;
+      setEmpresas((data ?? []) as Empresa[]);
+    } catch (err) {
+      console.error('Erro ao buscar empresas:', err);
+      setEmpresasError(String(err));
+      setEmpresas([]);
+    } finally {
+      setLoadingEmpresas(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchEmpresas();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // create empresa state
+  const [createEmpresaOpen, setCreateEmpresaOpen] = useState(false);
+  const [createEmpresaNome, setCreateEmpresaNome] = useState('');
+  const [createEmpresaCnpj, setCreateEmpresaCnpj] = useState('');
+  const [createEmpresaCor, setCreateEmpresaCor] = useState('#6366f1');
+  const [createEmpresaFile, setCreateEmpresaFile] = useState<File | null>(null);
+  const createEmpresaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [creatingEmpresa, setCreatingEmpresa] = useState(false);
+
+  // edit empresa state
+  const [editEmpresaOpen, setEditEmpresaOpen] = useState(false);
+  const [editEmpresaId, setEditEmpresaId] = useState<number | undefined>(undefined);
+  const [editEmpresaNome, setEditEmpresaNome] = useState('');
+  const [editEmpresaCnpj, setEditEmpresaCnpj] = useState('');
+  const [editEmpresaCor, setEditEmpresaCor] = useState('#6366f1');
+  const [editEmpresaFile, setEditEmpresaFile] = useState<File | null>(null);
+  const editEmpresaFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [editingEmpresa, setEditingEmpresa] = useState(false);
+
+  // helper to format CNPJ with mask
+  const formatCNPJ = (value: string) => {
+    // Remove all non-digits
+    const digits = value.replace(/\D/g, '');
+    
+    // Limit to 14 digits
+    const limited = digits.slice(0, 14);
+    
+    // Apply mask: 00.000.000/0000-00
+    if (limited.length <= 2) {
+      return limited;
+    } else if (limited.length <= 5) {
+      return `${limited.slice(0, 2)}.${limited.slice(2)}`;
+    } else if (limited.length <= 8) {
+      return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5)}`;
+    } else if (limited.length <= 12) {
+      return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5, 8)}/${limited.slice(8)}`;
+    } else {
+      return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5, 8)}/${limited.slice(8, 12)}-${limited.slice(12)}`;
+    }
+  };
+
+  // helper to upload empresa logo
+  const uploadEmpresaLogo = async (file: File, empresaId: number) => {
+    try {
+      const parts = file.name.split('.');
+      const ext = parts.length > 1 ? parts.pop() : 'jpg';
+      const filename = `${Date.now()}.${ext}`;
+      const path = `Empresas/${empresaId}/${filename}`;
+
+      const { error: uploadErr } = await supabase.storage.from('Usuarios').upload(path, file, { upsert: true });
+      if (uploadErr) {
+        console.error('Erro upload logo:', uploadErr);
+        return null;
+      }
+
+      const pub = supabase.storage.from('Usuarios').getPublicUrl(path as string) as any;
+      const publicUrl = pub?.data?.publicUrl ?? pub?.publicUrl ?? null;
+      return publicUrl;
+    } catch (err) {
+      console.error('Erro ao enviar logo:', err);
+      return null;
+    }
+  };
+
   // helper to upload plataforma image
   const uploadPlataformaImage = async (file: File, plataformaId: string) => {
     try {
@@ -1462,17 +1553,13 @@ export function Configuracoes() {
         </Dialog>
 
         <TabsContent value="preferencias">
-          <Card>
-            <CardHeader>
-              <CardTitle>Preferências Gerais</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="empresa">Nome da Empresa</Label>
-                  <Input id="empresa" defaultValue="Tridi" />
-                </div>
-                
+          <div className="space-y-6">
+            {/* Modo Escuro Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Preferências de Aparência</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Modo Escuro</Label>
@@ -1485,14 +1572,341 @@ export function Configuracoes() {
                     onCheckedChange={setDarkMode}
                   />
                 </div>
-              </div>
-              
-              <Button className="bg-purple-600 hover:bg-purple-700">
-                Salvar Preferências
-              </Button>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+
+            {/* Empresas Card */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Empresas</CardTitle>
+                  <Dialog open={createEmpresaOpen} onOpenChange={setCreateEmpresaOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-purple-600 hover:bg-purple-700">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Nova Empresa
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Nova Empresa</DialogTitle>
+                        <DialogDescription>Cadastre uma nova empresa no sistema.</DialogDescription>
+                      </DialogHeader>
+
+                      <div className="grid gap-3">
+                        <div className="space-y-1">
+                          <Label htmlFor="nova-empresa-nome">Nome da Empresa</Label>
+                          <Input id="nova-empresa-nome" value={createEmpresaNome} onChange={(e) => setCreateEmpresaNome(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="nova-empresa-cnpj">CNPJ</Label>
+                          <Input 
+                            id="nova-empresa-cnpj" 
+                            placeholder="00.000.000/0000-00" 
+                            value={createEmpresaCnpj} 
+                            onChange={(e) => setCreateEmpresaCnpj(formatCNPJ(e.target.value))} 
+                            maxLength={18}
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="nova-empresa-cor">Cor</Label>
+                          <div className="flex items-center gap-2">
+                            <input id="nova-empresa-cor" type="color" value={createEmpresaCor} onChange={(e) => setCreateEmpresaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
+                            <Input value={createEmpresaCor} onChange={(e) => setCreateEmpresaCor(e.target.value)} />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Logo (opcional)</Label>
+                          <div
+                            onClick={() => createEmpresaFileInputRef.current?.click()}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const f = e.dataTransfer?.files?.[0];
+                              if (f) setCreateEmpresaFile(f);
+                            }}
+                            className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                          >
+                            {!createEmpresaFile ? (
+                              <div className="text-center text-sm text-muted-foreground">
+                                Clique ou arraste uma imagem aqui
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-4">
+                                <img src={createPreviewUrl(createEmpresaFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
+                                <div className="flex flex-col gap-2">
+                                  <Button variant="outline" onClick={(e) => { e.stopPropagation(); createEmpresaFileInputRef.current?.click(); }}>Trocar</Button>
+                                  <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setCreateEmpresaFile(null); }}>Remover</Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <input ref={createEmpresaFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setCreateEmpresaFile(e.target.files?.[0] ?? null)} />
+                        </div>
+                      </div>
+
+                      <DialogFooter>
+                        <Button variant="ghost" onClick={() => setCreateEmpresaOpen(false)}>Cancelar</Button>
+                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                          try {
+                            if (!createEmpresaNome) {
+                              toast({ title: 'Preencha o nome da empresa', variant: 'destructive' });
+                              return;
+                            }
+                            setCreatingEmpresa(true);
+
+                            const { data: insertData, error: insertError } = await supabase
+                              .from('empresas')
+                              .insert({ nome: createEmpresaNome, cnpj: createEmpresaCnpj || null, cor: createEmpresaCor })
+                              .select()
+                              .single();
+
+                            if (insertError) {
+                              toast({ title: 'Erro ao criar empresa', description: insertError.message || String(insertError), variant: 'destructive' });
+                              return;
+                            }
+
+                            const empresaId = insertData?.id;
+
+                            if (createEmpresaFile && empresaId) {
+                              const logoUrl = await uploadEmpresaLogo(createEmpresaFile, empresaId);
+                              if (logoUrl) {
+                                await supabase.from('empresas').update({ logo: logoUrl }).eq('id', empresaId);
+                              }
+                            }
+
+                            toast({ title: 'Empresa criada com sucesso' });
+                            await fetchEmpresas();
+                            setCreateEmpresaNome('');
+                            setCreateEmpresaCnpj('');
+                            setCreateEmpresaCor('#6366f1');
+                            setCreateEmpresaFile(null);
+                            setCreateEmpresaOpen(false);
+                          } catch (err) {
+                            console.error('Erro criar empresa:', err);
+                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                          } finally {
+                            setCreatingEmpresa(false);
+                          }
+                        }} disabled={creatingEmpresa}>{creatingEmpresa ? 'Criando...' : 'Criar Empresa'}</Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>CNPJ</TableHead>
+                      <TableHead>Cor</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingEmpresas ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-muted-foreground">Carregando empresas...</TableCell>
+                      </TableRow>
+                    ) : empresasError ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-destructive">Erro: {empresasError}</TableCell>
+                      </TableRow>
+                    ) : empresas.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-muted-foreground">Nenhuma empresa cadastrada.</TableCell>
+                      </TableRow>
+                    ) : (
+                      empresas.map((empresa) => (
+                        <TableRow key={empresa.id}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-3">
+                              {empresa.logo && (
+                                <Avatar className="h-8 w-8">
+                                  <AvatarImage src={empresa.logo} alt={empresa.nome} />
+                                  <AvatarFallback>{empresa.nome.charAt(0).toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                              )}
+                              <span>{empresa.nome}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{empresa.cnpj || '-'}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-4 h-4 rounded-full"
+                                style={{ backgroundColor: empresa.cor || '#6366f1' }}
+                              />
+                              <span className="font-mono text-sm">{empresa.cor || '#6366f1'}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="outline" size="sm" onClick={() => {
+                                setEditEmpresaId(empresa.id);
+                                setEditEmpresaNome(empresa.nome);
+                                setEditEmpresaCnpj(empresa.cnpj || '');
+                                setEditEmpresaCor(empresa.cor || '#6366f1');
+                                setEditEmpresaOpen(true);
+                              }}>
+                                Editar
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                                    <Trash className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Tem certeza que deseja deletar a empresa <strong>{empresa.nome}</strong>? Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-destructive hover:bg-destructive/90"
+                                      onClick={async () => {
+                                        try {
+                                          if (!empresa.id) {
+                                            toast({ title: 'Erro', description: 'Empresa sem ID não pode ser deletada', variant: 'destructive' });
+                                            return;
+                                          }
+                                          const { error } = await supabase.from('empresas').delete().eq('id', empresa.id);
+                                          if (error) {
+                                            toast({ title: 'Erro ao deletar empresa', description: error.message || String(error), variant: 'destructive' });
+                                          } else {
+                                            toast({ title: 'Empresa deletada', description: `${empresa.nome} foi removida do sistema.` });
+                                            await fetchEmpresas();
+                                          }
+                                        } catch (err) {
+                                          console.error('Erro ao deletar empresa:', err);
+                                          toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                        }
+                                      }}
+                                    >
+                                      Deletar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
+
+        {/* Edit Empresa Dialog */}
+        <Dialog open={editEmpresaOpen} onOpenChange={setEditEmpresaOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Empresa</DialogTitle>
+              <DialogDescription>Atualize as informações da empresa.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="edit-empresa-nome">Nome da Empresa</Label>
+                <Input id="edit-empresa-nome" value={editEmpresaNome} onChange={(e) => setEditEmpresaNome(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-empresa-cnpj">CNPJ</Label>
+                <Input 
+                  id="edit-empresa-cnpj" 
+                  placeholder="00.000.000/0000-00" 
+                  value={editEmpresaCnpj} 
+                  onChange={(e) => setEditEmpresaCnpj(formatCNPJ(e.target.value))} 
+                  maxLength={18}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-empresa-cor">Cor</Label>
+                <div className="flex items-center gap-2">
+                  <input id="edit-empresa-cor" type="color" value={editEmpresaCor} onChange={(e) => setEditEmpresaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
+                  <Input value={editEmpresaCor} onChange={(e) => setEditEmpresaCor(e.target.value)} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>Logo (opcional)</Label>
+                <div
+                  onClick={() => editEmpresaFileInputRef.current?.click()}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    const f = e.dataTransfer?.files?.[0];
+                    if (f) setEditEmpresaFile(f);
+                  }}
+                  className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                >
+                  {!editEmpresaFile ? (
+                    <div className="text-center text-sm text-muted-foreground">
+                      Clique ou arraste uma imagem aqui
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <img src={createPreviewUrl(editEmpresaFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
+                      <div className="flex flex-col gap-2">
+                        <Button variant="outline" onClick={(e) => { e.stopPropagation(); editEmpresaFileInputRef.current?.click(); }}>Trocar</Button>
+                        <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setEditEmpresaFile(null); }}>Remover</Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <input ref={editEmpresaFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setEditEmpresaFile(e.target.files?.[0] ?? null)} />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setEditEmpresaOpen(false)}>Cancelar</Button>
+              <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                try {
+                  if (!editEmpresaId) {
+                    toast({ title: 'Erro', description: 'Empresa sem id não pode ser editada', variant: 'destructive' });
+                    return;
+                  }
+                  if (!editEmpresaNome) {
+                    toast({ title: 'Preencha o nome da empresa', variant: 'destructive' });
+                    return;
+                  }
+                  setEditingEmpresa(true);
+
+                  const updateObj: any = { nome: editEmpresaNome, cnpj: editEmpresaCnpj || null, cor: editEmpresaCor };
+
+                  if (editEmpresaFile) {
+                    const logoUrl = await uploadEmpresaLogo(editEmpresaFile, editEmpresaId);
+                    if (logoUrl) {
+                      updateObj.logo = logoUrl;
+                    }
+                  }
+
+                  const { error } = await supabase.from('empresas').update(updateObj).eq('id', editEmpresaId).select();
+                  if (error) {
+                    toast({ title: 'Erro ao atualizar empresa', description: error.message || String(error), variant: 'destructive' });
+                  } else {
+                    toast({ title: 'Empresa atualizada' });
+                    await fetchEmpresas();
+                    setEditEmpresaOpen(false);
+                    setEditEmpresaFile(null);
+                  }
+                } catch (err) {
+                  console.error('Erro ao atualizar empresa:', err);
+                  toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                } finally {
+                  setEditingEmpresa(false);
+                }
+              }} disabled={editingEmpresa}>{editingEmpresa ? 'Salvando...' : 'Salvar Alterações'}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </Tabs>
     </div>
   );
