@@ -568,7 +568,11 @@ export default function Pedido() {
             postal_code: (pedido?.cliente?.cep || stored.to?.postal_code || '').replace(/\D/g, '')
           },
           options: stored.options || { insurance_value: insuranceValue, receipt: false, own_hand: false, reverse: false, non_commercial: true },
-          products: (pedido?.itens || []).map((it: any) => ({ name: it.variacao?.nome || it.produto?.nome || 'Produto', quantity: String(it.quantidade || 1), unitary_value: String(Number(it.preco_unitario || it.preco || 0).toFixed(2)) })),
+          products: (pedido?.itens || []).map((it: any) => ({ 
+            name: it.variacao?.nome ? `${it.produto?.nome} - ${it.variacao.nome}` : (it.produto?.nome || 'Produto'), 
+            quantity: String(it.quantidade || 1), 
+            unitary_value: String(Number(it.preco_unitario || it.preco || 0).toFixed(2)) 
+          })),
           service: stored.service || stored.service_id || stored.raw_response?.service || stored.raw_response?.service_id,
           volumes: stored.volumes || (selectedEmbalagem ? [{ height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, length: selectedEmbalagem.comprimento, weight: selectedEmbalagem.peso, insurance_value: insuranceValue }] : [{ height: 5, width: 20, length: 20, weight: 1, insurance_value: insuranceValue }])
         };
@@ -648,10 +652,10 @@ export default function Pedido() {
               console.log('returnTo param:', returnTo);
               if (returnTo) {
                 console.log('Navigating back to:', returnTo);
-                // Use replace: false to ensure the location change triggers properly
                 navigate(returnTo, { replace: false });
               } else {
-                navigate('/?module=comercial');
+                // Navegar para comercial ao invés de home
+                navigate('/comercial');
               }
             }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
             <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
@@ -866,11 +870,14 @@ export default function Pedido() {
                       <TableCell>
                         <div className="flex items-center gap-3">
                           {item.produto?.img_url || item.variacao?.img_url ? (
-                            <img src={item.variacao?.img_url || item.produto?.img_url} alt={item.produto?.nome || item.variacao?.nome} className="w-10 h-10 rounded" />
+                            <img src={item.variacao?.img_url || item.produto?.img_url} alt={item.produto?.nome || item.variacao?.nome} className="w-10 h-10 rounded object-cover" />
                           ) : null}
                           <div>
-                            <div className="font-medium">{item.variacao?.nome || item.produto?.nome || item.produto_id}</div>
-                            <div className="text-sm text-muted-foreground">SKU: {item.variacao?.sku || item.produto?.sku || '-'}</div>
+                            <div className="font-medium">{item.produto?.nome || 'Produto'}</div>
+                            {item.variacao?.nome && (
+                              <div className="text-sm text-muted-foreground">{item.variacao.nome}</div>
+                            )}
+                            <div className="text-xs text-muted-foreground">SKU: {item.variacao?.sku || item.produto?.sku || '-'}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -1269,7 +1276,12 @@ export default function Pedido() {
           </DialogHeader>
           <div className="py-2">
             <div className="text-sm text-muted-foreground mb-2">Você está removendo:</div>
-            <div className="font-medium mb-4">{productToRemove ? (productToRemove.variacao?.nome || productToRemove.produto?.nome || productToRemove.nome) : '—'}</div>
+            <div className="mb-4">
+              <div className="font-medium">{productToRemove?.produto?.nome || productToRemove?.nome || '—'}</div>
+              {productToRemove?.variacao?.nome && (
+                <div className="text-sm text-muted-foreground">{productToRemove.variacao.nome}</div>
+              )}
+            </div>
 
             <label className="block text-sm text-muted-foreground">Valor a subtrair do pedido</label>
             <div className="flex items-center gap-2 mt-2">
@@ -1634,9 +1646,10 @@ export default function Pedido() {
         cliente={pedido?.cliente}
         embalagem={selectedEmbalagem}
         insuranceValue={(pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1}
-        productName={(pedido?.itens && pedido.itens.length) ? (pedido.itens[0].variacao?.nome || pedido.itens[0].produto?.nome || '') : ''}
+        productName={(pedido?.itens && pedido.itens.length) ? 
+          (pedido.itens[0].variacao?.nome ? `${pedido.itens[0].produto?.nome} - ${pedido.itens[0].variacao.nome}` : (pedido.itens[0].produto?.nome || '')) : ''}
         orderProducts={(pedido?.itens || []).map((it: any) => ({
-          name: it.variacao?.nome || it.produto?.nome || 'Produto',
+          name: it.variacao?.nome ? `${it.produto?.nome} - ${it.variacao.nome}` : (it.produto?.nome || 'Produto'),
           quantity: Number(it.quantidade || 1),
           unitary_value: Number(it.preco_unitario || it.preco || 0)
         }))}
