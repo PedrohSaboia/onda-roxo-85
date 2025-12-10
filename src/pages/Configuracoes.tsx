@@ -530,7 +530,17 @@ export function Configuracoes() {
                             }
                             setCreating(true);
 
-                            const { data, error } = await supabase.auth.signUp({ email: newEmail, password: newPassword, options: { data: { nome: newNome } } });
+                            // Salvar sessão atual antes de criar o novo usuário
+                            const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+                            const { data, error } = await supabase.auth.signUp({ 
+                              email: newEmail, 
+                              password: newPassword, 
+                              options: { 
+                                data: { nome: newNome },
+                                emailRedirectTo: window.location.origin
+                              } 
+                            });
 
                             if (error) {
                               toast({ title: 'Erro ao criar autenticação', description: error.message || String(error), variant: 'destructive' });
@@ -574,6 +584,14 @@ export function Configuracoes() {
                                 toast({ title: 'Autenticação criada', description: 'Conta criada. O usuário será registrado no sistema automaticamente após confirmação de email.' });
                                 await fetchUsuarios();
                               }
+                            }
+
+                            // Restaurar a sessão original (fazer logout do novo usuário e login do admin)
+                            if (currentSession) {
+                              await supabase.auth.setSession({
+                                access_token: currentSession.access_token,
+                                refresh_token: currentSession.refresh_token
+                              });
                             }
 
                             // reset form and close
