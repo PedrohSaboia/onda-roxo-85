@@ -1321,41 +1321,83 @@ export default function Pedido() {
                 </div>
 
                 {!readonly && (
-                  <Button 
-                    onClick={async () => {
-                      if (!tempoGanho || !id) return;
-                      setSavingTempoGanho(true);
-                      try {
-                        const { error } = await supabase
-                          .from('pedidos')
-                          .update({ tempo_ganho: tempoGanho.toISOString() })
-                          .eq('id', id);
-                        
-                        if (error) throw error;
-                        
-                        toast({
-                          title: "Sucesso",
-                          description: "Tempo ganho salvo com sucesso!",
-                        });
-                        
-                        // Atualizar o pedido local
-                        setPedido((prev: any) => ({ ...prev, tempo_ganho: tempoGanho.toISOString() }));
-                      } catch (error) {
-                        console.error('Erro ao salvar tempo ganho:', error);
-                        toast({
-                          title: "Erro",
-                          description: "Não foi possível salvar o tempo ganho.",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setSavingTempoGanho(false);
-                      }
-                    }}
-                    disabled={!tempoGanho || savingTempoGanho}
-                    className="w-full bg-purple-700 hover:bg-purple-800 text-white"
-                  >
-                    {savingTempoGanho ? "Salvando..." : "Salvar Tempo Ganho"}
-                  </Button>
+                  <>
+                    {!pedido?.tempo_ganho ? (
+                      <Button 
+                        onClick={async () => {
+                          if (!tempoGanho || !id) return;
+                          setSavingTempoGanho(true);
+                          try {
+                            const { error } = await supabase
+                              .from('pedidos')
+                              .update({ tempo_ganho: tempoGanho.toISOString() })
+                              .eq('id', id);
+                            
+                            if (error) throw error;
+                            
+                            toast({
+                              title: "Sucesso",
+                              description: "Tempo ganho salvo com sucesso!",
+                            });
+                            
+                            // Atualizar o pedido local
+                            setPedido((prev: any) => ({ ...prev, tempo_ganho: tempoGanho.toISOString() }));
+                          } catch (error) {
+                            console.error('Erro ao salvar tempo ganho:', error);
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível salvar o tempo ganho.",
+                              variant: "destructive",
+                            });
+                          } finally {
+                            setSavingTempoGanho(false);
+                          }
+                        }}
+                        disabled={!tempoGanho || savingTempoGanho}
+                        className="w-full bg-purple-700 hover:bg-purple-800 text-white"
+                      >
+                        {savingTempoGanho ? "Salvando..." : "Salvar Tempo Ganho"}
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={async () => {
+                          if (!id) return;
+                          setSavingTempoGanho(true);
+                          try {
+                            const { error } = await supabase
+                              .from('pedidos')
+                              .update({ tempo_ganho: null })
+                              .eq('id', id);
+                            
+                            if (error) throw error;
+                            
+                            toast({
+                              title: "Sucesso",
+                              description: "Tempo ganho removido com sucesso!",
+                            });
+                            
+                            // Atualizar o pedido local e limpar o estado
+                            setPedido((prev: any) => ({ ...prev, tempo_ganho: null }));
+                            setTempoGanho(undefined);
+                          } catch (error) {
+                            console.error('Erro ao limpar tempo ganho:', error);
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível limpar o tempo ganho.",
+                              variant: "destructive",
+                            });
+                          } finally {
+                            setSavingTempoGanho(false);
+                          }
+                        }}
+                        disabled={savingTempoGanho}
+                        variant="destructive"
+                        className="w-full"
+                      >
+                        {savingTempoGanho ? "Limpando..." : "Limpar Tempo Ganho"}
+                      </Button>
+                    )}
+                  </>
                 )}
 
                 {pedido?.tempo_ganho && (
