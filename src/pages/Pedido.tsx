@@ -566,7 +566,7 @@ export default function Pedido() {
             postal_code: (selectedRemetente?.cep || stored.from?.postal_code || '').replace(/\D/g, '')
           },
           to: {
-            name: pedido?.cliente?.nome || stored.to?.name || '' ,
+            name: pedido?.cliente?.nome || (stored.to?.name && stored.to.name !== pedido?.idExterno ? stored.to.name : 'Cliente') || 'Cliente',
             phone: pedido?.cliente?.telefone || pedido?.cliente?.contato || stored.to?.phone || '',
             email: pedido?.cliente?.email || stored.to?.email || 'cliente@email.com',
             document: pedido?.cliente?.cpf || stored.to?.document || '',
