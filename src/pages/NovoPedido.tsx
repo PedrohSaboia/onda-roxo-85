@@ -32,7 +32,7 @@ export default function NovoPedido() {
   const [brindeSelections, setBrindeSelections] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, empresaId } = useAuth();
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   // currency strings for inputs (pt-BR), store as strings to allow comma typing
   const [valorInvestidoStr, setValorInvestidoStr] = useState<string>('0,00');
@@ -196,7 +196,8 @@ export default function NovoPedido() {
         // frete_venda column (parsed from pt-BR input)
         frete_venda: parsePtBR(freteVendaStr),
         pagamento: formaPagamento || null,
-        criado_em: criadoEm
+        criado_em: criadoEm,
+        empresa_id: empresaId || null
       };
 
       const { data: pedidoData, error: pedidoError } = await supabase.from('pedidos').insert(pedidoPayload).select('id').single();
@@ -211,7 +212,8 @@ export default function NovoPedido() {
           telefone: contato ? String(contato).replace(/\D/g, '') : null,
           link_formulario: `/${pedidoId}`,
           pedido_id: pedidoId,
-          criado_em: new Date().toISOString()
+          criado_em: new Date().toISOString(),
+          empresa_id: empresaId || null
         };
         const { error: clienteError } = await supabase.from('clientes').insert(clientePayload as any);
         if (clienteError) {
@@ -235,7 +237,8 @@ export default function NovoPedido() {
             quantidade: 1,
             preco_unitario: it.preco || 0,
             codigo_barras: it.codigo_barras || null,
-            criado_em: new Date().toISOString()
+            criado_em: new Date().toISOString(),
+            empresa_id: empresaId || null
           });
         }
         return acc;

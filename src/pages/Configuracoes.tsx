@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { mockUsuarios, mockStatus, mockPlataformas } from '@/data/mockData';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -22,6 +23,7 @@ export function Configuracoes() {
     return stored === 'true';
   });
   const { toast } = useToast();
+  const { empresaId } = useAuth();
 
   // Apply dark mode to document
   useEffect(() => {
@@ -528,7 +530,17 @@ export function Configuracoes() {
                             }
                             setCreating(true);
 
-                            const { data, error } = await supabase.auth.signUp({ email: newEmail, password: newPassword, options: { data: { nome: newNome } } });
+                            // Salvar sessão atual antes de criar o novo usuário
+                            const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+                            const { data, error } = await supabase.auth.signUp({ 
+                              email: newEmail, 
+                              password: newPassword, 
+                              options: { 
+                                data: { nome: newNome },
+                                emailRedirectTo: window.location.origin
+                              } 
+                            });
 
                             if (error) {
                               toast({ title: 'Erro ao criar autenticação', description: error.message || String(error), variant: 'destructive' });
@@ -553,6 +565,7 @@ export function Configuracoes() {
                               // upsert into usuarios with same uuid
                               const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
                               if (imgUrl) upsertObj.img_url = imgUrl;
+                              if (empresaId) upsertObj.empresa_id = empresaId;
                               const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
                               if (upsertErr) {
                                 toast({ title: 'Conta criada, mas erro ao registrar no sistema', description: upsertErr.message || String(upsertErr), variant: 'destructive' });
@@ -562,13 +575,23 @@ export function Configuracoes() {
                               }
                             } else {
                               // fallback: insert without linking id — admin will need to reconcile
-                              const { error: insErr } = await supabase.from('usuarios').insert({ nome: newNome, email: newEmail, acesso: newPapel, ativo: true }).select();
+                              const insertObj: any = { nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
+                              if (empresaId) insertObj.empresa_id = empresaId;
+                              const { error: insErr } = await supabase.from('usuarios').insert(insertObj).select();
                               if (insErr) {
                                 toast({ title: 'Erro ao inserir usuário', description: insErr.message || String(insErr), variant: 'destructive' });
                               } else {
                                 toast({ title: 'Autenticação criada', description: 'Conta criada. O usuário será registrado no sistema automaticamente após confirmação de email.' });
                                 await fetchUsuarios();
                               }
+                            }
+
+                            // Restaurar a sessão original (fazer logout do novo usuário e login do admin)
+                            if (currentSession) {
+                              await supabase.auth.setSession({
+                                access_token: currentSession.access_token,
+                                refresh_token: currentSession.refresh_token
+                              });
                             }
 
                             // reset form and close
@@ -906,7 +929,9 @@ export function Configuracoes() {
                               return;
                             }
                             setCreatingStatus(true);
-                            const { error } = await supabase.from('status').insert({ nome: createNome, cor_hex: createCor, ordem: createOrdem }).select();
+                            const insertObj: any = { nome: createNome, cor_hex: createCor, ordem: createOrdem };
+                            if (empresaId) insertObj.empresa_id = empresaId;
+                            const { error } = await supabase.from('status').insert(insertObj).select();
                             if (error) {
                               toast({ title: 'Erro ao criar status', description: error.message || String(error), variant: 'destructive' });
                             } else {
@@ -1098,9 +1123,11 @@ export function Configuracoes() {
                             setCreatingPlataforma(true);
 
                             // Insert plataforma first to get ID
+                            const insertObj: any = { nome: createPlataformaNome, cor: createPlataformaCor };
+                            if (empresaId) insertObj.empresa_id = empresaId;
                             const { data: insertData, error: insertError } = await supabase
                               .from('plataformas')
-                              .insert({ nome: createPlataformaNome, cor: createPlataformaCor })
+                              .insert(insertObj)
                               .select()
                               .single();
 
@@ -1590,231 +1617,130 @@ export function Configuracoes() {
               </CardContent>
             </Card>
 
-            {/* Empresas Card */}
+            {/* Minha Empresa Card */}
             <Card>
               <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle>Empresas</CardTitle>
-                  <Dialog open={createEmpresaOpen} onOpenChange={setCreateEmpresaOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="bg-purple-600 hover:bg-purple-700">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Nova Empresa
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Nova Empresa</DialogTitle>
-                        <DialogDescription>Cadastre uma nova empresa no sistema.</DialogDescription>
-                      </DialogHeader>
-
-                      <div className="grid gap-3">
-                        <div className="space-y-1">
-                          <Label htmlFor="nova-empresa-nome">Nome da Empresa</Label>
-                          <Input id="nova-empresa-nome" value={createEmpresaNome} onChange={(e) => setCreateEmpresaNome(e.target.value)} />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="nova-empresa-cnpj">CNPJ</Label>
-                          <Input 
-                            id="nova-empresa-cnpj" 
-                            placeholder="00.000.000/0000-00" 
-                            value={createEmpresaCnpj} 
-                            onChange={(e) => setCreateEmpresaCnpj(formatCNPJ(e.target.value))} 
-                            maxLength={18}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="nova-empresa-cor">Cor</Label>
-                          <div className="flex items-center gap-2">
-                            <input id="nova-empresa-cor" type="color" value={createEmpresaCor} onChange={(e) => setCreateEmpresaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
-                            <Input value={createEmpresaCor} onChange={(e) => setCreateEmpresaCor(e.target.value)} />
-                          </div>
-                        </div>
-                        <div className="space-y-1">
-                          <Label>Logo (opcional)</Label>
-                          <div
-                            onClick={() => createEmpresaFileInputRef.current?.click()}
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={(e) => {
-                              e.preventDefault();
-                              const f = e.dataTransfer?.files?.[0];
-                              if (f) setCreateEmpresaFile(f);
-                            }}
-                            className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
-                          >
-                            {!createEmpresaFile ? (
-                              <div className="text-center text-sm text-muted-foreground">
-                                Clique ou arraste uma imagem aqui
-                              </div>
-                            ) : (
-                              <div className="flex items-center gap-4">
-                                <img src={createPreviewUrl(createEmpresaFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
-                                <div className="flex flex-col gap-2">
-                                  <Button variant="outline" onClick={(e) => { e.stopPropagation(); createEmpresaFileInputRef.current?.click(); }}>Trocar</Button>
-                                  <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setCreateEmpresaFile(null); }}>Remover</Button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          <input ref={createEmpresaFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setCreateEmpresaFile(e.target.files?.[0] ?? null)} />
-                        </div>
-                      </div>
-
-                      <DialogFooter>
-                        <Button variant="ghost" onClick={() => setCreateEmpresaOpen(false)}>Cancelar</Button>
-                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
-                          try {
-                            if (!createEmpresaNome) {
-                              toast({ title: 'Preencha o nome da empresa', variant: 'destructive' });
-                              return;
-                            }
-                            setCreatingEmpresa(true);
-
-                            const { data: insertData, error: insertError } = await supabase
-                              .from('empresas')
-                              .insert({ nome: createEmpresaNome, cnpj: createEmpresaCnpj || null, cor: createEmpresaCor })
-                              .select()
-                              .single();
-
-                            if (insertError) {
-                              toast({ title: 'Erro ao criar empresa', description: insertError.message || String(insertError), variant: 'destructive' });
-                              return;
-                            }
-
-                            const empresaId = insertData?.id;
-
-                            if (createEmpresaFile && empresaId) {
-                              const logoUrl = await uploadEmpresaLogo(createEmpresaFile, empresaId);
-                              if (logoUrl) {
-                                await supabase.from('empresas').update({ logo: logoUrl }).eq('id', empresaId);
-                              }
-                            }
-
-                            toast({ title: 'Empresa criada com sucesso' });
-                            await fetchEmpresas();
-                            setCreateEmpresaNome('');
-                            setCreateEmpresaCnpj('');
-                            setCreateEmpresaCor('#6366f1');
-                            setCreateEmpresaFile(null);
-                            setCreateEmpresaOpen(false);
-                          } catch (err) {
-                            console.error('Erro criar empresa:', err);
-                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                          } finally {
-                            setCreatingEmpresa(false);
-                          }
-                        }} disabled={creatingEmpresa}>{creatingEmpresa ? 'Criando...' : 'Criar Empresa'}</Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
-                </div>
+                <CardTitle>Minha Empresa</CardTitle>
+                <p className="text-sm text-muted-foreground">Informações sobre meu negócio</p>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>CNPJ</TableHead>
-                      <TableHead>Cor</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loadingEmpresas ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-sm text-muted-foreground">Carregando empresas...</TableCell>
-                      </TableRow>
-                    ) : empresasError ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-sm text-destructive">Erro: {empresasError}</TableCell>
-                      </TableRow>
-                    ) : empresas.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={4} className="text-sm text-muted-foreground">Nenhuma empresa cadastrada.</TableCell>
-                      </TableRow>
-                    ) : (
-                      empresas.map((empresa) => (
-                        <TableRow key={empresa.id}>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-3">
-                              {empresa.logo && (
-                                <Avatar className="h-8 w-8">
-                                  <AvatarImage src={empresa.logo} alt={empresa.nome} />
-                                  <AvatarFallback>{empresa.nome.charAt(0).toUpperCase()}</AvatarFallback>
-                                </Avatar>
+                {loadingEmpresas ? (
+                  <div className="text-sm text-muted-foreground">Carregando...</div>
+                ) : empresasError ? (
+                  <div className="text-sm text-destructive">Erro: {empresasError}</div>
+                ) : empresas.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Nenhuma empresa cadastrada.</div>
+                ) : (
+                  <div className="space-y-6">
+                    {empresas.map((empresa) => (
+                      <div key={empresa.id} className="space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {/* Coluna Esquerda - Informações */}
+                          <div className="space-y-4">
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium">Empresa</Label>
+                              <div className="px-3 py-2 border rounded-md bg-muted text-sm">
+                                {empresa.nome}
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium">CNPJ</Label>
+                              <div className="px-3 py-2 border rounded-md bg-muted text-sm font-mono">
+                                {empresa.cnpj || '-'}
+                              </div>
+                            </div>
+                            
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium">Cor</Label>
+                              <div className="flex items-center gap-3 px-3 py-2 border rounded-md bg-muted">
+                                <div 
+                                  className="w-8 h-8 rounded-md border"
+                                  style={{ backgroundColor: empresa.cor || '#6366f1' }}
+                                />
+                                <span className="font-mono text-sm">{empresa.cor || '#6366f1'}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Coluna Direita - Logo */}
+                          <div className="space-y-2">
+                            <Label className="text-sm font-medium">Logo Marca</Label>
+                            <div className="flex items-center justify-center border-2 rounded-lg p-8 bg-muted/30 h-full min-h-[200px]">
+                              {empresa.logo ? (
+                                <img src={empresa.logo} alt={empresa.nome} className="max-w-full max-h-48 object-contain" />
+                              ) : (
+                                <div className="text-center text-muted-foreground">
+                                  <Building className="h-16 w-16 mx-auto mb-2 opacity-20" />
+                                  <p className="text-sm">Sem logo</p>
+                                </div>
                               )}
-                              <span>{empresa.nome}</span>
                             </div>
-                          </TableCell>
-                          <TableCell>{empresa.cnpj || '-'}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-4 h-4 rounded-full"
-                                style={{ backgroundColor: empresa.cor || '#6366f1' }}
-                              />
-                              <span className="font-mono text-sm">{empresa.cor || '#6366f1'}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button variant="outline" size="sm" onClick={() => {
-                                setEditEmpresaId(empresa.id);
-                                setEditEmpresaNome(empresa.nome);
-                                setEditEmpresaCnpj(empresa.cnpj || '');
-                                setEditEmpresaCor(empresa.cor || '#6366f1');
-                                setEditEmpresaOpen(true);
-                              }}>
-                                Editar
+                          </div>
+                        </div>
+
+                        {/* Botões de Ação */}
+                        <div className="flex gap-3 pt-2">
+                          <Button 
+                            variant="outline" 
+                            className="flex-1"
+                            onClick={() => {
+                              setEditEmpresaId(empresa.id);
+                              setEditEmpresaNome(empresa.nome);
+                              setEditEmpresaCnpj(empresa.cnpj || '');
+                              setEditEmpresaCor(empresa.cor || '#6366f1');
+                              setEditEmpresaOpen(true);
+                            }}
+                          >
+                            Editar Empresa
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" className="flex-1">
+                                <Trash className="h-4 w-4 mr-2" />
+                                Deletar Empresa
                               </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
-                                    <Trash className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Tem certeza que deseja deletar a empresa <strong>{empresa.nome}</strong>? Esta ação não pode ser desfeita.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      className="bg-destructive hover:bg-destructive/90"
-                                      onClick={async () => {
-                                        try {
-                                          if (!empresa.id) {
-                                            toast({ title: 'Erro', description: 'Empresa sem ID não pode ser deletada', variant: 'destructive' });
-                                            return;
-                                          }
-                                          const { error } = await supabase.from('empresas').delete().eq('id', empresa.id);
-                                          if (error) {
-                                            toast({ title: 'Erro ao deletar empresa', description: error.message || String(error), variant: 'destructive' });
-                                          } else {
-                                            toast({ title: 'Empresa deletada', description: `${empresa.nome} foi removida do sistema.` });
-                                            await fetchEmpresas();
-                                          }
-                                        } catch (err) {
-                                          console.error('Erro ao deletar empresa:', err);
-                                          toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                                        }
-                                      }}
-                                    >
-                                      Deletar
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Tem certeza que deseja deletar a empresa <strong>{empresa.nome}</strong>? Esta ação não pode ser desfeita.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive hover:bg-destructive/90"
+                                  onClick={async () => {
+                                    try {
+                                      if (!empresa.id) {
+                                        toast({ title: 'Erro', description: 'Empresa sem ID não pode ser deletada', variant: 'destructive' });
+                                        return;
+                                      }
+                                      const { error } = await supabase.from('empresas').delete().eq('id', empresa.id);
+                                      if (error) {
+                                        toast({ title: 'Erro ao deletar empresa', description: error.message || String(error), variant: 'destructive' });
+                                      } else {
+                                        toast({ title: 'Empresa deletada', description: `${empresa.nome} foi removida do sistema.` });
+                                        await fetchEmpresas();
+                                      }
+                                    } catch (err) {
+                                      console.error('Erro ao deletar empresa:', err);
+                                      toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                    }
+                                  }}
+                                >
+                                  Deletar
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
