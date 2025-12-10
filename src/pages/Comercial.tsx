@@ -460,7 +460,7 @@ export function Comercial() {
             postal_code: ((selectedRemetente as any)?.cep || stored.from?.postal_code || '').replace(/\D/g, '')
           },
           to: {
-            name: cliente?.nome || stored.to?.name || '' ,
+            name: cliente?.nome || (stored.to?.name && stored.to.name !== pedidoRow?.id_externo ? stored.to.name : 'Cliente') || '' ,
             phone: (cliente as any)?.telefone || (cliente as any)?.contato || stored.to?.phone || '',
             email: (cliente as any)?.email || stored.to?.email || 'cliente@email.com',
             document: (cliente as any)?.cpf || stored.to?.document || '',
@@ -528,7 +528,7 @@ export function Comercial() {
             postal_code: ((selectedRemetente as any)?.cep || '').replace(/\D/g, '')
           },
           to: {
-            name: cliente?.nome || '',
+            name: cliente?.nome || 'Cliente',
             phone: (cliente as any)?.telefone || (cliente as any)?.contato || '',
             email: (cliente as any)?.email || 'cliente@email.com',
             document: (cliente as any)?.cpf || '',

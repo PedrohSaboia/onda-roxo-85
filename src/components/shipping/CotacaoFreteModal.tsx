@@ -55,7 +55,7 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
           postal_code: (remetente?.cep || remetente?.postal_code || '').replace(/\D/g, '')
         },
         to: {
-          name: cliente?.nome || cliente?.name || '',
+          name: cliente?.nome || cliente?.name || 'Cliente',
           phone: cliente?.telefone || cliente?.contato || cliente?.phone || '',
           email: cliente?.email || 'cliente@email.com',
           document: cliente?.cpf || cliente?.document || '',
