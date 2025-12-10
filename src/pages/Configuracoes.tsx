@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { mockUsuarios, mockStatus, mockPlataformas } from '@/data/mockData';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
@@ -22,6 +23,7 @@ export function Configuracoes() {
     return stored === 'true';
   });
   const { toast } = useToast();
+  const { empresaId } = useAuth();
 
   // Apply dark mode to document
   useEffect(() => {
@@ -553,6 +555,7 @@ export function Configuracoes() {
                               // upsert into usuarios with same uuid
                               const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
                               if (imgUrl) upsertObj.img_url = imgUrl;
+                              if (empresaId) upsertObj.empresa_id = empresaId;
                               const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
                               if (upsertErr) {
                                 toast({ title: 'Conta criada, mas erro ao registrar no sistema', description: upsertErr.message || String(upsertErr), variant: 'destructive' });
@@ -562,7 +565,9 @@ export function Configuracoes() {
                               }
                             } else {
                               // fallback: insert without linking id — admin will need to reconcile
-                              const { error: insErr } = await supabase.from('usuarios').insert({ nome: newNome, email: newEmail, acesso: newPapel, ativo: true }).select();
+                              const insertObj: any = { nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
+                              if (empresaId) insertObj.empresa_id = empresaId;
+                              const { error: insErr } = await supabase.from('usuarios').insert(insertObj).select();
                               if (insErr) {
                                 toast({ title: 'Erro ao inserir usuário', description: insErr.message || String(insErr), variant: 'destructive' });
                               } else {
