@@ -56,6 +56,7 @@ export function Comercial() {
   const [filterEtiquetaId, setFilterEtiquetaId] = useState(urlEtiqueta);
   const [filterClienteFormNotSent, setFilterClienteFormNotSent] = useState(urlClienteForm);
   const [etiquetaCount, setEtiquetaCount] = useState<number>(0);
+  const [envioAdiadoCount, setEnvioAdiadoCount] = useState<number>(0);
   const { toast } = useToast();
   const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
@@ -63,6 +64,8 @@ export function Comercial() {
   const [filterNotLiberado, setFilterNotLiberado] = useState(urlLiberado);
   const [filterResponsavelId, setFilterResponsavelId] = useState(urlResponsavel);
   const [usuariosList, setUsuariosList] = useState<Array<{ id: string; nome: string }>>([]);
+  const urlEnvioAdiado = params.get('envio_adiado') === 'true';
+  const [filterEnvioAdiado, setFilterEnvioAdiado] = useState(urlEnvioAdiado);
   
   // Estados temporários para o modal de filtros (antes de aplicar)
   const [tempFilterNotLiberado, setTempFilterNotLiberado] = useState(urlLiberado);
@@ -79,6 +82,7 @@ export function Comercial() {
     const newClienteForm = params.get('cliente_formulario_enviado') === 'false';
     const newLiberado = params.get('pedido_liberado') === 'false';
     const newResponsavel = params.get('responsavel_id') || '';
+    const newEnvioAdiado = params.get('envio_adiado') === 'true';
     
     setPage(newPage);
     setPageSize(newPageSize);
@@ -87,6 +91,7 @@ export function Comercial() {
     setFilterClienteFormNotSent(newClienteForm);
     setFilterNotLiberado(newLiberado);
     setFilterResponsavelId(newResponsavel);
+    setFilterEnvioAdiado(newEnvioAdiado);
     
     // Sincronizar estados temporários
     setTempFilterNotLiberado(newLiberado);
@@ -113,7 +118,7 @@ export function Comercial() {
         // Query the vw_clientes_pedidos view which flattens cliente+pedido fields
         const query = (supabase as any)
           .from('vw_clientes_pedidos')
-          .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio`, { count: 'exact' })
+          .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio, tempo_ganho`, { count: 'exact' })
           .order('pedido_criado_em', { ascending: false });
 
         // apply search term server-side so pagination is based on the query
@@ -148,6 +153,11 @@ export function Comercial() {
         // apply responsavel_id filter when requested
         if (filterResponsavelId) {
           (query as any).eq('responsavel_id', filterResponsavelId);
+        }
+
+        // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
+        if (filterEnvioAdiado) {
+          (query as any).not('tempo_ganho', 'is', null);
         }
 
         // fetch small lookup tables in parallel so we can map ids to display rows
@@ -289,7 +299,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, searchTerm]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterClienteFormNotSent, searchTerm]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -327,6 +337,28 @@ export function Comercial() {
       }
     };
     loadEtiquetaCount();
+    return () => { mounted = false };
+  }, []);
+
+  // load count of pedidos with tempo_ganho filled
+  useEffect(() => {
+    let mounted = true;
+    const loadEnvioAdiadoCount = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('pedidos')
+          .select('id', { count: 'exact' })
+          .not('tempo_ganho', 'is', null)
+          .neq('status_id', ENVIADO_STATUS_ID)
+          .limit(1);
+        if (error) throw error;
+        if (!mounted) return;
+        setEnvioAdiadoCount(count || 0);
+      } catch (err) {
+        console.error('Erro ao buscar contagem de envio adiado:', err);
+      }
+    };
+    loadEnvioAdiadoCount();
     return () => { mounted = false };
   }, []);
 
@@ -799,6 +831,7 @@ export function Comercial() {
     if (filterEtiquetaId) params.set('etiqueta_envio_id', filterEtiquetaId);
     if (filterClienteFormNotSent) params.set('cliente_formulario_enviado', 'false');
     if (filterNotLiberado) params.set('pedido_liberado', 'false');
+    if (filterEnvioAdiado) params.set('envio_adiado', 'true');
     navigate({ pathname: location.pathname, search: params.toString() });
   };
 
@@ -859,7 +892,7 @@ export function Comercial() {
 
               {/* Active filter tags (appear directly below the search input) */}
               <div className="mt-2">
-                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId || !!filterResponsavelId) && (
+                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId || !!filterResponsavelId || filterEnvioAdiado) && (
                   <div className="flex flex-wrap items-center gap-2">
                     {filterNotLiberado && (
                       <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
@@ -915,6 +948,26 @@ export function Comercial() {
                             navigate({ pathname: location.pathname, search: next.toString() });
                           }}
                           aria-label="Remover filtro etiqueta pendente"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    )}
+
+                    {filterEnvioAdiado && (
+                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                        <span className="text-sm">Envio Adiado</span>
+                        <button
+                          className="text-gray-500 hover:text-gray-700"
+                          onClick={() => {
+                            setFilterEnvioAdiado(false);
+                            setPage(1);
+                            const next = new URLSearchParams(location.search);
+                            next.delete('envio_adiado');
+                            if (!next.get('module')) next.set('module', 'comercial');
+                            navigate({ pathname: location.pathname, search: next.toString() });
+                          }}
+                          aria-label="Remover filtro envio adiado"
                         >
                           ×
                         </button>
@@ -979,6 +1032,29 @@ export function Comercial() {
                     >
                       <span className="text-sm">Etiqueta Pendente</span>
                       <span className="inline-block bg-red-50 text-red-700 px-2 py-0.5 rounded text-sm">{etiquetaCount}</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={filterEnvioAdiado ? 'outline' : 'ghost'}
+                      onClick={() => {
+                        // toggle envio adiado filter and reset to page 1
+                        const next = new URLSearchParams(location.search);
+                        if (filterEnvioAdiado) {
+                          setFilterEnvioAdiado(false);
+                          next.delete('envio_adiado');
+                        } else {
+                          setFilterEnvioAdiado(true);
+                          next.set('envio_adiado', 'true');
+                        }
+                        // Ensure the module query is preserved
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        setPage(1);
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      className="ml-2 flex items-center gap-2"
+                    >
+                      <span className="text-sm">Envio Adiado</span>
+                      <span className="inline-block bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-sm">{envioAdiadoCount}</span>
                     </Button>
                   </div>
                   {showFilters && (
@@ -1546,6 +1622,7 @@ export function Comercial() {
                   if (filterEtiquetaId) params.set('etiqueta_envio_id', filterEtiquetaId);
                   if (filterClienteFormNotSent) params.set('cliente_formulario_enviado', 'false');
                   if (filterNotLiberado) params.set('pedido_liberado', 'false');
+                  if (filterEnvioAdiado) params.set('envio_adiado', 'true');
                   navigate({ pathname: location.pathname, search: params.toString() });
                 }}
                 className="border rounded px-2 py-1"

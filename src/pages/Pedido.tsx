@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy, Edit } from 'lucide-react';
+import { Trash, Copy, Edit, CalendarIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import EmbalagensManager from '@/components/shipping/EmbalagensManager';
@@ -16,6 +16,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import EditSelectModal from '@/components/modals/EditSelectModal';
 import ClientEditModal from '@/components/modals/ClientEditModal';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 function formatAddress(cliente: any) {
   if (!cliente) return '-';
@@ -97,6 +102,8 @@ export default function Pedido() {
   const [wizardPayment, setWizardPayment] = useState<string>('Pix');
   const [wizardValueStr, setWizardValueStr] = useState<string>('');
   const [wizardSaving, setWizardSaving] = useState(false);
+  const [tempoGanho, setTempoGanho] = useState<Date | undefined>(undefined);
+  const [savingTempoGanho, setSavingTempoGanho] = useState(false);
 
   const formatCurrencyBR = (n: number) => n.toFixed(2).replace('.', ',');
   const parseCurrencyBR = (s: string) => {
@@ -311,6 +318,11 @@ export default function Pedido() {
           etiqueta: etiquetaRow ? { id: etiquetaRow.id, nome: etiquetaRow.nome, corHex: etiquetaRow.cor_hex } : null,
           itens
         });
+
+        // Inicializar tempo_ganho se existir
+        if (pedidoRow.tempo_ganho) {
+          setTempoGanho(new Date(pedidoRow.tempo_ganho));
+        }
 
     // init etiqueta input
   setEtiquetaText(etiquetaRow?.nome || '');
@@ -654,11 +666,32 @@ export default function Pedido() {
                 console.log('Navigating back to:', returnTo);
                 navigate(returnTo, { replace: false });
               } else {
-                // Navegar para comercial ao invés de home
-                navigate('/comercial');
+                // Navegar para comercial com query param
+                navigate('/?module=comercial');
               }
             }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
-            <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
+              {pedido?.tempo_ganho && pedido?.criado_em && (() => {
+                const criadoEm = new Date(pedido.criado_em);
+                const tempoGanho = new Date(pedido.tempo_ganho);
+                const hoje = new Date();
+                
+                // Resetar horas para comparação apenas de datas
+                criadoEm.setHours(0, 0, 0, 0);
+                tempoGanho.setHours(0, 0, 0, 0);
+                hoje.setHours(0, 0, 0, 0);
+                
+                // Calcular dias restantes
+                const diasRestantes = Math.ceil((tempoGanho.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+                
+                return (
+                  <span className="text-red-600 font-semibold text-lg">
+                    {diasRestantes > 0 ? `${diasRestantes} ${diasRestantes === 1 ? 'dia' : 'dias'} para o envio` : 'Prazo vencido'}
+                  </span>
+                );
+              })()}
+            </div>
             <p className="text-sm text-muted-foreground">em {pedido?.criado_em ? new Date(pedido.criado_em).toLocaleString('pt-BR') : '—'}</p>
           </div>
         </div>
@@ -826,6 +859,7 @@ export default function Pedido() {
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="entrega">Entrega</TabsTrigger>
+          <TabsTrigger value="tempo-ganho">Tempo Ganho</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo">
@@ -1234,6 +1268,106 @@ export default function Pedido() {
 
             {/* Link Etiqueta moved to the top delivery info card as requested */}
           </div>
+        </TabsContent>
+
+        <TabsContent value="tempo-ganho">
+          <Card>
+            <CardHeader>
+              <CardTitle>Tempo de Entrega Ganho</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Data de hoje
+                  </label>
+                  <Input 
+                    type="text" 
+                    value={format(new Date(), "dd/MM/yyyy", { locale: ptBR })} 
+                    disabled 
+                    className="bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Até que dia ganhou de tempo para enviar o pedido?
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !tempoGanho && "text-muted-foreground"
+                        )}
+                        disabled={readonly}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {tempoGanho ? format(tempoGanho, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={tempoGanho}
+                        onSelect={setTempoGanho}
+                        locale={ptBR}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {!readonly && (
+                  <Button 
+                    onClick={async () => {
+                      if (!tempoGanho || !id) return;
+                      setSavingTempoGanho(true);
+                      try {
+                        const { error } = await supabase
+                          .from('pedidos')
+                          .update({ tempo_ganho: tempoGanho.toISOString() })
+                          .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        toast({
+                          title: "Sucesso",
+                          description: "Tempo ganho salvo com sucesso!",
+                        });
+                        
+                        // Atualizar o pedido local
+                        setPedido((prev: any) => ({ ...prev, tempo_ganho: tempoGanho.toISOString() }));
+                      } catch (error) {
+                        console.error('Erro ao salvar tempo ganho:', error);
+                        toast({
+                          title: "Erro",
+                          description: "Não foi possível salvar o tempo ganho.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setSavingTempoGanho(false);
+                      }
+                    }}
+                    disabled={!tempoGanho || savingTempoGanho}
+                    className="w-full bg-purple-700 hover:bg-purple-800 text-white"
+                  >
+                    {savingTempoGanho ? "Salvando..." : "Salvar Tempo Ganho"}
+                  </Button>
+                )}
+
+                {pedido?.tempo_ganho && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
+                    <p className="text-sm text-green-800">
+                      <strong>Tempo ganho registrado:</strong> {format(new Date(pedido.tempo_ganho), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 
