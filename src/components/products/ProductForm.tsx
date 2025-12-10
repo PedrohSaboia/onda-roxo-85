@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import EmballagemModal from '@/components/shipping/EmballagemModal';
 
 import { Produto } from '@/types';
@@ -23,6 +24,7 @@ type Variation = {
 
 export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
   const { toast } = useToast();
+  const { empresaId } = useAuth();
   const [saving, setSaving] = useState(false);
 
   const [nome, setNome] = useState('');
@@ -99,6 +101,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         embalgens_id: selectedEmbalagemId || null,
         nome_variacao: nomeVariacao || null,
         qntd: qntd === '' ? 0 : Number(qntd),
+        empresa_id: empresaId || null,
       } as any;
 
       console.log('Produto a ser inserido:', prodInsert);
@@ -124,7 +127,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
           if (vUpdErr) throw vUpdErr;
         }
 
-        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx }));
+        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx, empresa_id: empresaId || null }));
         if (news.length > 0) {
           const { error: insErr } = await supabase.from('variacoes_produto').insert(news);
           if (insErr) throw insErr;
@@ -152,6 +155,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             qntd: v.qntd ?? 0,
             codigo_barras_v: v.codigo_barras_v || null,
             ordem: v.ordem ?? idx,
+            empresa_id: empresaId || null,
           }));
 
           const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
@@ -193,7 +197,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         if (error) throw error;
         setSelectedEmbalagemId(selectedEmbalagemForModal.id);
       } else {
-        const { data: ins, error } = await supabase.from('embalagens').insert(data).select('id').single();
+        const insertData = { ...data, empresa_id: empresaId || null };
+        const { data: ins, error } = await supabase.from('embalagens').insert(insertData).select('id').single();
         if (error) throw error;
         setSelectedEmbalagemId(ins.id);
       }

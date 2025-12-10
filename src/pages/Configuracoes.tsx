@@ -929,7 +929,9 @@ export function Configuracoes() {
                               return;
                             }
                             setCreatingStatus(true);
-                            const { error } = await supabase.from('status').insert({ nome: createNome, cor_hex: createCor, ordem: createOrdem }).select();
+                            const insertObj: any = { nome: createNome, cor_hex: createCor, ordem: createOrdem };
+                            if (empresaId) insertObj.empresa_id = empresaId;
+                            const { error } = await supabase.from('status').insert(insertObj).select();
                             if (error) {
                               toast({ title: 'Erro ao criar status', description: error.message || String(error), variant: 'destructive' });
                             } else {
@@ -1121,9 +1123,11 @@ export function Configuracoes() {
                             setCreatingPlataforma(true);
 
                             // Insert plataforma first to get ID
+                            const insertObj: any = { nome: createPlataformaNome, cor: createPlataformaCor };
+                            if (empresaId) insertObj.empresa_id = empresaId;
                             const { data: insertData, error: insertError } = await supabase
                               .from('plataformas')
-                              .insert({ nome: createPlataformaNome, cor: createPlataformaCor })
+                              .insert(insertObj)
                               .select()
                               .single();
 
