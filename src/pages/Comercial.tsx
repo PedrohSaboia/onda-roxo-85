@@ -13,6 +13,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Pedido } from '@/types';
 import EditSelectModal from '@/components/modals/EditSelectModal';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 const etiquetaLabels = {
   NAO_LIBERADO: 'Não Liberado',
@@ -57,6 +61,9 @@ export function Comercial() {
   const [filterClienteFormNotSent, setFilterClienteFormNotSent] = useState(urlClienteForm);
   const [etiquetaCount, setEtiquetaCount] = useState<number>(0);
   const [envioAdiadoCount, setEnvioAdiadoCount] = useState<number>(0);
+  const [filterEnvioAdiadoDate, setFilterEnvioAdiadoDate] = useState<Date | undefined>(undefined);
+  const [showEnvioAdiadoCalendar, setShowEnvioAdiadoCalendar] = useState(false);
+  const [diasComPedidos, setDiasComPedidos] = useState<Set<string>>(new Set());
   const { toast } = useToast();
   const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
@@ -157,7 +164,18 @@ export function Comercial() {
 
         // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
         if (filterEnvioAdiado) {
-          (query as any).not('tempo_ganho', 'is', null);
+          if (filterEnvioAdiadoDate) {
+            // Filtrar pela data específica selecionada
+            const startOfDay = new Date(filterEnvioAdiadoDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(filterEnvioAdiadoDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            (query as any).gte('tempo_ganho', startOfDay.toISOString());
+            (query as any).lte('tempo_ganho', endOfDay.toISOString());
+          } else {
+            // Filtrar apenas por tempo_ganho preenchido (qualquer data)
+            (query as any).not('tempo_ganho', 'is', null);
+          }
         }
 
         // fetch small lookup tables in parallel so we can map ids to display rows
@@ -299,7 +317,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterClienteFormNotSent, searchTerm]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -359,6 +377,37 @@ export function Comercial() {
       }
     };
     loadEnvioAdiadoCount();
+    return () => { mounted = false };
+  }, []);
+
+  // load dates with tempo_ganho pedidos
+  useEffect(() => {
+    let mounted = true;
+    const loadDiasComPedidos = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('pedidos')
+          .select('tempo_ganho')
+          .not('tempo_ganho', 'is', null)
+          .neq('status_id', ENVIADO_STATUS_ID);
+        
+        if (error) throw error;
+        if (!mounted) return;
+        
+        const datas = new Set<string>();
+        data?.forEach((pedido: any) => {
+          if (pedido.tempo_ganho) {
+            const date = new Date(pedido.tempo_ganho);
+            datas.add(format(date, 'yyyy-MM-dd'));
+          }
+        });
+        
+        setDiasComPedidos(datas);
+      } catch (err) {
+        console.error('Erro ao buscar dias com pedidos:', err);
+      }
+    };
+    loadDiasComPedidos();
     return () => { mounted = false };
   }, []);
 
@@ -956,11 +1005,27 @@ export function Comercial() {
 
                     {filterEnvioAdiado && (
                       <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
-                        <span className="text-sm">Envio Adiado</span>
+                        <span className="text-sm">
+                          Envio Adiado
+                          {filterEnvioAdiadoDate && ` - ${format(filterEnvioAdiadoDate, "dd/MM/yyyy", { locale: ptBR })}`}
+                        </span>
+                        {filterEnvioAdiadoDate && (
+                          <button
+                            className="text-gray-500 hover:text-gray-700"
+                            onClick={() => {
+                              setFilterEnvioAdiadoDate(undefined);
+                              setPage(1);
+                            }}
+                            aria-label="Remover filtro de data"
+                          >
+                            ⊗
+                          </button>
+                        )}
                         <button
                           className="text-gray-500 hover:text-gray-700"
                           onClick={() => {
                             setFilterEnvioAdiado(false);
+                            setFilterEnvioAdiadoDate(undefined);
                             setPage(1);
                             const next = new URLSearchParams(location.search);
                             next.delete('envio_adiado');
@@ -1041,6 +1106,7 @@ export function Comercial() {
                         const next = new URLSearchParams(location.search);
                         if (filterEnvioAdiado) {
                           setFilterEnvioAdiado(false);
+                          setFilterEnvioAdiadoDate(undefined);
                           next.delete('envio_adiado');
                         } else {
                           setFilterEnvioAdiado(true);
@@ -1056,6 +1122,59 @@ export function Comercial() {
                       <span className="text-sm">Envio Adiado</span>
                       <span className="inline-block bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-sm">{envioAdiadoCount}</span>
                     </Button>
+                    {filterEnvioAdiado && (
+                      <Popover open={showEnvioAdiadoCalendar} onOpenChange={setShowEnvioAdiadoCalendar}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="ml-2"
+                          >
+                            {filterEnvioAdiadoDate ? format(filterEnvioAdiadoDate, "dd/MM/yyyy", { locale: ptBR }) : "Filtrar por data"}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={filterEnvioAdiadoDate}
+                            onSelect={(date) => {
+                              setFilterEnvioAdiadoDate(date);
+                              setShowEnvioAdiadoCalendar(false);
+                              setPage(1);
+                            }}
+                            locale={ptBR}
+                            modifiers={{
+                              comPedidos: (date) => {
+                                const dateStr = format(date, 'yyyy-MM-dd');
+                                return diasComPedidos.has(dateStr);
+                              }
+                            }}
+                            modifiersStyles={{
+                              comPedidos: {
+                                position: 'relative',
+                              }
+                            }}
+                            modifiersClassNames={{
+                              comPedidos: 'has-pedidos'
+                            }}
+                            initialFocus
+                          />
+                          <style>{`
+                            .has-pedidos::after {
+                              content: '';
+                              position: absolute;
+                              bottom: 2px;
+                              left: 50%;
+                              transform: translateX(-50%);
+                              width: 6px;
+                              height: 6px;
+                              background-color: #ef4444;
+                              border-radius: 50%;
+                            }
+                          `}</style>
+                        </PopoverContent>
+                      </Popover>
+                    )}
                   </div>
                   {showFilters && (
                     <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-20 p-3">
