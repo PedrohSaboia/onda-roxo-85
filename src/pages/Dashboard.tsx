@@ -3,7 +3,7 @@ import { MetricCard } from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { format, startOfMonth, subMonths, parseISO, eachDayOfInterval } from 'date-fns';
@@ -37,31 +37,43 @@ export function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
-  useEffect(() => {
-    let mounted = true;
-    const fetchMetrics = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const startISO = new Date(startDate + 'T00:00:00').toISOString();
-        const endISO = new Date(endDate + 'T23:59:59').toISOString();
+  const fetchMetrics = useCallback(async () => {
+    // Cancelar requisição anterior se existir
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
+    
+    setLoading(true);
+    setError(null);
+    try {
+      const startISO = new Date(startDate + 'T00:00:00').toISOString();
+      const endISO = new Date(endDate + 'T23:59:59').toISOString();
 
-        // Buscar pedidos com joins
-        const { data: pedidos, error: pedidosError } = await supabase
-          .from('pedidos')
-          .select(`
-            id, criado_em, valor_total, data_enviado, id_melhor_envio, carrinho_me,
-            plataformas(nome, cor),
-            status(nome, cor_hex),
-            itens_pedido(quantidade, preco_unitario, produto:produtos(nome, sku, img_url))
-          `)
-          .gte('criado_em', startISO)
-          .lte('criado_em', endISO)
-          .order('criado_em', { ascending: false });
+      // Buscar pedidos com joins - otimizado removendo campos desnecessários
+      const { data: pedidos, error: pedidosError } = await supabase
+        .from('pedidos')
+        .select(`
+          criado_em, valor_total, data_enviado, id_melhor_envio, carrinho_me,
+          plataformas(nome, cor),
+          status(nome, cor_hex),
+          itens_pedido(quantidade, preco_unitario, produto:produtos(nome, img_url))
+        `)
+        .gte('criado_em', startISO)
+        .lte('criado_em', endISO)
+        .order('criado_em', { ascending: false })
+        .abortSignal(signal);
 
-        if (pedidosError) throw pedidosError;
-        if (!mounted) return;
+      if (pedidosError) {
+        if (pedidosError.message.includes('aborted')) return;
+        throw pedidosError;
+      }
+      if (signal.aborted) return;
 
         const pedidosData = pedidos || [];
 
@@ -190,20 +202,40 @@ export function Dashboard() {
         });
 
       } catch (err: any) {
+        if (err.name === 'AbortError' || err.message?.includes('aborted')) return;
         console.error('Erro ao buscar dashboard:', err);
         setError(err?.message || String(err));
       } finally {
-        setLoading(false);
+        if (!signal.aborted) {
+          setLoading(false);
+        }
       }
-    };
-
-    fetchMetrics();
-    return () => { mounted = false };
   }, [startDate, endDate]);
 
-  const formatCurrency = (value: number) => {
+  useEffect(() => {
+    // Debounce: aguardar 300ms após última mudança de data
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+
+    debounceTimerRef.current = setTimeout(() => {
+      fetchMetrics();
+    }, 300);
+
+    // Cleanup
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, [startDate, endDate, fetchMetrics]);
+
+  const formatCurrency = useCallback((value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-  };
+  }, []);
 
   return (
     <div className="space-y-6 p-6">
