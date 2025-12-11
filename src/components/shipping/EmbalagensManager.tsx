@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import EmballagemModal from './EmballagemModal';
 
@@ -17,6 +18,7 @@ type Embalagem = {
 
 export default function EmbalagensManager() {
   const { toast } = useToast();
+  const { empresaId } = useAuth();
   const [loading, setLoading] = useState(true);
   const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -60,9 +62,10 @@ export default function EmbalagensManager() {
         toast({ title: 'Sucesso', description: 'Embalagem atualizada' });
       } else {
         // Insert
+        const insertData = { ...data, empresa_id: empresaId || null };
         const { error } = await supabase
           .from('embalagens')
-          .insert(data);
+          .insert(insertData);
         
         if (error) throw error;
         toast({ title: 'Sucesso', description: 'Embalagem criada' });

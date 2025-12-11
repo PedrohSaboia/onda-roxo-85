@@ -109,6 +109,7 @@ export interface Pedido {
   foiDuplicado?: boolean;
   criadoEm: string;
   atualizadoEm: string;
+  tempo_ganho?: string;
 }
 
 export interface DashboardMetrics {

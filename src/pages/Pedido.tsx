@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy, Edit } from 'lucide-react';
+import { Trash, Copy, Edit, CalendarIcon } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import EmbalagensManager from '@/components/shipping/EmbalagensManager';
@@ -16,6 +16,11 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 import EditSelectModal from '@/components/modals/EditSelectModal';
 import ClientEditModal from '@/components/modals/ClientEditModal';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 function formatAddress(cliente: any) {
   if (!cliente) return '-';
@@ -97,6 +102,8 @@ export default function Pedido() {
   const [wizardPayment, setWizardPayment] = useState<string>('Pix');
   const [wizardValueStr, setWizardValueStr] = useState<string>('');
   const [wizardSaving, setWizardSaving] = useState(false);
+  const [tempoGanho, setTempoGanho] = useState<Date | undefined>(undefined);
+  const [savingTempoGanho, setSavingTempoGanho] = useState(false);
 
   const formatCurrencyBR = (n: number) => n.toFixed(2).replace('.', ',');
   const parseCurrencyBR = (s: string) => {
@@ -311,6 +318,11 @@ export default function Pedido() {
           etiqueta: etiquetaRow ? { id: etiquetaRow.id, nome: etiquetaRow.nome, corHex: etiquetaRow.cor_hex } : null,
           itens
         });
+
+        // Inicializar tempo_ganho se existir
+        if (pedidoRow.tempo_ganho) {
+          setTempoGanho(new Date(pedidoRow.tempo_ganho));
+        }
 
     // init etiqueta input
   setEtiquetaText(etiquetaRow?.nome || '');
@@ -568,7 +580,11 @@ export default function Pedido() {
             postal_code: (pedido?.cliente?.cep || stored.to?.postal_code || '').replace(/\D/g, '')
           },
           options: stored.options || { insurance_value: insuranceValue, receipt: false, own_hand: false, reverse: false, non_commercial: true },
-          products: (pedido?.itens || []).map((it: any) => ({ name: it.variacao?.nome || it.produto?.nome || 'Produto', quantity: String(it.quantidade || 1), unitary_value: String(Number(it.preco_unitario || it.preco || 0).toFixed(2)) })),
+          products: (pedido?.itens || []).map((it: any) => ({ 
+            name: it.variacao?.nome ? `${it.produto?.nome} - ${it.variacao.nome}` : (it.produto?.nome || 'Produto'), 
+            quantity: String(it.quantidade || 1), 
+            unitary_value: String(Number(it.preco_unitario || it.preco || 0).toFixed(2)) 
+          })),
           service: stored.service || stored.service_id || stored.raw_response?.service || stored.raw_response?.service_id,
           volumes: stored.volumes || (selectedEmbalagem ? [{ height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, length: selectedEmbalagem.comprimento, weight: selectedEmbalagem.peso, insurance_value: insuranceValue }] : [{ height: 5, width: 20, length: 20, weight: 1, insurance_value: insuranceValue }])
         };
@@ -648,13 +664,34 @@ export default function Pedido() {
               console.log('returnTo param:', returnTo);
               if (returnTo) {
                 console.log('Navigating back to:', returnTo);
-                // Use replace: false to ensure the location change triggers properly
                 navigate(returnTo, { replace: false });
               } else {
+                // Navegar para comercial com query param
                 navigate('/?module=comercial');
               }
             }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
-            <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
+              {pedido?.tempo_ganho && pedido?.criado_em && (() => {
+                const criadoEm = new Date(pedido.criado_em);
+                const tempoGanho = new Date(pedido.tempo_ganho);
+                const hoje = new Date();
+                
+                // Resetar horas para comparação apenas de datas
+                criadoEm.setHours(0, 0, 0, 0);
+                tempoGanho.setHours(0, 0, 0, 0);
+                hoje.setHours(0, 0, 0, 0);
+                
+                // Calcular dias restantes
+                const diasRestantes = Math.ceil((tempoGanho.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+                
+                return (
+                  <span className="text-red-600 font-semibold text-lg">
+                    {diasRestantes > 0 ? `${diasRestantes} ${diasRestantes === 1 ? 'dia' : 'dias'} para o envio` : 'Prazo vencido'}
+                  </span>
+                );
+              })()}
+            </div>
             <p className="text-sm text-muted-foreground">em {pedido?.criado_em ? new Date(pedido.criado_em).toLocaleString('pt-BR') : '—'}</p>
           </div>
         </div>
@@ -822,6 +859,7 @@ export default function Pedido() {
           <TabsTrigger value="resumo">Resumo</TabsTrigger>
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="entrega">Entrega</TabsTrigger>
+          <TabsTrigger value="tempo-ganho">Tempo Ganho</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo">
@@ -866,11 +904,14 @@ export default function Pedido() {
                       <TableCell>
                         <div className="flex items-center gap-3">
                           {item.produto?.img_url || item.variacao?.img_url ? (
-                            <img src={item.variacao?.img_url || item.produto?.img_url} alt={item.produto?.nome || item.variacao?.nome} className="w-10 h-10 rounded" />
+                            <img src={item.variacao?.img_url || item.produto?.img_url} alt={item.produto?.nome || item.variacao?.nome} className="w-10 h-10 rounded object-cover" />
                           ) : null}
                           <div>
-                            <div className="font-medium">{item.variacao?.nome || item.produto?.nome || item.produto_id}</div>
-                            <div className="text-sm text-muted-foreground">SKU: {item.variacao?.sku || item.produto?.sku || '-'}</div>
+                            <div className="font-medium">{item.produto?.nome || 'Produto'}</div>
+                            {item.variacao?.nome && (
+                              <div className="text-sm text-muted-foreground">{item.variacao.nome}</div>
+                            )}
+                            <div className="text-xs text-muted-foreground">SKU: {item.variacao?.sku || item.produto?.sku || '-'}</div>
                           </div>
                         </div>
                       </TableCell>
@@ -1228,6 +1269,147 @@ export default function Pedido() {
             {/* Link Etiqueta moved to the top delivery info card as requested */}
           </div>
         </TabsContent>
+
+        <TabsContent value="tempo-ganho">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Tempo de Entrega Ganho</CardTitle>
+                {!readonly && pedido?.tempo_ganho && (
+                  <Button 
+                    onClick={async () => {
+                      if (!id) return;
+                      setSavingTempoGanho(true);
+                      try {
+                        const { error } = await supabase
+                          .from('pedidos')
+                          .update({ tempo_ganho: null })
+                          .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        toast({
+                          title: "Sucesso",
+                          description: "Tempo ganho removido com sucesso!",
+                        });
+                        
+                        // Atualizar o pedido local e limpar o estado
+                        setPedido((prev: any) => ({ ...prev, tempo_ganho: null }));
+                        setTempoGanho(undefined);
+                      } catch (error) {
+                        console.error('Erro ao limpar tempo ganho:', error);
+                        toast({
+                          title: "Erro",
+                          description: "Não foi possível limpar o tempo ganho.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setSavingTempoGanho(false);
+                      }
+                    }}
+                    disabled={savingTempoGanho}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    {savingTempoGanho ? "Limpando..." : "Limpar Tempo Ganho"}
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Data de hoje
+                  </label>
+                  <Input 
+                    type="text" 
+                    value={format(new Date(), "dd/MM/yyyy", { locale: ptBR })} 
+                    disabled 
+                    className="bg-gray-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Até que dia ganhou de tempo para enviar o pedido?
+                  </label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !tempoGanho && "text-muted-foreground"
+                        )}
+                        disabled={readonly}
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {tempoGanho ? format(tempoGanho, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={tempoGanho}
+                        onSelect={setTempoGanho}
+                        locale={ptBR}
+                        disabled={(date) => date < new Date()}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {!readonly && (
+                  <Button 
+                    onClick={async () => {
+                      if (!tempoGanho || !id) return;
+                      setSavingTempoGanho(true);
+                      try {
+                        const { error } = await supabase
+                          .from('pedidos')
+                          .update({ tempo_ganho: tempoGanho.toISOString() })
+                          .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        toast({
+                          title: "Sucesso",
+                          description: "Tempo ganho salvo com sucesso!",
+                        });
+                        
+                        // Atualizar o pedido local
+                        setPedido((prev: any) => ({ ...prev, tempo_ganho: tempoGanho.toISOString() }));
+                      } catch (error) {
+                        console.error('Erro ao salvar tempo ganho:', error);
+                        toast({
+                          title: "Erro",
+                          description: "Não foi possível salvar o tempo ganho.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setSavingTempoGanho(false);
+                      }
+                    }}
+                    disabled={!tempoGanho || savingTempoGanho}
+                    className="w-full bg-purple-700 hover:bg-purple-800 text-white"
+                  >
+                    {savingTempoGanho ? "Salvando..." : "Salvar Tempo Ganho"}
+                  </Button>
+                )}
+
+                {pedido?.tempo_ganho && (
+                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
+                    <p className="text-sm text-green-800">
+                      <strong>Tempo ganho registrado:</strong> {format(new Date(pedido.tempo_ganho), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Modais de gerenciamento */}
@@ -1269,7 +1451,12 @@ export default function Pedido() {
           </DialogHeader>
           <div className="py-2">
             <div className="text-sm text-muted-foreground mb-2">Você está removendo:</div>
-            <div className="font-medium mb-4">{productToRemove ? (productToRemove.variacao?.nome || productToRemove.produto?.nome || productToRemove.nome) : '—'}</div>
+            <div className="mb-4">
+              <div className="font-medium">{productToRemove?.produto?.nome || productToRemove?.nome || '—'}</div>
+              {productToRemove?.variacao?.nome && (
+                <div className="text-sm text-muted-foreground">{productToRemove.variacao.nome}</div>
+              )}
+            </div>
 
             <label className="block text-sm text-muted-foreground">Valor a subtrair do pedido</label>
             <div className="flex items-center gap-2 mt-2">
@@ -1634,9 +1821,10 @@ export default function Pedido() {
         cliente={pedido?.cliente}
         embalagem={selectedEmbalagem}
         insuranceValue={(pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1}
-        productName={(pedido?.itens && pedido.itens.length) ? (pedido.itens[0].variacao?.nome || pedido.itens[0].produto?.nome || '') : ''}
+        productName={(pedido?.itens && pedido.itens.length) ? 
+          (pedido.itens[0].variacao?.nome ? `${pedido.itens[0].produto?.nome} - ${pedido.itens[0].variacao.nome}` : (pedido.itens[0].produto?.nome || '')) : ''}
         orderProducts={(pedido?.itens || []).map((it: any) => ({
-          name: it.variacao?.nome || it.produto?.nome || 'Produto',
+          name: it.variacao?.nome ? `${it.produto?.nome} - ${it.variacao.nome}` : (it.produto?.nome || 'Produto'),
           quantity: Number(it.quantidade || 1),
           unitary_value: Number(it.preco_unitario || it.preco || 0)
         }))}

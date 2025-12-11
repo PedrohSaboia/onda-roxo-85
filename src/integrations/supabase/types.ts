@@ -72,6 +72,33 @@ export type Database = {
         }
         Relationships: []
       }
+      empresas: {
+        Row: {
+          id: number
+          created_at: string
+          nome: string | null
+          cnpj: string | null
+          cor: string | null
+          logo: string | null
+        }
+        Insert: {
+          id?: number
+          created_at?: string
+          nome?: string | null
+          cnpj?: string | null
+          cor?: string | null
+          logo?: string | null
+        }
+        Update: {
+          id?: number
+          created_at?: string
+          nome?: string | null
+          cnpj?: string | null
+          cor?: string | null
+          logo?: string | null
+        }
+        Relationships: []
+      }
       itens_pedido: {
         Row: {
           atualizado_em: string

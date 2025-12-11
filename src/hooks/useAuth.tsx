@@ -10,6 +10,7 @@ interface AuthContextType {
   isUserActive: boolean;
   acesso?: string | null;
   imgUrl?: string | null;
+  empresaId?: number | null;
   signUp: (email: string, password: string, nome: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<{ error: any }>;
@@ -25,6 +26,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isUserActive, setIsUserActive] = useState(false);
   const [acesso, setAcesso] = useState<string | null>(null);
   const [imgUrl, setImgUrl] = useState<string | null>(null);
+  const [empresaId, setEmpresaId] = useState<number | null>(null);
   const { toast } = useToast();
 
   // Verificar se usuário está ativo
@@ -52,19 +54,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const { data, error } = await supabase
         .from('usuarios')
-        .select('acesso, img_url')
+        .select('acesso, img_url, empresa_id')
         .eq('id', userId)
         .maybeSingle();
 
       if (error) {
         console.error('Erro ao buscar acesso do usuário:', error);
-        return { acesso: null, img_url: null };
+        return { acesso: null, img_url: null, empresa_id: null };
       }
 
-      return { acesso: data?.acesso ?? null, img_url: data?.img_url ?? null };
+      return { acesso: data?.acesso ?? null, img_url: data?.img_url ?? null, empresa_id: data?.empresa_id ?? null };
     } catch (err) {
       console.error('Erro ao buscar acesso do usuário:', err);
-      return { acesso: null, img_url: null };
+      return { acesso: null, img_url: null, empresa_id: null };
     }
   };
 
@@ -84,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const userData = await fetchAcesso(session.user.id);
               setAcesso(userData.acesso);
               setImgUrl(userData.img_url);
+              setEmpresaId(userData.empresa_id);
               
               if (!active && event === 'SIGNED_IN') {
                 toast({
@@ -102,6 +105,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setIsUserActive(false);
           setAcesso(null);
           setImgUrl(null);
+          setEmpresaId(null);
           setIsLoading(false);
         }
       }
@@ -120,6 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const userData = await fetchAcesso(session.user.id);
             setAcesso(userData.acesso);
             setImgUrl(userData.img_url);
+            setEmpresaId(userData.empresa_id);
           } catch (error) {
             console.error('Erro ao verificar status do usuário:', error);
             setIsUserActive(false);
@@ -274,6 +279,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isUserActive,
     acesso,
     imgUrl,
+    empresaId,
     signUp,
     signIn,
     signOut,
