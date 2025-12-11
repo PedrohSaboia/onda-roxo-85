@@ -102,7 +102,7 @@ export function TermoPrivacidade() {
             <h2 className="text-2xl font-semibold text-foreground mb-4">8. Menores de Idade</h2>
             <p>
               Nosso sistema não é direcionado a menores de 18 anos. Não coletamos intencionalmente 
-              informações de menores. Se tomarmos conhecimento de que coletamos dados de um menor, 
+              informações de menores. Se tomarmos conhecimento de que coletamos dados de um menor 
               tomaremos medidas para excluí-los.
             </p>
           </section>
