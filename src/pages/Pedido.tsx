@@ -566,7 +566,7 @@ export default function Pedido() {
             postal_code: (selectedRemetente?.cep || stored.from?.postal_code || '').replace(/\D/g, '')
           },
           to: {
-            name: pedido?.cliente?.nome || (stored.to?.name && stored.to.name !== pedido?.idExterno ? stored.to.name : 'Cliente') || 'Cliente',
+            name: pedido?.cliente?.nome || stored.to?.name || '' ,
             phone: pedido?.cliente?.telefone || pedido?.cliente?.contato || stored.to?.phone || '',
             email: pedido?.cliente?.email || stored.to?.email || 'cliente@email.com',
             document: pedido?.cliente?.cpf || stored.to?.document || '',
@@ -1273,7 +1273,48 @@ export default function Pedido() {
         <TabsContent value="tempo-ganho">
           <Card>
             <CardHeader>
-              <CardTitle>Tempo de Entrega Ganho</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Tempo de Entrega Ganho</CardTitle>
+                {!readonly && pedido?.tempo_ganho && (
+                  <Button 
+                    onClick={async () => {
+                      if (!id) return;
+                      setSavingTempoGanho(true);
+                      try {
+                        const { error } = await supabase
+                          .from('pedidos')
+                          .update({ tempo_ganho: null })
+                          .eq('id', id);
+                        
+                        if (error) throw error;
+                        
+                        toast({
+                          title: "Sucesso",
+                          description: "Tempo ganho removido com sucesso!",
+                        });
+                        
+                        // Atualizar o pedido local e limpar o estado
+                        setPedido((prev: any) => ({ ...prev, tempo_ganho: null }));
+                        setTempoGanho(undefined);
+                      } catch (error) {
+                        console.error('Erro ao limpar tempo ganho:', error);
+                        toast({
+                          title: "Erro",
+                          description: "Não foi possível limpar o tempo ganho.",
+                          variant: "destructive",
+                        });
+                      } finally {
+                        setSavingTempoGanho(false);
+                      }
+                    }}
+                    disabled={savingTempoGanho}
+                    variant="destructive"
+                    size="sm"
+                  >
+                    {savingTempoGanho ? "Limpando..." : "Limpar Tempo Ganho"}
+                  </Button>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-4">
