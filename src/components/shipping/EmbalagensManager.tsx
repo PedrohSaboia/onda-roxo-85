@@ -123,16 +123,17 @@ export default function EmbalagensManager() {
         <Button onClick={handleNew}>Nova Embalagem</Button>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nome</TableHead>
-              <TableHead>Dimensões (cm)</TableHead>
-              <TableHead>Peso (kg)</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
+        <div className="max-h-[60vh] overflow-y-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Nome</TableHead>
+                <TableHead>Dimensões (cm)</TableHead>
+                <TableHead>Peso (kg)</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
             {embalagens.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={4} className="text-center text-sm text-muted-foreground">
@@ -169,6 +170,7 @@ export default function EmbalagensManager() {
             )}
           </TableBody>
         </Table>
+        </div>
       </CardContent>
 
       <EmballagemModal
