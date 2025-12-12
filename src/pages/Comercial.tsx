@@ -189,6 +189,38 @@ export function Comercial() {
           }
         }
 
+        // apply produtos filter: buscar pedidos que contêm os produtos/variações selecionados
+        if (selectedProdutos.length > 0) {
+          const produtoIds = selectedProdutos.filter(p => p.tipo === 'produto').map(p => p.id);
+          const variacaoIds = selectedProdutos.filter(p => p.tipo === 'variacao').map(p => p.id);
+
+          let itemsQuery = supabase.from('itens_pedido').select('pedido_id');
+          
+          if (produtoIds.length > 0 && variacaoIds.length > 0) {
+            itemsQuery = itemsQuery.or(`produto_id.in.(${produtoIds.join(',')}),variacao_id.in.(${variacaoIds.join(',')})`);
+          } else if (produtoIds.length > 0) {
+            itemsQuery = itemsQuery.in('produto_id', produtoIds);
+          } else if (variacaoIds.length > 0) {
+            itemsQuery = itemsQuery.in('variacao_id', variacaoIds);
+          }
+
+          const { data: itemsData, error: itemsError } = await itemsQuery;
+          if (itemsError) throw itemsError;
+
+          const pedidoIds = [...new Set((itemsData || []).map((item: any) => item.pedido_id))];
+          
+          if (pedidoIds.length === 0) {
+            // Nenhum pedido encontrado com esses produtos
+            if (!mounted) return;
+            setPedidos([]);
+            setTotal(0);
+            setLoading(false);
+            return;
+          }
+
+          (query as any).in('pedido_id', pedidoIds);
+        }
+
         // fetch small lookup tables in parallel so we can map ids to display rows
         const [resLookup, resData] = await Promise.all([
           Promise.all([
@@ -328,7 +360,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm, selectedProdutos]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -468,48 +500,8 @@ export function Comercial() {
   // apply client-formulario filter client-side: only include pedidos whose cliente.formulario_enviado === false
   const filteredPedidosWithClienteFilter = filterClienteFormNotSent ? filteredPedidos.filter(p => !(p as any).formularioEnviado) : filteredPedidos;
 
-  // apply produtos filter: usar useEffect para buscar pedidos que têm os produtos selecionados
-  const [pedidosComProdutosFiltrados, setPedidosComProdutosFiltrados] = useState<string[]>([]);
-  
-  useEffect(() => {
-    if (selectedProdutos.length === 0) {
-      setPedidosComProdutosFiltrados([]);
-      return;
-    }
-
-    const buscarPedidosComProdutos = async () => {
-      try {
-        const produtoIds = selectedProdutos.filter(p => p.tipo === 'produto').map(p => p.id);
-        const variacaoIds = selectedProdutos.filter(p => p.tipo === 'variacao').map(p => p.id);
-
-        let query = supabase.from('itens_pedido').select('pedido_id');
-        
-        if (produtoIds.length > 0 && variacaoIds.length > 0) {
-          query = query.or(`produto_id.in.(${produtoIds.join(',')}),variacao_id.in.(${variacaoIds.join(',')})`);
-        } else if (produtoIds.length > 0) {
-          query = query.in('produto_id', produtoIds);
-        } else if (variacaoIds.length > 0) {
-          query = query.in('variacao_id', variacaoIds);
-        }
-
-        const { data, error } = await query;
-        
-        if (error) throw error;
-
-        const pedidoIds = [...new Set((data || []).map((item: any) => item.pedido_id))];
-        setPedidosComProdutosFiltrados(pedidoIds);
-      } catch (err) {
-        console.error('Erro ao buscar pedidos com produtos:', err);
-        setPedidosComProdutosFiltrados([]);
-      }
-    };
-
-    buscarPedidosComProdutos();
-  }, [selectedProdutos]);
-
-  const filteredPedidosComProdutos = selectedProdutos.length > 0 
-    ? filteredPedidosWithClienteFilter.filter(pedido => pedidosComProdutosFiltrados.includes(pedido.id))
-    : filteredPedidosWithClienteFilter;
+  // O filtro de produtos agora é feito no backend, então não precisamos mais fazer client-side
+  const filteredPedidosComProdutos = filteredPedidosWithClienteFilter;
 
   // Status edit modal state
   const [statusEditOpen, setStatusEditOpen] = useState(false);
