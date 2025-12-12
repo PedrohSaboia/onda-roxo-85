@@ -221,23 +221,24 @@ export function Logistica() {
           </div>
         </div>
 
-        {/* Cards: itens a enviar (view vw_itens_logistica) */}
-        <div className="mt-4">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-lg font-medium">Itens a enviar</h3>
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" onClick={() => fetchLogItems()}>Atualizar</Button>
+        {/* Cards: itens a enviar (view vw_itens_logistica) - only show when no pedido is active */}
+        {!foundPedido && (
+          <div className="mt-4">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-medium">Itens a enviar</h3>
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" onClick={() => fetchLogItems()}>Atualizar</Button>
+              </div>
             </div>
-          </div>
 
-          {loadingLogItems ? (
-            <div className="text-sm text-muted-foreground">Carregando itens de logística...</div>
-          ) : logItemsError ? (
-            <div className="text-sm text-destructive">Erro: {logItemsError}</div>
-          ) : logItems.length === 0 ? (
-            <div className="text-sm text-muted-foreground">Nenhum item pendente para logística.</div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {loadingLogItems ? (
+              <div className="text-sm text-muted-foreground">Carregando itens de logística...</div>
+            ) : logItemsError ? (
+              <div className="text-sm text-destructive">Erro: {logItemsError}</div>
+            ) : logItems.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nenhum item pendente para logística.</div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
               {logItems.map((it) => (
                 <Card key={`${it.produto_id ?? 'p'}-${it.variacao_id ?? 'v'}`} className="h-28">
                   <CardContent className="flex items-center p-4 gap-3 h-full">
@@ -261,7 +262,8 @@ export function Logistica() {
               ))}
             </div>
           )}
-        </div>
+          </div>
+        )}
 
           {/* If a pedido was found, show a single pedido card with its items */}
           {foundPedido && (
