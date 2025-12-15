@@ -19,7 +19,6 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { useAuth } from '@/hooks/useAuth';
 
 const etiquetaLabels = {
   NAO_LIBERADO: 'Não Liberado',
@@ -38,7 +37,6 @@ export function Comercial() {
   const location = useLocation();
   const { empresaId } = useAuth();
   const { toast } = useToast();
-  const { empresaId } = useAuth();
   
   // Read current values from URL
   const params = new URLSearchParams(location.search);
