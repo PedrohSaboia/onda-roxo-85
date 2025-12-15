@@ -104,18 +104,20 @@ serve(async (req)=>{
     }
     // ***** INÍCIO DA CORREÇÃO *****
     let produtoUuid = null;
+    let empresaIdFromProduto = null;
     // 1. Pega o SKU do primeiro item do carrinho
     const primeiroItemSku = resource.items?.data?.[0]?.sku?.data?.sku ?? null;
     if (primeiroItemSku) {
       // 2. Procura na sua tabela 'produtos' pelo produto com esse SKU
-      const { data: produtoEncontrado, error: produtoError } = await supabase.from("produtos").select("id") // Seleciona apenas a coluna 'id' (que é o UUID)
+      const { data: produtoEncontrado, error: produtoError } = await supabase.from("produtos").select("id, empresa_id") // Seleciona id e empresa_id
       .eq("sku", primeiroItemSku).maybeSingle();
       if (produtoError) {
         console.error("Erro ao buscar produto por SKU:", produtoError);
       }
-      // 3. Se encontrou, armazena o UUID
+      // 3. Se encontrou, armazena o UUID e empresa_id
       if (produtoEncontrado) {
         produtoUuid = produtoEncontrado.id;
+        empresaIdFromProduto = produtoEncontrado.empresa_id;
       } else {
         console.warn(`SKU '${primeiroItemSku}' do carrinho abandonado não foi encontrado na tabela 'produtos'.`);
       }
@@ -142,7 +144,8 @@ serve(async (req)=>{
       responsavel: "c569008c-f2f0-41a8-857e-109652a98ed3",
       vendido: false,
       substituido: false,
-      tag_utm: resource.utm_campaign ?? spreadsheet.utm_campaign ?? null
+      tag_utm: resource.utm_campaign ?? spreadsheet.utm_campaign ?? null,
+      empresa_id: empresaIdFromProduto
     };
     const { error } = await supabase.from("leads").insert(novoLead);
     if (error) {

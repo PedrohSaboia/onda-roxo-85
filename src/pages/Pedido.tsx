@@ -21,6 +21,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/hooks/useAuth';
 
 function formatAddress(cliente: any) {
   if (!cliente) return '-';
@@ -42,6 +43,7 @@ export default function Pedido() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const readonly = params.get('readonly') === '1' || params.get('readonly') === 'true';
+  const { user, empresaId } = useAuth();
   const [pedido, setPedido] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [statuses, setStatuses] = useState<any[]>([]);
@@ -104,6 +106,29 @@ export default function Pedido() {
   const [wizardSaving, setWizardSaving] = useState(false);
   const [tempoGanho, setTempoGanho] = useState<Date | undefined>(undefined);
   const [savingTempoGanho, setSavingTempoGanho] = useState(false);
+  // Up-sell states
+  const [upSellModalOpen, setUpSellModalOpen] = useState(false);
+  const [upSellSourceItem, setUpSellSourceItem] = useState<any | null>(null);
+  const [upSellProducts, setUpSellProducts] = useState<any[]>([]);
+  const [loadingUpSell, setLoadingUpSell] = useState(false);
+  const [selectedVariations, setSelectedVariations] = useState<Record<string, string>>({});
+  const [confirmManterOpen, setConfirmManterOpen] = useState(false);
+  const [itemToKeep, setItemToKeep] = useState<any | null>(null);
+  // Up-sell wizard states
+  const [upSellWizardOpen, setUpSellWizardOpen] = useState(false);
+  const [upSellWizardStep, setUpSellWizardStep] = useState(1);
+  const [upSellDate, setUpSellDate] = useState<string>(new Date().toISOString().slice(0,10));
+  const [upSellPayment, setUpSellPayment] = useState<string>('Pix');
+  const [upSellValueStr, setUpSellValueStr] = useState<string>('');
+  const [upSellStatus, setUpSellStatus] = useState<string>('');
+  const [statusUpSellOptions, setStatusUpSellOptions] = useState<any[]>([]);
+  const [selectedUpSellProduct, setSelectedUpSellProduct] = useState<any>(null);
+  const [savingUpSell, setSavingUpSell] = useState(false);
+  const [statusUpSellMap, setStatusUpSellMap] = useState<Record<number, string>>({});
+  const [isAumentoGratis, setIsAumentoGratis] = useState(false);
+  const [isNormalFlow, setIsNormalFlow] = useState(false);
+  const [pendingUpSellAlertOpen, setPendingUpSellAlertOpen] = useState(false);
+  const [pendingUpSellProducts, setPendingUpSellProducts] = useState<any[]>([]);
 
   const formatCurrencyBR = (n: number) => n.toFixed(2).replace('.', ',');
   const parseCurrencyBR = (s: string) => {
@@ -111,6 +136,83 @@ export default function Pedido() {
     const cleaned = String(s).replace(/R\$|\s/g, '').replace(/\./g, '').replace(/,/g, '.');
     const v = Number(cleaned);
     return isNaN(v) ? 0 : v;
+  };
+
+  // Function to check if all up_cell products are resolved and auto-liberate the order
+  // RULES:
+  // 1. If there's at least 1 product WITHOUT up_cell -> DO NOT auto-liberate (button will be shown)
+  // 2. If ALL products have up_cell -> auto-liberate when ALL exit status 1
+  // 3. Special case: If there's ONLY 1 product with up_cell (no other products) -> auto-liberate when it exits status 1
+  const checkAndAutoLiberatePedido = async (excludeItemId?: string) => {
+    if (!pedido || pedido.pedido_liberado) return;
+    
+    try {
+      // Get count of items in this order
+      const totalItens = (pedido.itens || []).length;
+      
+      // Special case: If there's only 1 item total and it's being processed, liberate directly
+      if (totalItens === 1 && excludeItemId) {
+        const singleItem = pedido.itens[0];
+        if (singleItem.produto?.up_cell && (singleItem.id === excludeItemId || singleItem._sourceIds?.includes(excludeItemId))) {
+          // Only 1 up_cell product and it's being resolved - liberate now
+          const { error } = await supabase
+            .from('pedidos')
+            .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() })
+            .eq('id', pedido.id);
+          
+          if (error) throw error;
+          
+          toast({ title: 'Pedido liberado automaticamente', description: 'Produto de up-sell foi resolvido' });
+          return;
+        }
+      }
+      
+      // Get fresh itens_pedido data from database
+      const { data: itensData, error: itensError } = await supabase
+        .from('itens_pedido')
+        .select('id, status_up_sell, produto:produtos(id, up_cell)')
+        .eq('pedido_id', pedido.id);
+      
+      if (itensError) throw itensError;
+      
+      const itens = itensData || [];
+      
+      // Count up_cell products and non-up_cell products
+      const upCellProducts = itens.filter((it: any) => it.produto?.up_cell);
+      const nonUpCellProducts = itens.filter((it: any) => !it.produto?.up_cell);
+      
+      // Rule 1: If there's at least 1 product WITHOUT up_cell -> DO NOT auto-liberate
+      // The button will be shown for the user to click manually
+      if (nonUpCellProducts.length > 0) {
+        return; // Don't auto-liberate, button will handle it
+      }
+      
+      // Rule 2 & 3: ALL products are up_cell (including special case of just 1)
+      // Check if all up_cell products are resolved (status !== 1)
+      if (upCellProducts.length > 0) {
+        const allUpCellResolved = upCellProducts.every((it: any) => {
+          // Exclude the item we just updated (it might not be reflected yet in db)
+          if (excludeItemId && it.id === excludeItemId) {
+            return true; // This one was just resolved
+          }
+          return it.status_up_sell && it.status_up_sell !== 1;
+        });
+        
+        if (allUpCellResolved) {
+          // Auto-liberate the order
+          const { error } = await supabase
+            .from('pedidos')
+            .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() })
+            .eq('id', pedido.id);
+          
+          if (error) throw error;
+          
+          toast({ title: 'Pedido liberado automaticamente', description: 'Todos os produtos de up-sell foram resolvidos' });
+        }
+      }
+    } catch (err: any) {
+      console.error('Erro ao verificar auto-liberação:', err);
+    }
   };
 
   // Load produtos for modal when opened
@@ -123,7 +225,7 @@ export default function Pedido() {
       try {
         const { data, error } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em,up_cell, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
@@ -138,6 +240,7 @@ export default function Pedido() {
           categoria: p.categoria || '',
           imagemUrl: p.img_url || undefined,
           codigo_barras: p.codigo_barras || null,
+          up_cell: p.up_cell || false,
           variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null, codigo_barras_v: v.codigo_barras_v || null })),
           nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
@@ -167,6 +270,92 @@ export default function Pedido() {
     loadProdutosModal();
     return () => { mounted = false };
   }, [addProductsVisible]);
+
+  // Load up-sell products when modal opens
+  useEffect(() => {
+    if (!upSellModalOpen || !upSellSourceItem) return;
+    let mounted = true;
+    const loadUpSellProducts = async () => {
+      setLoadingUpSell(true);
+      try {
+        const productId = upSellSourceItem.produto?.id;
+        if (!productId) return;
+        
+        // Get the product to access lista_id_upsell
+        const { data: prodData, error: prodError } = await supabase
+          .from('produtos')
+          .select('lista_id_upsell')
+          .eq('id', productId)
+          .single();
+        
+        if (prodError) throw prodError;
+        if (!mounted) return;
+        
+        const upSellIds = prodData?.lista_id_upsell || [];
+        if (upSellIds.length === 0) {
+          setUpSellProducts([]);
+          return;
+        }
+        
+        // Load the up-sell products
+        const { data: upSellData, error: upSellError } = await supabase
+          .from('produtos')
+          .select('id, nome, sku, preco, img_url, variacoes_produto(id, nome, sku, valor, img_url)')
+          .in('id', upSellIds);
+        
+        if (upSellError) throw upSellError;
+        if (!mounted) return;
+        
+        setUpSellProducts(upSellData || []);
+      } catch (err) {
+        console.error('Erro ao carregar produtos up-sell:', err);
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível carregar os produtos up-sell',
+          variant: 'destructive'
+        });
+      } finally {
+        setLoadingUpSell(false);
+      }
+    };
+    
+    loadUpSellProducts();
+    return () => { mounted = false };
+  }, [upSellModalOpen, upSellSourceItem]);
+
+  // Load status up-sell options and map
+  useEffect(() => {
+    let mounted = true;
+    const loadStatusUpSell = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('status_upsell')
+          .select('*')
+          .order('id');
+        
+        if (error) throw error;
+        if (!mounted) return;
+        
+        setStatusUpSellOptions(data || []);
+        
+        // Create map for quick lookup
+        const map: Record<number, string> = {};
+        (data || []).forEach((status: any) => {
+          map[status.id] = status.status;
+        });
+        setStatusUpSellMap(map);
+        
+        if (data && data.length > 0) {
+          setUpSellStatus(String(data[0].id));
+        }
+      } catch (err) {
+        console.error('Erro ao carregar status up-sell:', err);
+      }
+    };
+    
+    loadStatusUpSell();
+    return () => { mounted = false };
+  }, []); // Load once on mount
 
   // Tipos
   type Embalagem = {
@@ -245,6 +434,24 @@ export default function Pedido() {
             // ignore if table doesn't exist
           }
         })();
+        
+        // Load status up-sell for display in table
+        (async () => {
+          try {
+            const { data: statusData, error: statusError } = await supabase
+              .from('status_upsell')
+              .select('*');
+            if (!statusError && statusData) {
+              const map: Record<number, string> = {};
+              statusData.forEach((status: any) => {
+                map[status.id] = status.status;
+              });
+              setStatusUpSellMap(map);
+            }
+          } catch (e) {
+            // ignore if table doesn't exist
+          }
+        })();
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
         toast({ 
@@ -263,7 +470,7 @@ export default function Pedido() {
         const [{ data: pedidoData, error: pedidoError }, { data: plataformasData, error: plataformasError }, { data: statusesData, error: statusesError }, { data: usuariosData, error: usuariosError }, { data: etiquetasData, error: etiquetasError }] = await Promise.all([
           supabase
             .from('pedidos')
-            .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, produto:produtos(id,nome,sku,img_url,preco), variacao:variacoes_produto(id,nome,sku,img_url,valor))`)
+            .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, status_up_sell, produto:produtos(id,nome,sku,img_url,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,img_url,valor))`)
             .eq('id', id)
             .single(),
           supabase.from('plataformas').select('*').order('nome'),
@@ -300,14 +507,21 @@ export default function Pedido() {
         const etiquetaRow = pick(pedidoRow.tipos_etiqueta);
 
         // map itens to include produto and variacao objects when present
-        const itens = (pedidoRow.itens_pedido || []).map((it: any) => ({
-          id: it.id,
-          quantidade: it.quantidade,
-          preco_unitario: it.preco_unitario,
-          produto: it.produto || null,
-          variacao: it.variacao || null,
-          criado_em: it.criado_em,
-        }));
+        const itens = (pedidoRow.itens_pedido || []).map((it: any) => {
+          const produtoData = pick(it.produto);
+          const variacaoData = pick(it.variacao);
+          return {
+            id: it.id,
+            quantidade: it.quantidade,
+            preco_unitario: it.preco_unitario,
+            produto: produtoData || null,
+            variacao: variacaoData || null,
+            criado_em: it.criado_em,
+            produto_id: produtoData?.id || null,
+            variacao_id: variacaoData?.id || null,
+            status_up_sell: it.status_up_sell || null,
+          };
+        });
 
         setPedido({
           ...pedidoRow,
@@ -699,11 +913,32 @@ export default function Pedido() {
           <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
             {pedido?.status?.nome}
           </Badge>
-          {/* Liberar Pedido button: visible only when pedido_liberado is falsy */}
-          {!readonly && pedido && !pedido?.pedido_liberado && (
+          {/* Liberar Pedido button: visible only when pedido_liberado is falsy AND there's at least 1 product without up_cell */}
+          {!readonly && pedido && !pedido?.pedido_liberado && (() => {
+            // Check if there's at least one product that is NOT up_cell
+            const hasNonUpCellProduct = (pedido.itens || []).some((it: any) => {
+              const isUpCell = it.produto?.up_cell === true;
+              return !isUpCell;
+            });
+            // Only show button if there's at least one non-up_cell product
+            return hasNonUpCellProduct;
+          })() && (
             <Button
               onClick={async () => {
                 if (!pedido) return;
+                
+                // Check for pending up-sell products (status_up_sell === 1 or null for up_cell products)
+                const pendingProducts = (pedido.itens || []).filter((it: any) => {
+                  if (!it.produto?.up_cell) return false;
+                  return !it.status_up_sell || it.status_up_sell === 1;
+                });
+                
+                if (pendingProducts.length > 0) {
+                  setPendingUpSellProducts(pendingProducts);
+                  setPendingUpSellAlertOpen(true);
+                  return;
+                }
+                
                 try {
                   setLiberando(true);
                   const { error } = await supabase
@@ -879,14 +1114,24 @@ export default function Pedido() {
                     <TableHead>Qtd</TableHead>
                     <TableHead>Valor unit.</TableHead>
                     <TableHead>Subtotal</TableHead>
+                    <TableHead className="text-center">Up-Sell</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {pedido?.itens?.length ? (() => {
                     // group items by produto id + variacao id + preco_unitario to combine equal items
+                    // BUT DO NOT group items with up_cell=true (they must remain separate for individual up-sell)
                     const grouped: Record<string, any> = {};
+                    const ungrouped: any[] = [];
+                    
                     (pedido.itens || []).forEach((it: any) => {
+                      // If product has up_cell, don't group it
+                      if (it.produto?.up_cell) {
+                        ungrouped.push({ ...it, quantidade: Number(it.quantidade || 1), _sourceIds: [it.id] });
+                        return;
+                      }
+                      
                       const prodId = it.produto?.id || it.produto_id || '';
                       const varId = it.variacao?.id || it.variacao_id || '';
                       const price = String(it.preco_unitario ?? it.preco ?? 0);
@@ -898,7 +1143,8 @@ export default function Pedido() {
                         grouped[key]._sourceIds.push(it.id);
                       }
                     });
-                    const groupedArray = Object.values(grouped);
+                    
+                    const groupedArray = [...Object.values(grouped), ...ungrouped];
                     return groupedArray.map((item: any) => (
                     <TableRow key={item._sourceIds?.[0] || item.id}>
                       <TableCell>
@@ -919,6 +1165,49 @@ export default function Pedido() {
                       <TableCell>{item.quantidade}</TableCell>
                       <TableCell>R$ {Number(item.preco_unitario || item.produto?.preco || 0).toFixed(2)}</TableCell>
                       <TableCell>R$ {(Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 0)).toFixed(2)}</TableCell>
+                      <TableCell className="text-center">
+                        {item.produto?.up_cell ? (
+                          <div className="flex items-center justify-center gap-2">
+                            {/* Show buttons only if status_up_sell is 1 (Aguardando aumento) or null */}
+                            {(!item.status_up_sell || item.status_up_sell === 1) && (
+                              <>
+                                <Button 
+                                  size="sm" 
+                                  className="bg-green-600 hover:bg-green-700 text-white"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (readonly) return;
+                                    setIsNormalFlow(true);
+                                    setIsAumentoGratis(false);
+                                    setUpSellSourceItem(item);
+                                    setUpSellModalOpen(true);
+                                  }}
+                                >
+                                  UpSell
+                                </Button>
+                                <Button 
+                                  size="sm" 
+                                  className="bg-red-600 hover:bg-red-700 text-white"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (readonly) return;
+                                    setItemToKeep(item);
+                                    setConfirmManterOpen(true);
+                                  }}
+                                >
+                                  Manter
+                                </Button>
+                              </>
+                            )}
+                            {/* Show only badge if status is not "Aguardando aumento" */}
+                            {item.status_up_sell && item.status_up_sell !== 1 && statusUpSellMap[item.status_up_sell] && (
+                              <Badge className="bg-green-100 text-green-700 border-green-300">
+                                {statusUpSellMap[item.status_up_sell]}
+                              </Badge>
+                            )}
+                          </div>
+                        ) : null}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; /* target first source id for removal modal */ const toRemove = { ...item, id: (item._sourceIds && item._sourceIds[0]) || item.id }; setProductToRemove(toRemove); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
@@ -1473,7 +1762,8 @@ export default function Pedido() {
                 if (!productToRemove || !pedido) return;
                 setRemovingItem(true);
                 try {
-                  // delete item
+                  // Simply delete the item - no need to reset status
+                  // When re-added, it will be a NEW item with "Aguardando aumento"
                   const { error: delErr } = await supabase.from('itens_pedido').delete().eq('id', productToRemove.id);
                   if (delErr) throw delErr;
 
@@ -1558,7 +1848,7 @@ export default function Pedido() {
                         setModalCart(prev => {
                           const existing = prev.find(i => i.id === itemId && !!i.brinde === !!brindeSelectionsModal[p.id]);
                           if (existing) return prev.map(i => i.id === itemId ? { ...i, quantidade: i.quantidade + 1 } : i);
-                          return [...prev, { id: itemId, produtoId: p.id, nome: p.nome, quantidade, preco: unitario, imagemUrl: p.imagemUrl, codigo_barras: barcode, brinde: !!brindeSelectionsModal[p.id] }];
+                          return [...prev, { id: itemId, produtoId: p.id, nome: p.nome, quantidade, preco: unitario, imagemUrl: p.imagemUrl, codigo_barras: barcode, brinde: !!brindeSelectionsModal[p.id], up_cell: p.up_cell || false }];
                         });
                       }}>+</Button>
                     </div>
@@ -1717,21 +2007,45 @@ export default function Pedido() {
                     const providedValue = parseCurrencyBR(wizardValueStr);
                     setWizardSaving(true);
                     try {
+                      // Get "Aguardando aumento" status ID
+                      let aguardandoAumentoId: number | null = null;
+                      try {
+                        const { data: statusData } = await supabase
+                          .from('status_upsell')
+                          .select('id')
+                          .eq('status', 'Aguardando aumento')
+                          .single();
+                        
+                        if (statusData) {
+                          aguardandoAumentoId = statusData.id;
+                        }
+                      } catch (err) {
+                        console.warn('Status "Aguardando aumento" não encontrado:', err);
+                      }
+                      
                       // Build inserts: expand quantities into individual rows (one per unit)
                       const inserts: any[] = [];
                       modalCart.forEach((it) => {
                         const [produtoId, variacaoId] = String(it.id).split(':');
                         const qty = Number(it.quantidade || 1);
                         for (let k = 0; k < qty; k++) {
-                          inserts.push({
+                          const insertItem: any = {
                             pedido_id: pedido.id,
                             produto_id: it.produtoId || produtoId,
                             variacao_id: variacaoId || null,
                             quantidade: 1,
                             preco_unitario: it.preco || 0,
                             codigo_barras: it.codigo_barras || null,
-                            criado_em: new Date().toISOString()
-                          });
+                            criado_em: new Date().toISOString(),
+                            empresa_id: empresaId || null
+                          };
+                          
+                          // Add "Aguardando aumento" status if product has up_cell
+                          if (it.up_cell && aguardandoAumentoId) {
+                            insertItem.status_up_sell = aguardandoAumentoId;
+                          }
+                          
+                          inserts.push(insertItem);
                         }
                       });
 
@@ -1884,6 +2198,707 @@ export default function Pedido() {
             >
               Salvar
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Up-Sell */}
+      <Dialog open={upSellModalOpen} onOpenChange={setUpSellModalOpen}>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-base">Selecionar Produto Up-Sell</DialogTitle>
+          </DialogHeader>
+
+          <div className="flex-1 overflow-y-auto space-y-3 py-2">
+            {loadingUpSell ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-sm text-muted-foreground">Carregando produtos...</p>
+              </div>
+            ) : upSellProducts.length === 0 ? (
+              <div className="flex items-center justify-center py-12">
+                <p className="text-sm text-muted-foreground">Nenhum produto up-sell configurado</p>
+              </div>
+            ) : (
+              upSellProducts.map((prod) => {
+                const hasVariations = prod.variacoes_produto && prod.variacoes_produto.length > 0;
+                const selectedVarId = selectedVariations[prod.id] || (hasVariations ? prod.variacoes_produto[0].id : null);
+                const selectedVar = hasVariations ? prod.variacoes_produto.find((v: any) => v.id === selectedVarId) : null;
+                const displayPrice = selectedVar ? selectedVar.valor : prod.preco;
+                
+                return (
+                  <div
+                    key={prod.id}
+                    className="border rounded-lg p-3 border-gray-300"
+                  >
+                    <div className="flex items-start gap-3">
+                      {(selectedVar?.img_url || prod.img_url) ? (
+                        <div className="w-14 h-14 flex-shrink-0">
+                          <img
+                            src={selectedVar?.img_url || prod.img_url}
+                            alt={prod.nome}
+                            className="w-full h-full object-cover rounded border"
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-14 h-14 flex-shrink-0 bg-gray-100 rounded border flex items-center justify-center">
+                          <span className="text-gray-400 text-[10px]">Sem imagem</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm text-gray-900 break-words line-clamp-2 leading-tight">{prod.nome}</div>
+                        
+                        {hasVariations && (
+                          <div className="mt-2">
+                            <label className="text-[10px] text-gray-600 mb-1 block">
+                              Selecione a variação:
+                            </label>
+                            <select
+                              className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gray-400"
+                              value={selectedVarId || ''}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                setSelectedVariations(prev => ({
+                                  ...prev,
+                                  [prod.id]: e.target.value
+                                }));
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {prod.variacoes_produto.map((v: any) => (
+                                <option key={v.id} value={v.id}>
+                                  {v.nome} - R$ {Number(v.valor || 0).toFixed(2)}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        
+                        <div className="mt-3 flex flex-col gap-2">
+                          <Button
+                            size="sm"
+                            className="w-full bg-green-600 hover:bg-green-700 text-white text-xs py-2"
+                            onClick={() => {
+                              // Store selected product and open wizard
+                              const selectedProduct = {
+                                ...prod,
+                                selectedVariationId: selectedVarId,
+                                selectedVariation: selectedVar,
+                                displayPrice: displayPrice
+                              };
+                              setSelectedUpSellProduct(selectedProduct);
+                              
+                              // Calculate the price difference for wizard
+                              const originalPrice = Number(upSellSourceItem.preco_unitario || upSellSourceItem.produto?.preco || 0);
+                              const newPrice = Number(displayPrice || 0);
+                              const difference = newPrice - originalPrice;
+                              
+                              // Set wizard initial values for normal flow
+                              setUpSellValueStr(formatCurrencyBR(Math.abs(difference)));
+                              setUpSellDate(new Date().toISOString().slice(0,10));
+                              setUpSellPayment('Pix');
+                              setUpSellWizardStep(1);
+                              setIsNormalFlow(true);
+                              setIsAumentoGratis(false);
+                              
+                              // Close product selection modal and open wizard
+                              setUpSellModalOpen(false);
+                              setUpSellWizardOpen(true);
+                            }}
+                          >
+                            Próxima etapa
+                          </Button>
+                          
+                          <button
+                            className="text-xs text-gray-700 underline hover:text-gray-900"
+                            onClick={() => {
+                              // Store selected product and open wizard
+                              const selectedProduct = {
+                                ...prod,
+                                selectedVariationId: selectedVarId,
+                                selectedVariation: selectedVar,
+                                displayPrice: displayPrice
+                              };
+                              setSelectedUpSellProduct(selectedProduct);
+                              
+                              // Set wizard initial values for aumento grátis
+                              setUpSellDate(new Date().toISOString().slice(0,10));
+                              setUpSellWizardStep(1);
+                              setIsAumentoGratis(true);
+                              setIsNormalFlow(false);
+                              
+                              // Close product selection modal and open wizard
+                              setUpSellModalOpen(false);
+                              setUpSellWizardOpen(true);
+                            }}
+                          >
+                            upsell gratuito
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setUpSellModalOpen(false);
+                setUpSellSourceItem(null);
+                setSelectedVariations({});
+              }}
+            >
+              Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Alerta Up-Sell Pendente */}
+      <Dialog open={pendingUpSellAlertOpen} onOpenChange={setPendingUpSellAlertOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">⚠️ Produtos com Up-Sell Pendente</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-gray-600 mb-4">
+              Não é possível liberar o pedido. Os seguintes produtos estão com up-sell pendente:
+            </p>
+            <ul className="space-y-2">
+              {pendingUpSellProducts.map((item: any, index: number) => (
+                <li key={index} className="flex items-center gap-2 p-2 bg-orange-50 rounded border border-orange-200">
+                  {item.produto?.img_url && (
+                    <img src={item.produto.img_url} alt={item.produto?.nome} className="w-8 h-8 rounded object-cover" />
+                  )}
+                  <div>
+                    <span className="font-medium">{item.produto?.nome || 'Produto'}</span>
+                    {item.variacao?.nome && (
+                      <span className="text-sm text-gray-500 ml-1">({item.variacao.nome})</span>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <p className="text-sm text-gray-500 mt-4">
+              Por favor, resolva o up-sell de cada produto (UpSell ou Manter) antes de liberar o pedido.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setPendingUpSellAlertOpen(false);
+                setPendingUpSellProducts([]);
+              }}
+            >
+              Entendi
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Confirmação Manter */}
+      <Dialog open={confirmManterOpen} onOpenChange={setConfirmManterOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Manter Produto</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-gray-600">
+              Tem certeza que deseja manter o produto <strong>{itemToKeep?.produto?.nome}</strong> sem fazer up-sell?
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmManterOpen(false);
+                setItemToKeep(null);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={async () => {
+                try {
+                  const itemId = itemToKeep._sourceIds?.[0] || itemToKeep.id;
+                  
+                  // Set status to "Não aumentado" (ID 2)
+                  const { error } = await supabase
+                    .from('itens_pedido')
+                    .update({ status_up_sell: 2 })
+                    .eq('id', itemId);
+                  
+                  if (error) throw error;
+                  
+                  // Register metric
+                  await supabase.from('metricas_upsell').insert({
+                    responsavel_id: user?.id || null,
+                    status_upsell: 2,
+                    pedido_id: pedido?.id || null,
+                    produto_base: itemToKeep.produto?.id || null,
+                    produto_upsell: null, // No up-sell, kept original
+                    variacao_base: itemToKeep.variacao?.id || null,
+                    variacao_upsell: null,
+                    produto_base_nome: itemToKeep.produto?.nome || null,
+                    produto_upsell_nome: null,
+                    variacao_base_nome: itemToKeep.variacao?.nome || null,
+                    variacao_upsell_nome: null,
+                    empresa_id: empresaId || null,
+                  });
+                  
+                  toast({
+                    title: 'Produto mantido',
+                    description: 'O produto original foi mantido no pedido',
+                  });
+                  
+                  // Check if all up_cell products are now resolved and auto-liberate
+                  await checkAndAutoLiberatePedido(itemId);
+                  
+                  setConfirmManterOpen(false);
+                  setItemToKeep(null);
+                  navigate(0);
+                } catch (err: any) {
+                  console.error('Erro ao manter produto:', err);
+                  toast({
+                    title: 'Erro',
+                    description: err?.message || 'Não foi possível manter o produto',
+                    variant: 'destructive',
+                  });
+                }
+              }}
+            >
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Wizard Up-Sell: Data -> Forma de Pagamento -> Valor -> Status Up-Sell */}
+      <Dialog open={upSellWizardOpen} onOpenChange={setUpSellWizardOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {isAumentoGratis ? 'Selecionar Data do Aumento Grátis' :
+               isNormalFlow ? (
+                 upSellWizardStep === 1 ? 'Selecionar Data' : 
+                 upSellWizardStep === 2 ? 'Selecionar Forma de Pagamento' : 
+                 'Definir Valor'
+               ) :
+               upSellWizardStep === 1 ? 'Selecionar Data' : 
+               upSellWizardStep === 2 ? 'Selecionar Forma de Pagamento' : 
+               upSellWizardStep === 3 ? 'Definir Valor' : 
+               'Tipo de Up-Sell'
+              }
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4">
+            {/* Step indicator */}
+            {isAumentoGratis ? (
+              <div className="flex items-center justify-center mb-4 text-xs">
+                <div className="font-semibold text-blue-600 cursor-pointer hover:underline" onClick={() => setUpSellWizardStep(1)}>Data</div>
+              </div>
+            ) : isNormalFlow ? (
+              <div className="flex items-center justify-between mb-4 text-xs">
+                <div 
+                  className={`flex-1 text-center ${upSellWizardStep >= 1 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
+                  onClick={() => upSellWizardStep > 1 && setUpSellWizardStep(1)}
+                >
+                  Data
+                </div>
+                <div 
+                  className={`flex-1 text-center ${upSellWizardStep >= 2 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
+                  onClick={() => upSellWizardStep > 2 && setUpSellWizardStep(2)}
+                >
+                  Forma Pag.
+                </div>
+                <div className={`flex-1 text-center ${upSellWizardStep >= 3 ? 'font-semibold text-green-600' : 'text-gray-400'}`}>Valor</div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between mb-4 text-xs">
+                <div 
+                  className={`flex-1 text-center ${upSellWizardStep >= 1 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
+                  onClick={() => upSellWizardStep > 1 && setUpSellWizardStep(1)}
+                >
+                  Data
+                </div>
+                <div 
+                  className={`flex-1 text-center ${upSellWizardStep >= 2 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
+                  onClick={() => upSellWizardStep > 2 && setUpSellWizardStep(2)}
+                >
+                  Forma Pag.
+                </div>
+                <div 
+                  className={`flex-1 text-center ${upSellWizardStep >= 3 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
+                  onClick={() => upSellWizardStep > 3 && setUpSellWizardStep(3)}
+                >
+                  Valor
+                </div>
+                <div className={`flex-1 text-center ${upSellWizardStep >= 4 ? 'font-semibold text-green-600' : 'text-gray-400'}`}>Status</div>
+              </div>
+            )}
+
+            {upSellWizardStep === 1 && (
+              <div className="text-center">
+                <input 
+                  type="date" 
+                  className="mx-auto p-2 border rounded" 
+                  value={upSellDate} 
+                  onChange={(e) => setUpSellDate(e.target.value)} 
+                />
+                <div className="mt-4 text-sm text-muted-foreground">
+                  Você selecionou {upSellDate.split('-').reverse().join('/')}
+                </div>
+              </div>
+            )}
+
+            {upSellWizardStep === 2 && (
+              <div className="text-center space-y-4">
+                <div className="flex items-center justify-center gap-4">
+                  {['Pix','Boleto','Cartão','Outro'].map((m) => (
+                    <button 
+                      key={m} 
+                      onClick={() => setUpSellPayment(m)} 
+                      className={`px-4 py-2 rounded ${upSellPayment === m ? 'ring-2 ring-green-500 bg-white' : 'bg-gray-100'}`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-2 text-sm">Você selecionou <strong>{upSellPayment}</strong></div>
+              </div>
+            )}
+
+            {upSellWizardStep === 3 && (
+              <div>
+                <label className="block text-sm text-muted-foreground">Diferença de valor do up-sell</label>
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
+                  <Input value={upSellValueStr} onChange={(e) => setUpSellValueStr(e.target.value)} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Produto original: R$ {Number(upSellSourceItem?.preco_unitario || 0).toFixed(2)}
+                  <br />
+                  Novo produto: R$ {Number(selectedUpSellProduct?.displayPrice || 0).toFixed(2)}
+                </p>
+              </div>
+            )}
+
+            {upSellWizardStep === 4 && !isNormalFlow && !isAumentoGratis && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Selecione o tipo de up-sell</label>
+                <div className="space-y-2">
+                  {statusUpSellOptions.map((status) => (
+                    <button
+                      key={status.id}
+                      onClick={() => setUpSellStatus(String(status.id))}
+                      className={`w-full p-3 rounded border-2 text-left transition-all ${
+                        upSellStatus === String(status.id) 
+                          ? 'border-green-500 bg-green-50' 
+                          : 'border-gray-200 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="font-medium">{status.status}</div>
+                    </button>
+                  ))}
+                </div>
+                {statusUpSellOptions.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhum status de up-sell configurado
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <div className="flex justify-between w-full">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setUpSellWizardOpen(false);
+                  setUpSellModalOpen(true);
+                }}
+              >
+                Cancelar
+              </Button>
+              <div>
+                {isAumentoGratis ? (
+                  <Button 
+                    className="bg-blue-600 hover:bg-blue-700 text-white" 
+                    disabled={savingUpSell}
+                    onClick={async () => {
+                      if (!pedido || !selectedUpSellProduct) return;
+                      
+                      setSavingUpSell(true);
+                      try {
+                        const itemId = upSellSourceItem._sourceIds?.[0] || upSellSourceItem.id;
+                        const hasVariations = selectedUpSellProduct.variacoes_produto && selectedUpSellProduct.variacoes_produto.length > 0;
+                        
+                        // Set status to "Aumento grátis" (ID 4)
+                        const updateData: any = {
+                          produto_id: selectedUpSellProduct.id,
+                          preco_unitario: upSellSourceItem.preco_unitario, // Keep original price
+                          status_up_sell: 4,
+                        };
+                        
+                        if (hasVariations && selectedUpSellProduct.selectedVariationId) {
+                          updateData.variacao_id = selectedUpSellProduct.selectedVariationId;
+                        } else {
+                          updateData.variacao_id = null;
+                        }
+                        
+                        const { error: updateError } = await supabase
+                          .from('itens_pedido')
+                          .update(updateData)
+                          .eq('id', itemId);
+                        
+                        if (updateError) throw updateError;
+                        
+                        // Register metric
+                        await supabase.from('metricas_upsell').insert({
+                          responsavel_id: user?.id || null,
+                          status_upsell: 4,
+                          pedido_id: pedido?.id || null,
+                          produto_base: upSellSourceItem.produto?.id || null,
+                          produto_upsell: selectedUpSellProduct.id || null,
+                          variacao_base: upSellSourceItem.variacao?.id || null,
+                          variacao_upsell: selectedUpSellProduct.selectedVariationId || null,
+                          produto_base_nome: upSellSourceItem.produto?.nome || null,
+                          produto_upsell_nome: selectedUpSellProduct.nome || null,
+                          variacao_base_nome: upSellSourceItem.variacao?.nome || null,
+                          variacao_upsell_nome: selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome || null,
+                          empresa_id: empresaId || null,
+                        });
+                        
+                        toast({
+                          title: 'Aumento grátis realizado!',
+                          description: 'Produto substituído sem alteração de valor',
+                        });
+                        
+                        // Check if all up_cell products are now resolved and auto-liberate
+                        await checkAndAutoLiberatePedido(itemId);
+                        
+                        setUpSellWizardOpen(false);
+                        setUpSellSourceItem(null);
+                        setSelectedUpSellProduct(null);
+                        setSelectedVariations({});
+                        setIsAumentoGratis(false);
+                        navigate(0);
+                      } catch (err: any) {
+                        console.error('Erro ao realizar aumento grátis:', err);
+                        toast({
+                          title: 'Erro',
+                          description: err?.message || 'Não foi possível realizar o aumento grátis',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        setSavingUpSell(false);
+                      }
+                    }}
+                  >
+                    {savingUpSell ? 'Salvando...' : 'Confirmar Aumento Grátis'}
+                  </Button>
+                ) : isNormalFlow && upSellWizardStep < 3 ? (
+                  <Button 
+                    className="bg-green-600 hover:bg-green-700 text-white" 
+                    onClick={() => setUpSellWizardStep(s => s + 1)}
+                  >
+                    Próxima etapa
+                  </Button>
+                ) : isNormalFlow && upSellWizardStep === 3 ? (
+                  <Button 
+                    className="bg-green-600 hover:bg-green-700 text-white" 
+                    disabled={savingUpSell}
+                    onClick={async () => {
+                      if (!pedido || !selectedUpSellProduct) return;
+                      
+                      setSavingUpSell(true);
+                      try {
+                        const itemId = upSellSourceItem._sourceIds?.[0] || upSellSourceItem.id;
+                        const hasVariations = selectedUpSellProduct.variacoes_produto && selectedUpSellProduct.variacoes_produto.length > 0;
+                        
+                        // Set status to "Aumentado" (ID 3)
+                        const updateData: any = {
+                          produto_id: selectedUpSellProduct.id,
+                          preco_unitario: selectedUpSellProduct.displayPrice,
+                          status_up_sell: 3,
+                        };
+                        
+                        if (hasVariations && selectedUpSellProduct.selectedVariationId) {
+                          updateData.variacao_id = selectedUpSellProduct.selectedVariationId;
+                        } else {
+                          updateData.variacao_id = null;
+                        }
+                        
+                        const { error: updateError } = await supabase
+                          .from('itens_pedido')
+                          .update(updateData)
+                          .eq('id', itemId);
+                        
+                        if (updateError) throw updateError;
+                        
+                        // Update pedido valor_total with the difference
+                        const difference = parseCurrencyBR(upSellValueStr);
+                        const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
+                        const newTotal = Number((currentTotal + difference).toFixed(2));
+                        
+                        const { error: pedidoError } = await supabase
+                          .from('pedidos')
+                          .update({ 
+                            valor_total: newTotal, 
+                            atualizado_em: new Date().toISOString() 
+                          })
+                          .eq('id', pedido.id);
+                        
+                        if (pedidoError) throw pedidoError;
+                        
+                        // Register metric
+                        await supabase.from('metricas_upsell').insert({
+                          responsavel_id: user?.id || null,
+                          status_upsell: 3,
+                          pedido_id: pedido?.id || null,
+                          produto_base: upSellSourceItem.produto?.id || null,
+                          produto_upsell: selectedUpSellProduct.id || null,
+                          variacao_base: upSellSourceItem.variacao?.id || null,
+                          variacao_upsell: selectedUpSellProduct.selectedVariationId || null,
+                          produto_base_nome: upSellSourceItem.produto?.nome || null,
+                          produto_upsell_nome: selectedUpSellProduct.nome || null,
+                          variacao_base_nome: upSellSourceItem.variacao?.nome || null,
+                          variacao_upsell_nome: selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome || null,
+                          empresa_id: empresaId || null,
+                        });
+                        
+                        toast({
+                          title: 'Up-sell realizado com sucesso!',
+                          description: `Produto substituído e valor atualizado`,
+                        });
+                        
+                        // Check if all up_cell products are now resolved and auto-liberate
+                        await checkAndAutoLiberatePedido(itemId);
+                        
+                        setUpSellWizardOpen(false);
+                        setUpSellSourceItem(null);
+                        setSelectedUpSellProduct(null);
+                        setSelectedVariations({});
+                        setIsNormalFlow(false);
+                        navigate(0);
+                      } catch (err: any) {
+                        console.error('Erro ao realizar up-sell:', err);
+                        toast({
+                          title: 'Erro',
+                          description: err?.message || 'Não foi possível realizar o up-sell',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        setSavingUpSell(false);
+                      }
+                    }}
+                  >
+                    {savingUpSell ? 'Salvando...' : 'Confirmar Up-Sell'}
+                  </Button>
+                ) : upSellWizardStep < 4 ? (
+                  <Button 
+                    className="bg-green-600 hover:bg-green-700 text-white" 
+                    onClick={() => setUpSellWizardStep(s => s + 1)}
+                  >
+                    Próxima etapa
+                  </Button>
+                ) : (
+                  <Button 
+                    className="bg-green-600 hover:bg-green-700 text-white" 
+                    disabled={savingUpSell || !upSellStatus}
+                    onClick={async () => {
+                      if (!pedido || !selectedUpSellProduct) return;
+                      
+                      if (!upSellStatus) {
+                        toast({
+                          title: 'Erro',
+                          description: 'Selecione um tipo de up-sell para continuar',
+                          variant: 'destructive',
+                        });
+                        return;
+                      }
+                      
+                      setSavingUpSell(true);
+                      try {
+                        const itemId = upSellSourceItem._sourceIds?.[0] || upSellSourceItem.id;
+                        const hasVariations = selectedUpSellProduct.variacoes_produto && selectedUpSellProduct.variacoes_produto.length > 0;
+                        
+                        // Find "Aumentado" status ID
+                        const aumentadoStatus = Object.entries(statusUpSellMap).find(
+                          ([_, name]) => name === 'Aumentado'
+                        );
+                        
+                        // Update the item with the new product and status "Aumentado"
+                        const updateData: any = {
+                          produto_id: selectedUpSellProduct.id,
+                          preco_unitario: selectedUpSellProduct.displayPrice,
+                          status_up_sell: aumentadoStatus ? parseInt(aumentadoStatus[0]) : (upSellStatus ? parseInt(upSellStatus) : null),
+                        };
+                        
+                        if (hasVariations && selectedUpSellProduct.selectedVariationId) {
+                          updateData.variacao_id = selectedUpSellProduct.selectedVariationId;
+                        } else {
+                          updateData.variacao_id = null;
+                        }
+                        
+                        const { error: updateError } = await supabase
+                          .from('itens_pedido')
+                          .update(updateData)
+                          .eq('id', itemId);
+                        
+                        if (updateError) throw updateError;
+                        
+                        // Update pedido valor_total with the difference
+                        const difference = parseCurrencyBR(upSellValueStr);
+                        const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
+                        const newTotal = Number((currentTotal + difference).toFixed(2));
+                        
+                        const { error: pedidoError } = await supabase
+                          .from('pedidos')
+                          .update({ 
+                            valor_total: newTotal, 
+                            atualizado_em: new Date().toISOString() 
+                          })
+                          .eq('id', pedido.id);
+                        
+                        if (pedidoError) throw pedidoError;
+                        
+                        toast({
+                          title: 'Up-sell realizado com sucesso!',
+                          description: `Produto substituído e valor atualizado`,
+                        });
+                        
+                        setUpSellWizardOpen(false);
+                        setUpSellSourceItem(null);
+                        setSelectedUpSellProduct(null);
+                        setSelectedVariations({});
+                        setIsAumentoGratis(false);
+                        setIsNormalFlow(false);
+                        navigate(0); // Reload page
+                      } catch (err: any) {
+                        console.error('Erro ao realizar up-sell:', err);
+                        toast({
+                          title: 'Erro',
+                          description: err?.message || 'Não foi possível realizar o up-sell',
+                          variant: 'destructive',
+                        });
+                      } finally {
+                        setSavingUpSell(false);
+                      }
+                    }}
+                  >
+                    {savingUpSell ? 'Salvando...' : 'Confirmar Up-Sell'}
+                  </Button>
+                )}
+              </div>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>

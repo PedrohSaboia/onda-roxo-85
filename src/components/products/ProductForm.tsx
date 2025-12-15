@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import EmballagemModal from '@/components/shipping/EmballagemModal';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 import { Produto } from '@/types';
 
@@ -46,6 +48,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const [selectedEmbalagemForModal, setSelectedEmbalagemForModal] = useState<any | undefined>(undefined);
   const [selectedEmbalagemId, setSelectedEmbalagemId] = useState<string | ''>('');
   const [nomeVariacao, setNomeVariacao] = useState<string>('');
+  const [upCell, setUpCell] = useState<boolean>(false);
+  const [upSellModalOpen, setUpSellModalOpen] = useState<boolean>(false);
+  const [selectedUpSellIds, setSelectedUpSellIds] = useState<string[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
+  const [upSellSearchTerm, setUpSellSearchTerm] = useState<string>('');
 
 
 
@@ -56,6 +63,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
     setSelectedEmbalagemId('');
     setNomeVariacao('');
     setOriginalVariationIds([]);
+    setUpCell(false);
+    setSelectedUpSellIds([]);
   }
 
   const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length }]);
@@ -102,6 +111,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         nome_variacao: nomeVariacao || null,
         qntd: qntd === '' ? 0 : Number(qntd),
         empresa_id: empresaId || null,
+        up_cell: upCell,
+        lista_id_upsell: upCell && selectedUpSellIds.length > 0 ? selectedUpSellIds : null,
       } as any;
 
       console.log('Produto a ser inserido:', prodInsert);
@@ -190,6 +201,28 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
     return () => { mounted = false };
   }, [embalagemModalOpen]);
 
+  // Load available products for up-sell selection
+  useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('produtos')
+          .select('id, nome, sku, img_url')
+          .order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        // Exclude current product being edited
+        const filtered = product ? (data || []).filter((p: any) => p.id !== (product as any).id) : (data || []);
+        setAvailableProducts(filtered);
+      } catch (err: any) {
+        console.error('Erro ao carregar produtos:', err);
+      }
+    })();
+    return () => { mounted = false };
+  }, [open, product]);
+
   const handleSaveEmbalagem = async (data: any) => {
     try {
       if (selectedEmbalagemForModal && selectedEmbalagemForModal.id) {
@@ -227,6 +260,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
       setCodigoBarras(hasVar ? '' : (p.codigo_barras || p.codigoBarras || ''));
       setNomeVariacao((product as any).nomeVariacao || '');
       setSelectedEmbalagemId((product as any).embalgens_id || '');
+      setUpCell(Boolean((product as any).up_cell || (product as any).upCell));
+      setSelectedUpSellIds((product as any).lista_id_upsell || []);
       // Seed variations from passed product object if present
       const seed = (p.variacoes || []).map((v: any) => ({
         id: v.id,
@@ -371,11 +406,32 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             </div>
           </div>
 
-          <div className="mt-4">
+          <div className="mt-4 flex items-center gap-6">
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={hasVariations} onChange={(e)=>setHasVariations(e.target.checked)} />
               <span>Possui variações</span>
             </label>
+            
+            <label className="flex items-center gap-2">
+              <input 
+                type="checkbox" 
+                checked={upCell} 
+                onChange={(e) => setUpCell(e.target.checked)} 
+              />
+              <span>Produto com Up-Sell</span>
+            </label>
+            
+            {upCell && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setUpSellModalOpen(true)}
+                className="ml-auto"
+              >
+                Editar upseel ({selectedUpSellIds.length} selecionados)
+              </Button>
+            )}
           </div>
 
           {hasVariations && (
@@ -458,6 +514,135 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         </CardContent>
       </Card>
       <EmballagemModal open={embalagemModalOpen} onClose={() => setEmbalagemModalOpen(false)} onSave={handleSaveEmbalagem} embalagem={selectedEmbalagemForModal} />
+      
+      {/* Modal de seleção de produtos Up-Sell */}
+      <Dialog open={upSellModalOpen} onOpenChange={(open) => {
+        setUpSellModalOpen(open);
+        if (!open) setUpSellSearchTerm('');
+      }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Selecionar Produtos para Up-Sell</DialogTitle>
+            <p className="text-sm text-muted-foreground">Escolha os produtos que serão oferecidos como up-sell</p>
+          </DialogHeader>
+          
+          {/* Campo de busca */}
+          <div className="py-2">
+            <div className="relative">
+              <Input
+                placeholder="Buscar por nome ou SKU..."
+                value={upSellSearchTerm}
+                onChange={(e) => setUpSellSearchTerm(e.target.value)}
+                className="pl-3"
+              />
+            </div>
+          </div>
+
+          {/* Lista de produtos */}
+          <div className="flex-1 overflow-y-auto py-2 min-h-[300px]">
+            {(() => {
+              const filtered = availableProducts.filter(prod => 
+                prod.nome.toLowerCase().includes(upSellSearchTerm.toLowerCase()) ||
+                prod.sku.toLowerCase().includes(upSellSearchTerm.toLowerCase())
+              );
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <p className="text-sm">
+                      {upSellSearchTerm ? 'Nenhum produto encontrado' : 'Nenhum produto disponível'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-2 gap-3">
+                  {filtered.map((prod) => {
+                    const isSelected = selectedUpSellIds.includes(prod.id);
+                    return (
+                      <div
+                        key={prod.id}
+                        className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'border-amber-600 bg-amber-50' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                        onClick={() => {
+                          setSelectedUpSellIds(prev => 
+                            prev.includes(prod.id) 
+                              ? prev.filter(id => id !== prod.id)
+                              : [...prev, prod.id]
+                          );
+                        }}
+                      >
+                        <div className="flex-shrink-0">
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                            isSelected ? 'bg-amber-600 border-amber-600' : 'border-gray-400'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {prod.img_url ? (
+                          <div className="w-12 h-12 flex-shrink-0">
+                            <img 
+                              src={prod.img_url} 
+                              alt={prod.nome} 
+                              className="w-full h-full object-cover rounded-md border"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 flex-shrink-0 bg-gray-100 rounded-md border flex items-center justify-center">
+                            <span className="text-gray-400 text-[10px]">Sem imagem</span>
+                          </div>
+                    )}
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-gray-900 break-words line-clamp-2">{prod.nome}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">SKU: {prod.sku}</div>
+                    </div>
+                  </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+
+          <DialogFooter className="border-t pt-4">
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm text-muted-foreground">
+                {selectedUpSellIds.length} {selectedUpSellIds.length === 1 ? 'produto selecionado' : 'produtos selecionados'}
+              </span>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setUpSellModalOpen(false);
+                    setUpSellSearchTerm('');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setUpSellModalOpen(false);
+                    setUpSellSearchTerm('');
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  Confirmar
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

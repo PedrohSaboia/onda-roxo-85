@@ -24,7 +24,7 @@ export function Estoque() {
       try {
         const { data, error: supaError } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -43,6 +43,9 @@ export function Estoque() {
             .sort((a: any, b: any) => a.ordem - b.ordem),
           nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
+          up_cell: p.up_cell,
+          upCell: p.up_cell,
+          lista_id_upsell: p.lista_id_upsell,
           criadoEm: p.criado_em,
           atualizadoEm: p.atualizado_em,
         }));
@@ -69,7 +72,7 @@ export function Estoque() {
     // refetch produtos after modal close
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('criado_em', { ascending: false });
+      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('criado_em', { ascending: false });
       if (data) setProdutos(data.map((p: any) => ({
         id: p.id,
         nome: p.nome,
@@ -83,6 +86,9 @@ export function Estoque() {
           .sort((a: any, b: any) => a.ordem - b.ordem),
         nomeVariacao: p.nome_variacao || null,
         qntd: p.qntd ?? 0,
+        up_cell: p.up_cell,
+        upCell: p.up_cell,
+        lista_id_upsell: p.lista_id_upsell,
         criadoEm: p.criado_em,
         atualizadoEm: p.atualizado_em,
       })));

@@ -17,6 +17,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { useAuth } from '@/hooks/useAuth';
 
 const etiquetaLabels = {
   NAO_LIBERADO: 'Não Liberado',
@@ -33,6 +34,7 @@ const etiquetaColors = {
 export function Comercial() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { empresaId } = useAuth();
   
   // Read current values from URL
   const params = new URLSearchParams(location.search);
@@ -492,7 +494,7 @@ export function Comercial() {
       // load full pedido with cliente and itens
       const { data: pedidoRow, error: pedidoError } = await supabase
         .from('pedidos')
-        .select(`*, clientes(*), itens_pedido(id,quantidade,preco_unitario, produto:produtos(id,nome,sku,preco), variacao:variacoes_produto(id,nome,sku,ordem))`)
+        .select(`*, clientes(*), itens_pedido(id,quantidade,preco_unitario, produto:produtos(id,nome,sku,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,ordem))`)
         .eq('id', pedidoId)
         .single();
 
@@ -761,7 +763,8 @@ export function Comercial() {
         valor_total: (pedidoRow as any).valor_total || null,
         frete_venda: (pedidoRow as any).frete_venda || null,
         cor_do_pedido: '#FF0000',
-        criado_em: now
+        criado_em: now,
+        empresa_id: empresaId || null
       };
 
   // mark the inserted record as a duplicata
@@ -803,7 +806,8 @@ export function Comercial() {
             link_formulario: `/${newPedidoId}`,
             formulario_enviado: false,
             pedido_id: newPedidoId,
-            criado_em: new Date().toISOString()
+            criado_em: new Date().toISOString(),
+            empresa_id: empresaId || null
           };
           const { error: clienteError } = await supabase.from('clientes').insert(clientePayload as any);
           if (clienteError) console.error('Erro ao duplicar cliente:', clienteError);
@@ -823,7 +827,8 @@ export function Comercial() {
             quantidade: it.quantidade || 1,
             preco_unitario: it.preco_unitario || it.preco || 0,
             codigo_barras: it.codigo_barras || null,
-            criado_em: new Date().toISOString()
+            criado_em: new Date().toISOString(),
+            empresa_id: empresaId || null
           }));
           const { error: itensError } = await supabase.from('itens_pedido').insert(itensPayload as any);
           if (itensError) console.error('Erro ao duplicar itens do pedido:', itensError);

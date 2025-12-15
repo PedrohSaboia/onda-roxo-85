@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Pedido } from '@/types';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
+import { useAuth } from '@/hooks/useAuth';
 
 const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
 const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
@@ -20,6 +21,7 @@ const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
 export function PedidosEnviados() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { empresaId } = useAuth();
   
   // Read current values from URL
   const params = new URLSearchParams(location.search);
@@ -309,7 +311,8 @@ export function PedidosEnviados() {
         valor_total: (pedidoRow as any).valor_total || null,
         frete_venda: (pedidoRow as any).frete_venda || null,
         cor_do_pedido: '#FF0000',
-        criado_em: now
+        criado_em: now,
+        empresa_id: empresaId || null
       };
 
       // mark the inserted record as a duplicata
@@ -351,7 +354,8 @@ export function PedidosEnviados() {
             link_formulario: `/${newPedidoId}`,
             formulario_enviado: false,
             pedido_id: newPedidoId,
-            criado_em: new Date().toISOString()
+            criado_em: new Date().toISOString(),
+            empresa_id: empresaId || null
           };
           const { error: clienteError } = await supabase.from('clientes').insert(clientePayload as any);
           if (clienteError) console.error('Erro ao duplicar cliente:', clienteError);
@@ -371,7 +375,8 @@ export function PedidosEnviados() {
             quantidade: it.quantidade || 1,
             preco_unitario: it.preco_unitario || it.preco || 0,
             codigo_barras: it.codigo_barras || null,
-            criado_em: new Date().toISOString()
+            criado_em: new Date().toISOString(),
+            empresa_id: empresaId || null
           }));
           const { error: itensError } = await supabase.from('itens_pedido').insert(itensPayload as any);
           if (itensError) console.error('Erro ao duplicar itens do pedido:', itensError);
