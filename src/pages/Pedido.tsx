@@ -762,7 +762,7 @@ export default function Pedido() {
         setCalculandoFrete(true);
 
         // Build a minimal payload reusing stored data but filling from/to/products if missing
-        const insuranceValue = (pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1;
+        const insuranceValue = 1;
 
         const payload: any = {
           from: {
@@ -793,14 +793,14 @@ export default function Pedido() {
             country_id: stored.to?.country_id || 'BR',
             postal_code: (pedido?.cliente?.cep || stored.to?.postal_code || '').replace(/\D/g, '')
           },
-          options: stored.options || { insurance_value: insuranceValue, receipt: false, own_hand: false, reverse: false, non_commercial: true },
+          options: stored.options || { insurance_value: 1, receipt: false, own_hand: false, reverse: false, non_commercial: true },
           products: (pedido?.itens || []).map((it: any) => ({ 
             name: it.variacao?.nome ? `${it.produto?.nome} - ${it.variacao.nome}` : (it.produto?.nome || 'Produto'), 
             quantity: String(it.quantidade || 1), 
             unitary_value: String(Number(it.preco_unitario || it.preco || 0).toFixed(2)) 
           })),
           service: stored.service || stored.service_id || stored.raw_response?.service || stored.raw_response?.service_id,
-          volumes: stored.volumes || (selectedEmbalagem ? [{ height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, length: selectedEmbalagem.comprimento, weight: selectedEmbalagem.peso, insurance_value: insuranceValue }] : [{ height: 5, width: 20, length: 20, weight: 1, insurance_value: insuranceValue }])
+          volumes: stored.volumes || (selectedEmbalagem ? [{ height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, length: selectedEmbalagem.comprimento, weight: selectedEmbalagem.peso, insurance_value: 1 }] : [{ height: 5, width: 20, length: 20, weight: 1, insurance_value: 1 }])
         };
 
         console.log('Enviando frete salvo ao carrinho ME:', payload);
@@ -2134,7 +2134,7 @@ export default function Pedido() {
         remetente={selectedRemetente}
         cliente={pedido?.cliente}
         embalagem={selectedEmbalagem}
-        insuranceValue={(pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1}
+        insuranceValue={1}
         productName={(pedido?.itens && pedido.itens.length) ? 
           (pedido.itens[0].variacao?.nome ? `${pedido.itens[0].produto?.nome} - ${pedido.itens[0].variacao.nome}` : (pedido.itens[0].produto?.nome || '')) : ''}
         orderProducts={(pedido?.itens || []).map((it: any) => ({

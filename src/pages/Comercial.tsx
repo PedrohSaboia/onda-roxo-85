@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, Filter, Eye, Edit, Copy, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Eye, Edit, Copy, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -10,9 +10,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 import { Pedido } from '@/types';
 import EditSelectModal from '@/components/modals/EditSelectModal';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
@@ -34,6 +36,8 @@ const etiquetaColors = {
 export function Comercial() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { empresaId } = useAuth();
+  const { toast } = useToast();
   const { empresaId } = useAuth();
   
   // Read current values from URL
@@ -66,7 +70,6 @@ export function Comercial() {
   const [filterEnvioAdiadoDate, setFilterEnvioAdiadoDate] = useState<Date | undefined>(undefined);
   const [showEnvioAdiadoCalendar, setShowEnvioAdiadoCalendar] = useState(false);
   const [diasComPedidos, setDiasComPedidos] = useState<Set<string>>(new Set());
-  const { toast } = useToast();
   const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
   const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
@@ -80,6 +83,14 @@ export function Comercial() {
   const [tempFilterNotLiberado, setTempFilterNotLiberado] = useState(urlLiberado);
   const [tempFilterClienteFormNotSent, setTempFilterClienteFormNotSent] = useState(urlClienteForm);
   const [tempFilterResponsavelId, setTempFilterResponsavelId] = useState(urlResponsavel);
+  
+  // Estados para filtro de produtos
+  const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
+  const [produtoSearchTerm, setProdutoSearchTerm] = useState('');
+  const [selectedProdutos, setSelectedProdutos] = useState<Array<{ id: string; nome: string; tipo: 'produto' | 'variacao'; variacaoNome?: string }>>([]);
+  const [showVariacoesModal, setShowVariacoesModal] = useState(false);
+  const [variacoesList, setVariacoesList] = useState<Array<{ id: string; nome: string; produtoId: string; produtoNome: string }>>([]);
+  const [selectedProdutoParaVariacao, setSelectedProdutoParaVariacao] = useState<{ id: string; nome: string } | null>(null);
   
   // Sync state from URL when location changes
   useEffect(() => {
@@ -178,6 +189,38 @@ export function Comercial() {
             // Filtrar apenas por tempo_ganho preenchido (qualquer data)
             (query as any).not('tempo_ganho', 'is', null);
           }
+        }
+
+        // apply produtos filter: buscar pedidos que contêm os produtos/variações selecionados
+        if (selectedProdutos.length > 0) {
+          const produtoIds = selectedProdutos.filter(p => p.tipo === 'produto').map(p => p.id);
+          const variacaoIds = selectedProdutos.filter(p => p.tipo === 'variacao').map(p => p.id);
+
+          let itemsQuery = supabase.from('itens_pedido').select('pedido_id');
+          
+          if (produtoIds.length > 0 && variacaoIds.length > 0) {
+            itemsQuery = itemsQuery.or(`produto_id.in.(${produtoIds.join(',')}),variacao_id.in.(${variacaoIds.join(',')})`);
+          } else if (produtoIds.length > 0) {
+            itemsQuery = itemsQuery.in('produto_id', produtoIds);
+          } else if (variacaoIds.length > 0) {
+            itemsQuery = itemsQuery.in('variacao_id', variacaoIds);
+          }
+
+          const { data: itemsData, error: itemsError } = await itemsQuery;
+          if (itemsError) throw itemsError;
+
+          const pedidoIds = [...new Set((itemsData || []).map((item: any) => item.pedido_id))];
+          
+          if (pedidoIds.length === 0) {
+            // Nenhum pedido encontrado com esses produtos
+            if (!mounted) return;
+            setPedidos([]);
+            setTotal(0);
+            setLoading(false);
+            return;
+          }
+
+          (query as any).in('pedido_id', pedidoIds);
         }
 
         // fetch small lookup tables in parallel so we can map ids to display rows
@@ -319,7 +362,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm, selectedProdutos]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -459,6 +502,9 @@ export function Comercial() {
   // apply client-formulario filter client-side: only include pedidos whose cliente.formulario_enviado === false
   const filteredPedidosWithClienteFilter = filterClienteFormNotSent ? filteredPedidos.filter(p => !(p as any).formularioEnviado) : filteredPedidos;
 
+  // O filtro de produtos agora é feito no backend, então não precisamos mais fazer client-side
+  const filteredPedidosComProdutos = filteredPedidosWithClienteFilter;
+
   // Status edit modal state
   const [statusEditOpen, setStatusEditOpen] = useState(false);
   const [statusEditPedidoId, setStatusEditPedidoId] = useState<string | null>(null);
@@ -487,10 +533,120 @@ export function Comercial() {
   const [responsavelOptions, setResponsavelOptions] = useState<Array<{ id: string; nome: string; img_url?: string }>>([]);
   const [loadingResponsavelOptions, setLoadingResponsavelOptions] = useState(false);
 
+  // Função para buscar produtos
+  const buscarProdutos = async (termo: string) => {
+    if (!termo || termo.length < 2) {
+      setProdutosList([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('produtos')
+        .select('id, nome, sku, variacoes_produto(id)')
+        .ilike('nome', `%${termo}%`)
+        .limit(20);
+
+      if (error) throw error;
+
+      const produtos = (data || []).map((p: any) => ({
+        id: p.id,
+        nome: p.nome,
+        sku: p.sku || '',
+        temVariacoes: (p.variacoes_produto && p.variacoes_produto.length > 0)
+      }));
+
+      setProdutosList(produtos);
+    } catch (err) {
+      console.error('Erro ao buscar produtos:', err);
+      toast({ title: 'Erro', description: 'Não foi possível buscar produtos', variant: 'destructive' });
+    }
+  };
+
+  // Função para carregar variações de um produto
+  const carregarVariacoes = async (produtoId: string, produtoNome: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('variacoes_produto')
+        .select('id, nome')
+        .eq('produto_id', produtoId)
+        .order('ordem');
+
+      if (error) throw error;
+
+      const variacoes = (data || []).map((v: any) => ({
+        id: v.id,
+        nome: v.nome,
+        produtoId,
+        produtoNome
+      }));
+
+      setVariacoesList(variacoes);
+      setSelectedProdutoParaVariacao({ id: produtoId, nome: produtoNome });
+      setShowVariacoesModal(true);
+    } catch (err) {
+      console.error('Erro ao carregar variações:', err);
+      toast({ title: 'Erro', description: 'Não foi possível carregar variações', variant: 'destructive' });
+    }
+  };
+
+  // Função para selecionar produto
+  const selecionarProduto = async (produto: { id: string; nome: string; temVariacoes: boolean }) => {
+    if (produto.temVariacoes) {
+      // Abrir modal de variações
+      await carregarVariacoes(produto.id, produto.nome);
+    } else {
+      // Adicionar produto direto
+      if (!selectedProdutos.find(p => p.id === produto.id && p.tipo === 'produto')) {
+        setSelectedProdutos(prev => [...prev, { id: produto.id, nome: produto.nome, tipo: 'produto' }]);
+      }
+      setProdutoSearchTerm('');
+      setProdutosList([]);
+    }
+  };
+
+  // Função para selecionar variação
+  const selecionarVariacao = (variacao: { id: string; nome: string; produtoId: string; produtoNome: string }) => {
+    if (!selectedProdutos.find(p => p.id === variacao.id && p.tipo === 'variacao')) {
+      setSelectedProdutos(prev => [...prev, { 
+        id: variacao.id, 
+        nome: variacao.produtoNome, 
+        tipo: 'variacao',
+        variacaoNome: variacao.nome
+      }]);
+    }
+    setShowVariacoesModal(false);
+    setProdutoSearchTerm('');
+    setProdutosList([]);
+  };
+
+  // Função para remover produto/variação do filtro
+  const removerProdutoFiltro = (id: string, tipo: 'produto' | 'variacao') => {
+    setSelectedProdutos(prev => prev.filter(p => !(p.id === id && p.tipo === tipo)));
+  };
+
   const handleEnvioRapido = async (pedidoId: string) => {
     if (!pedidoId) return;
     setProcessingRapid(prev => ({ ...prev, [pedidoId]: true }));
     try {
+      // Buscar transportadoras bloqueadas
+      let fretesOcultos: number[] = [];
+      if (empresaId) {
+        try {
+          const { data: fretesData, error: fretesError } = await supabase
+            .from('fretes_nao_disponiveis' as any)
+            .select('id_frete')
+            .eq('empresa_id', empresaId);
+
+          if (!fretesError && fretesData) {
+            fretesOcultos = fretesData.map((f: any) => f.id_frete).filter((id: any) => id !== null);
+          }
+        } catch (err) {
+          console.warn('Erro ao buscar fretes ocultos:', err);
+          // Continua o fluxo mesmo com erro na busca
+        }
+      }
+
       // load full pedido with cliente and itens
       const { data: pedidoRow, error: pedidoError } = await supabase
         .from('pedidos')
@@ -525,6 +681,12 @@ export function Comercial() {
       }));
 
       if (stored) {
+        // Verificar se a transportadora está bloqueada
+        const serviceId = stored.service || stored.service_id || stored.raw_response?.service || stored.raw_response?.service_id;
+        if (fretesOcultos.includes(serviceId)) {
+          throw new Error(`A transportadora ${stored.transportadora || 'selecionada'} está bloqueada para sua empresa. Por favor, selecione outra opção de frete.`);
+        }
+
         // reuse stored payload when available
   const insuranceValue = (pedidoRow?.itens_pedido || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0) || 1;
         const payload: any = {
@@ -589,8 +751,27 @@ export function Comercial() {
 
         const { data: calcResp, error: calcErr } = await supabase.functions.invoke('calculo-frete-melhorenvio', { body: calcPayload });
         if (calcErr) throw calcErr;
-        const cotacoesValidas = (calcResp?.cotacoes || []).filter((q: any) => !q.error).map((quote: any) => ({ service_id: quote.id, transportadora: quote.company.name, modalidade: quote.name, prazo: `${quote.delivery_time} dias úteis`, preco: Number(quote.price), raw_response: quote }));
-        if (!cotacoesValidas.length) throw new Error('Nenhuma opção de frete disponível');
+        
+        // Filtrar cotações válidas E não bloqueadas
+        const cotacoesValidas = (calcResp?.cotacoes || [])
+          .filter((q: any) => !q.error)
+          .filter((q: any) => !fretesOcultos.includes(q.id))
+          .map((quote: any) => ({ 
+            service_id: quote.id, 
+            transportadora: quote.company.name, 
+            modalidade: quote.name, 
+            prazo: `${quote.delivery_time} dias úteis`, 
+            preco: Number(quote.price), 
+            raw_response: quote 
+          }));
+        
+        if (!cotacoesValidas.length) {
+          if (fretesOcultos.length > 0) {
+            throw new Error('Nenhuma opção de frete disponível. Todas as transportadoras disponíveis estão bloqueadas para sua empresa.');
+          }
+          throw new Error('Nenhuma opção de frete disponível');
+        }
+        
         const maisBarato = cotacoesValidas.reduce((prev: any, curr: any) => prev.preco < curr.preco ? prev : curr);
 
         // build payload to add to cart using cheapest quote
@@ -873,7 +1054,7 @@ export function Comercial() {
     }
   };
 
-  const totalPages = Math.max(1, Math.ceil((total || filteredPedidosWithClienteFilter.length) / pageSize));
+  const totalPages = Math.max(1, Math.ceil((total || filteredPedidosComProdutos.length) / pageSize));
 
   const updatePageInUrl = (newPage: number) => {
     const params = new URLSearchParams(location.search);
@@ -917,7 +1098,7 @@ export function Comercial() {
               <h1 className="text-2xl font-bold">{view === 'enviados' ? 'Pedidos Enviados' : 'Pedidos'}</h1>
               <p className="text-muted-foreground">
                 {view === 'enviados'
-                  ? `${filteredPedidosWithClienteFilter.length} pedidos   ados`
+                  ? `${filteredPedidosComProdutos.length} pedidos enviados`
                   : filterNotLiberado
                     ? `${total} pedidos encontrados`
                     : `${totalExcludingEnviados} pedidos encont rados`}
@@ -946,7 +1127,7 @@ export function Comercial() {
 
               {/* Active filter tags (appear directly below the search input) */}
               <div className="mt-2">
-                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId || !!filterResponsavelId || filterEnvioAdiado) && (
+                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId || !!filterResponsavelId || filterEnvioAdiado || selectedProdutos.length > 0) && (
                   <div className="flex flex-wrap items-center gap-2">
                     {filterNotLiberado && (
                       <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
@@ -1063,6 +1244,23 @@ export function Comercial() {
                         </button>
                       </div>
                     )}
+
+                    {selectedProdutos.map((produto) => (
+                      <div key={`${produto.tipo}-${produto.id}`} className="flex items-center gap-2 bg-purple-100 text-purple-800 px-3 py-1 rounded">
+                        <span className="text-sm">
+                          {produto.tipo === 'variacao' 
+                            ? `${produto.nome} - ${produto.variacaoNome}` 
+                            : produto.nome}
+                        </span>
+                        <button
+                          className="text-purple-600 hover:text-purple-800"
+                          onClick={() => removerProdutoFiltro(produto.id, produto.tipo)}
+                          aria-label="Remover filtro de produto"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -1182,7 +1380,7 @@ export function Comercial() {
                     )}
                   </div>
                   {showFilters && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-20 p-3">
+                    <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
                       <div className="flex items-center justify-between mb-2">
                         <div className="text-sm font-medium">Filtros</div>
                         <button className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
@@ -1209,12 +1407,46 @@ export function Comercial() {
                           ))}
                         </select>
                       </div>
+                      <div className="mb-3">
+                        <label htmlFor="filter-produto" className="text-sm block mb-1">Filtrar por produto</label>
+                        <div className="relative">
+                          <Input
+                            id="filter-produto"
+                            type="text"
+                            placeholder="Digite o nome do produto..."
+                            value={produtoSearchTerm}
+                            onChange={(e) => {
+                              setProdutoSearchTerm(e.target.value);
+                              buscarProdutos(e.target.value);
+                            }}
+                            className="w-full text-sm"
+                          />
+                          {produtosList.length > 0 && (
+                            <div className="absolute z-[100] w-full bg-white border rounded shadow-lg mt-1 max-h-48 overflow-y-auto">
+                              {produtosList.map(produto => (
+                                <div
+                                  key={produto.id}
+                                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                                  onClick={() => selecionarProduto(produto)}
+                                >
+                                  <div className="font-medium">{produto.nome}</div>
+                                  {produto.sku && <div className="text-xs text-gray-500">{produto.sku}</div>}
+                                  {produto.temVariacoes && <div className="text-xs text-purple-600">Com variações</div>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
                       <div className="flex items-center justify-end gap-2">
                         <Button variant="outline" size="sm" onClick={() => {
                           // clear temporary filters
                           setTempFilterNotLiberado(false);
                           setTempFilterClienteFormNotSent(false);
                           setTempFilterResponsavelId('');
+                          setSelectedProdutos([]);
+                          setProdutoSearchTerm('');
+                          setProdutosList([]);
                         }}>Limpar</Button>
                         <Button size="sm" onClick={() => {
                           // apply temporary filters to actual filters via query params
@@ -1265,7 +1497,7 @@ export function Comercial() {
                 </TableRow>
               )}
 
-              {filteredPedidosWithClienteFilter.map((pedido) => (
+              {filteredPedidosComProdutos.map((pedido) => (
                 <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => {
                   const currentParams = new URLSearchParams(location.search);
                   if (view === 'enviados') currentParams.set('readonly', '1');
@@ -1318,14 +1550,64 @@ export function Comercial() {
                   <TableCell>
                     <div>
                       <div
-                        className="font-medium max-w-[260px] truncate overflow-hidden whitespace-nowrap"
-                        title={pedido.clienteNome}
+                        className="font-medium max-w-[260px] truncate overflow-hidden whitespace-nowrap cursor-pointer"
+                        title="Clique para copiar"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const text = String(pedido.clienteNome || '');
+                          try {
+                            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                              navigator.clipboard.writeText(text).then(() => {
+                                toast({ title: 'Copiado', description: 'Nome do cliente copiado para a área de transferência.' });
+                              }).catch((err) => {
+                                console.error('Erro ao copiar:', err);
+                                toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'});
+                              });
+                            } else {
+                              const ta = document.createElement('textarea');
+                              ta.value = text;
+                              document.body.appendChild(ta);
+                              ta.select();
+                              try { document.execCommand('copy'); toast({ title: 'Copiado', description: 'Nome do cliente copiado para a área de transferência.' }); }
+                              catch (ex) { console.error('Fallback copy failed', ex); toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'}); }
+                              document.body.removeChild(ta);
+                            }
+                          } catch (err) {
+                            console.error('Copy exception', err);
+                            toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'});
+                          }
+                        }}
                       >
                         {pedido.clienteNome}
                       </div>
                       <div
-                        className="text-sm text-muted-foreground max-w-[260px] truncate overflow-hidden whitespace-nowrap"
-                        title={pedido.contato}
+                        className="text-sm text-muted-foreground max-w-[260px] truncate overflow-hidden whitespace-nowrap cursor-pointer"
+                        title="Clique para copiar"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const text = String(pedido.contato || '');
+                          try {
+                            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                              navigator.clipboard.writeText(text).then(() => {
+                                toast({ title: 'Copiado', description: 'Contato copiado para a área de transferência.' });
+                              }).catch((err) => {
+                                console.error('Erro ao copiar:', err);
+                                toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'});
+                              });
+                            } else {
+                              const ta = document.createElement('textarea');
+                              ta.value = text;
+                              document.body.appendChild(ta);
+                              ta.select();
+                              try { document.execCommand('copy'); toast({ title: 'Copiado', description: 'Contato copiado para a área de transferência.' }); }
+                              catch (ex) { console.error('Fallback copy failed', ex); toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'}); }
+                              document.body.removeChild(ta);
+                            }
+                          } catch (err) {
+                            console.error('Copy exception', err);
+                            toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'});
+                          }
+                        }}
                       >
                         {pedido.contato}
                       </div>
@@ -1729,7 +2011,7 @@ export function Comercial() {
         <div className="flex items-center justify-between p-4 border-t">
           <div className="flex items-center gap-4">
               <div className="text-sm text-muted-foreground">
-              Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total || filteredPedidosWithClienteFilter.length)}</strong> de <strong>{total || filteredPedidosWithClienteFilter.length}</strong>
+              Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total || filteredPedidosComProdutos.length)}</strong> de <strong>{total || filteredPedidosComProdutos.length}</strong>
             </div>
             <div className="flex items-center gap-2">
               <label className="text-sm text-muted-foreground">Mostrar</label>
@@ -1768,6 +2050,31 @@ export function Comercial() {
   </Card>
         </div>
       </div>
+
+      {/* Modal de Variações */}
+      <Dialog open={showVariacoesModal} onOpenChange={setShowVariacoesModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Selecionar Variação</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground mb-4">
+              O produto <strong>{selectedProdutoParaVariacao?.nome}</strong> possui variações. Selecione uma:
+            </p>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {variacoesList.map(variacao => (
+                <div
+                  key={variacao.id}
+                  className="p-3 border rounded hover:bg-purple-50 cursor-pointer transition-colors"
+                  onClick={() => selecionarVariacao(variacao)}
+                >
+                  <div className="font-medium">{variacao.nome}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
