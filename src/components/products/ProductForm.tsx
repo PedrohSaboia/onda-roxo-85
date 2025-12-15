@@ -22,6 +22,10 @@ type Variation = {
   qntd?: number;
   codigo_barras_v?: string;
   ordem?: number;
+  altura?: number;
+  largura?: number;
+  comprimento?: number;
+  peso?: number;
 }
 
 export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
@@ -37,6 +41,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const [categoria, setCategoria] = useState('');
   const [imgUrl, setImgUrl] = useState('');
   const [qntd, setQntd] = useState<number | ''>('');
+  const [altura, setAltura] = useState<number | ''>('');
+  const [largura, setLargura] = useState<number | ''>('');
+  const [comprimento, setComprimento] = useState<number | ''>('');
+  const [peso, setPeso] = useState<number | ''>('');
 
   const [hasVariations, setHasVariations] = useState(false);
   const [variations, setVariations] = useState<Variation[]>([]);
@@ -59,6 +67,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const reset = () => {
     setNome(''); setSku(''); setPreco('0.00'); setUnidade('un'); setCategoria(''); setImgUrl(''); setQntd('');
     setCodigoBarras('');
+    setAltura(''); setLargura(''); setComprimento(''); setPeso('');
     setHasVariations(false); setVariations([]);
     setSelectedEmbalagemId('');
     setNomeVariacao('');
@@ -67,7 +76,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
     setSelectedUpSellIds([]);
   }
 
-  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length }]);
+  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length, altura: undefined, largura: undefined, comprimento: undefined, peso: undefined }]);
   const updateVariation = (idx: number, patch: Partial<Variation>) => setVariations(v => v.map((it,i)=> i===idx ? { ...it, ...patch } : it));
   const removeVariation = (idx: number) => setVariations(v => v.filter((_,i)=> i!==idx));
 
@@ -84,11 +93,21 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         if (!v.sku || !v.sku.trim()) { toast({ title: `SKU da variação ${i + 1} é obrigatório` }); return; }
         if (isNaN(Number(v.valor))) { toast({ title: `Valor da variação ${i + 1} inválido` }); return; }
         if (v.qntd === undefined || v.qntd === null || isNaN(Number(v.qntd))) { toast({ title: `Quantidade da variação ${i + 1} inválida` }); return; }
+        // Validar campos de volume da variação
+        if (!v.altura || v.altura <= 0) { toast({ title: `Altura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
+        if (!v.largura || v.largura <= 0) { toast({ title: `Largura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
+        if (!v.comprimento || v.comprimento <= 0) { toast({ title: `Comprimento da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
+        if (!v.peso || v.peso <= 0) { toast({ title: `Peso da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
       }
     } else {
       // No variations: product-level validations apply
       if (!sku.trim()) { toast({ title: 'SKU é obrigatório' }); return; }
       if (isNaN(Number(preco))) { toast({ title: 'Preço inválido' }); return; }
+      // Validar campos de volume do produto
+      if (!altura || altura <= 0) { toast({ title: 'Altura é obrigatória', description: 'Por favor, preencha a altura do produto.', variant: 'destructive' }); return; }
+      if (!largura || largura <= 0) { toast({ title: 'Largura é obrigatória', description: 'Por favor, preencha a largura do produto.', variant: 'destructive' }); return; }
+      if (!comprimento || comprimento <= 0) { toast({ title: 'Comprimento é obrigatório', description: 'Por favor, preencha o comprimento do produto.', variant: 'destructive' }); return; }
+      if (!peso || peso <= 0) { toast({ title: 'Peso é obrigatório', description: 'Por favor, preencha o peso do produto.', variant: 'destructive' }); return; }
     }
 
   setSaving(true);
@@ -113,6 +132,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         empresa_id: empresaId || null,
         up_cell: upCell,
         lista_id_upsell: upCell && selectedUpSellIds.length > 0 ? selectedUpSellIds : null,
+        altura: hasVariations ? null : (altura || null),
+        largura: hasVariations ? null : (largura || null),
+        comprimento: hasVariations ? null : (comprimento || null),
+        peso: hasVariations ? null : (peso || null),
       } as any;
 
       console.log('Produto a ser inserido:', prodInsert);
@@ -134,11 +157,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
         const existing = variations.filter(v => v.id);
         for (const v of existing) {
-          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 0 }).eq('id', v.id);
+          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 0, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null }).eq('id', v.id);
           if (vUpdErr) throw vUpdErr;
         }
 
-        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx, empresa_id: empresaId || null }));
+        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx, empresa_id: empresaId || null, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null }));
         if (news.length > 0) {
           const { error: insErr } = await supabase.from('variacoes_produto').insert(news);
           if (insErr) throw insErr;
@@ -167,6 +190,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             codigo_barras_v: v.codigo_barras_v || null,
             ordem: v.ordem ?? idx,
             empresa_id: empresaId || null,
+            altura: v.altura || null,
+            largura: v.largura || null,
+            comprimento: v.comprimento || null,
+            peso: v.peso || null,
           }));
 
           const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
@@ -253,6 +280,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
       setCategoria(p.categoria || '');
       setImgUrl(p.imagemUrl || '');
       setQntd(p.qntd ?? '');
+      setAltura(p.altura ?? '');
+      setLargura(p.largura ?? '');
+      setComprimento(p.comprimento ?? '');
+      setPeso(p.peso ?? '');
       const hasVar = Boolean((product as any).variacoes && (product as any).variacoes.length > 0);
       setHasVariations(hasVar);
       // If product has variations, barcode should live on variations; clear product-level barcode
@@ -270,7 +301,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         img_url: v.img_url || '',
         qntd: v.qntd ?? 0,
         codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || '',
-        ordem: v.ordem ?? 0
+        ordem: v.ordem ?? 0,
+        altura: v.altura ?? undefined,
+        largura: v.largura ?? undefined,
+        comprimento: v.comprimento ?? undefined,
+        peso: v.peso ?? undefined,
       }));
       setVariations(seed);
       setOriginalVariationIds(seed.map((v: any) => v.id).filter(Boolean));
@@ -288,7 +323,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
               img_url: v.img_url || '',
               qntd: v.qntd ?? 0,
               codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || '',
-              ordem: v.ordem ?? 0
+              ordem: v.ordem ?? 0,
+              altura: v.altura ?? undefined,
+              largura: v.largura ?? undefined,
+              comprimento: v.comprimento ?? undefined,
+              peso: v.peso ?? undefined,
             }));
             setVariations(mappedDb);
             setOriginalVariationIds(mappedDb.map((v: any) => v.id).filter(Boolean));
@@ -405,6 +444,54 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             </div>
           </div>
 
+          {/* Dados de Volume - somente quando não tem variações */}
+          {!hasVariations && (
+            <div className="mt-4 p-4 border rounded-lg bg-blue-50">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">!</div>
+                <h3 className="font-semibold text-sm">DADOS DO VOLUME</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <Label>Altura* <span className="text-xs text-gray-500">(cm)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={altura as any} 
+                    onChange={(e)=>setAltura(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="10"
+                  />
+                </div>
+                <div>
+                  <Label>Largura* <span className="text-xs text-gray-500">(cm)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={largura as any} 
+                    onChange={(e)=>setLargura(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="40"
+                  />
+                </div>
+                <div>
+                  <Label>Comprimento* <span className="text-xs text-gray-500">(cm)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={comprimento as any} 
+                    onChange={(e)=>setComprimento(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="40"
+                  />
+                </div>
+                <div>
+                  <Label>Peso* <span className="text-xs text-gray-500">(kg)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={peso as any} 
+                    onChange={(e)=>setPeso(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="6"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 flex items-center gap-6">
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={hasVariations} onChange={(e)=>setHasVariations(e.target.checked)} />
@@ -478,6 +565,53 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         <div>
                           <Label>Imagem URL</Label>
                           <Input value={v.img_url} onChange={(e)=>updateVariation(idx, { img_url: e.target.value })} />
+                        </div>
+                      </div>
+                      
+                      {/* Dados de Volume da Variação */}
+                      <div className="mt-3 p-3 border rounded bg-blue-50">
+                        <div className="text-xs font-semibold mb-2 text-blue-700">DADOS DO VOLUME</div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                          <div>
+                            <Label className="text-xs">Altura* <span className="text-gray-500">(cm)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.altura as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { altura: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="10"
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Largura* <span className="text-gray-500">(cm)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.largura as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { largura: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="40"
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Comprimento* <span className="text-gray-500">(cm)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.comprimento as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { comprimento: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="40"
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Peso* <span className="text-gray-500">(kg)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.peso as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { peso: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="6"
+                              className="h-8"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
