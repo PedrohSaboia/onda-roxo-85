@@ -14,6 +14,7 @@ type Cliente = {
   endereco: string;
   numero: string;
   complemento: string;
+  observacao: string;
   bairro: string;
   cidade: string;
   estado: string;
@@ -50,6 +51,7 @@ export default function InformacoesEntrega() {
           endereco: data.endereco || '',
           numero: data.numero || '',
           complemento: data.complemento || '',
+          observacao: (data as any).observacao || '',
           bairro: data.bairro || '',
           cidade: data.cidade || '',
           estado: data.estado || '',
@@ -222,6 +224,7 @@ export default function InformacoesEntrega() {
         endereco: cliente.endereco,
         numero: cliente.numero,
         complemento: cliente.complemento || null,
+        observacao: cliente.observacao || null,
         bairro: cliente.bairro,
         cidade: cliente.cidade,
         estado: cliente.estado,
@@ -352,6 +355,9 @@ export default function InformacoesEntrega() {
 
                 <label className="block text-sm font-medium text-gray-700">Complemento <span className="text-sm text-gray-500">(opcional)</span></label>
                 <input className="w-full p-3 border rounded-md mb-4" value={cliente.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
+
+                <label className="block text-sm font-medium text-gray-700">Observação <span className="text-sm text-gray-500">(opcional)</span></label>
+                <textarea className="w-full p-3 border rounded-md mb-4" rows={3} value={cliente.observacao || ''} onChange={(e) => updateField('observacao', e.target.value)} />
 
                 <div className="flex flex-col sm:flex-row justify-between gap-3">
                   <button type="button" onClick={() => { setSubmitted(false); setCepBuscado(false); setStep(1); }} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>

@@ -96,6 +96,7 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
           endereco: data.endereco || '',
           numero: data.numero || '',
           complemento: data.complemento || '',
+          observacao: (data as any).observacao || '',
           bairro: data.bairro || '',
           cidade: data.cidade || '',
           estado: data.estado || '',
@@ -165,6 +166,7 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
         endereco: cliente.endereco,
         numero: cliente.numero,
         complemento: cliente.complemento || null,
+        observacao: cliente.observacao || null,
         bairro: cliente.bairro,
         cidade: cliente.cidade,
         estado: cliente.estado,
@@ -256,6 +258,11 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
           <div>
             <label className="block text-sm text-muted-foreground">Complemento</label>
             <Input value={cliente?.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
+          </div>
+
+          <div>
+            <label className="block text-sm text-muted-foreground">Observação</label>
+            <textarea className="w-full p-2 border rounded-md" rows={3} value={cliente?.observacao || ''} onChange={(e) => updateField('observacao', e.target.value)} />
           </div>
         </div>
 
