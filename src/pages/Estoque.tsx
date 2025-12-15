@@ -24,7 +24,8 @@ export function Estoque() {
       try {
         const { data, error: supaError } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
+          .order('contagem', { ascending: false, nullsFirst: false })
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -72,7 +73,7 @@ export function Estoque() {
     // refetch produtos after modal close
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('criado_em', { ascending: false });
+      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('contagem', { ascending: false, nullsFirst: false }).order('criado_em', { ascending: false });
       if (data) setProdutos(data.map((p: any) => ({
         id: p.id,
         nome: p.nome,

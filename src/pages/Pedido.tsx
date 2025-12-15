@@ -225,7 +225,8 @@ export default function Pedido() {
       try {
         const { data, error } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em,up_cell, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em,up_cell,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
+          .order('contagem', { ascending: false, nullsFirst: false })
           .order('criado_em', { ascending: false });
 
         if (error) throw error;
@@ -2052,6 +2053,30 @@ export default function Pedido() {
                       if (inserts.length) {
                         const { error: insErr } = await supabase.from('itens_pedido').insert(inserts as any);
                         if (insErr) throw insErr;
+                        
+                        // Incrementar contagem dos produtos adicionados
+                        const productCounts: Record<string, number> = {};
+                        modalCart.forEach(it => {
+                          const [produtoId] = String(it.id).split(':');
+                          const productId = it.produtoId || produtoId;
+                          const qty = Number(it.quantidade || 1);
+                          productCounts[productId] = (productCounts[productId] || 0) + qty;
+                        });
+
+                        for (const [productId, count] of Object.entries(productCounts)) {
+                          const { data: currentProduct } = await supabase
+                            .from('produtos')
+                            .select('contagem')
+                            .eq('id', productId)
+                            .single();
+                          
+                          if (currentProduct) {
+                            await supabase
+                              .from('produtos')
+                              .update({ contagem: (currentProduct.contagem || 0) + count })
+                              .eq('id', productId);
+                          }
+                        }
                       }
 
                       // update pedido valor_total (add providedValue)

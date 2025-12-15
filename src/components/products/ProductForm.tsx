@@ -213,9 +213,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
           .order('nome');
         if (error) throw error;
         if (!mounted) return;
-        // Exclude current product being edited
-        const filtered = product ? (data || []).filter((p: any) => p.id !== (product as any).id) : (data || []);
-        setAvailableProducts(filtered);
+        // Include all products (mesmo produto pode ser upsell com variação diferente)
+        setAvailableProducts(data || []);
       } catch (err: any) {
         console.error('Erro ao carregar produtos:', err);
       }
