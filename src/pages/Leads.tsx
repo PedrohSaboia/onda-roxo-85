@@ -10,6 +10,7 @@ import { useToast } from '@/hooks/use-toast';
 import { AppHeader } from '@/components/layout/AppHeader';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import { Check, X, Pencil, SquarePlus } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 type LeadRow = {
   id: string;
@@ -31,6 +32,7 @@ type LeadRow = {
 export default function Leads() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { empresaId } = useAuth();
 
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -527,7 +529,8 @@ export default function Leads() {
                               responsavel_id: activeLead.responsavel || null,
                               plataforma_id: plataformaId,
                               status_id: '3ca23a64-cb1e-480c-8efa-0468ebc18097',
-                              data_prevista: addDate || null
+                              data_prevista: addDate || null,
+                              empresa_id: empresaId || null
                             };
 
                             const { data: pedidoData, error: pedidoError } = await (supabase as any)
@@ -547,7 +550,8 @@ export default function Leads() {
                                   nome: payload.cliente_nome || payload.id_externo,
                                   telefone: payload.contato || null,
                                   email: null,
-                                  pedido_id: pedidoId
+                                  pedido_id: pedidoId,
+                                  empresa_id: empresaId || null
                                 };
 
                                 const { error: clienteError } = await (supabase as any)

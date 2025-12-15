@@ -184,7 +184,7 @@ export default function NovoPedido() {
         criadoEm = now.toISOString();
       }
       const pedidoPayload: any = {
-        id_externo: idExterno || null,
+        id_externo: idExterno || `PED-${Date.now()}`,
         cliente_nome: nome || null,
         // send only digits for contato to the backend
         contato: contato ? String(contato).replace(/\D/g, '') : null,
@@ -247,6 +247,36 @@ export default function NovoPedido() {
       const { error: itensError } = await supabase.from('itens_pedido').insert(itens as any);
       if (itensError) throw itensError;
 
+      // Incrementar contagem dos produtos adicionados
+      const productCounts: Record<string, number> = {};
+      cart.forEach(it => {
+        const [produtoId] = String(it.id).split(':');
+        const productId = it.produtoId || produtoId;
+        const qty = Number(it.quantidade || 1);
+        productCounts[productId] = (productCounts[productId] || 0) + qty;
+      });
+
+      for (const [productId, count] of Object.entries(productCounts)) {
+        await supabase.rpc('increment', {
+          row_id: productId,
+          x: count
+        }).eq('id', productId);
+        
+        // Fallback: se a função RPC não existir, usar update direto
+        const { data: currentProduct } = await supabase
+          .from('produtos')
+          .select('contagem')
+          .eq('id', productId)
+          .single();
+        
+        if (currentProduct) {
+          await supabase
+            .from('produtos')
+            .update({ contagem: (currentProduct.contagem || 0) + count })
+            .eq('id', productId);
+        }
+      }
+
       toast({ title: 'Pedido criado', description: 'Pedido e itens salvos com sucesso' });
       navigate(`/pedido/${pedidoId}`);
     } catch (err: any) {
@@ -266,7 +296,8 @@ export default function NovoPedido() {
       try {
         const { data, error } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v,ordem)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v,ordem)')
+          .order('contagem', { ascending: false, nullsFirst: false })
           .order('criado_em', { ascending: false });
 
         if (error) throw error;

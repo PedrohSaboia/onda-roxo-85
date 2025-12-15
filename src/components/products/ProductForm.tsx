@@ -8,6 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import EmballagemModal from '@/components/shipping/EmballagemModal';
+import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 import { Produto } from '@/types';
 
@@ -20,6 +22,10 @@ type Variation = {
   qntd?: number;
   codigo_barras_v?: string;
   ordem?: number;
+  altura?: number;
+  largura?: number;
+  comprimento?: number;
+  peso?: number;
 }
 
 export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
@@ -35,6 +41,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const [categoria, setCategoria] = useState('');
   const [imgUrl, setImgUrl] = useState('');
   const [qntd, setQntd] = useState<number | ''>('');
+  const [altura, setAltura] = useState<number | ''>('');
+  const [largura, setLargura] = useState<number | ''>('');
+  const [comprimento, setComprimento] = useState<number | ''>('');
+  const [peso, setPeso] = useState<number | ''>('');
 
   const [hasVariations, setHasVariations] = useState(false);
   const [variations, setVariations] = useState<Variation[]>([]);
@@ -46,19 +56,27 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const [selectedEmbalagemForModal, setSelectedEmbalagemForModal] = useState<any | undefined>(undefined);
   const [selectedEmbalagemId, setSelectedEmbalagemId] = useState<string | ''>('');
   const [nomeVariacao, setNomeVariacao] = useState<string>('');
+  const [upCell, setUpCell] = useState<boolean>(false);
+  const [upSellModalOpen, setUpSellModalOpen] = useState<boolean>(false);
+  const [selectedUpSellIds, setSelectedUpSellIds] = useState<string[]>([]);
+  const [availableProducts, setAvailableProducts] = useState<any[]>([]);
+  const [upSellSearchTerm, setUpSellSearchTerm] = useState<string>('');
 
 
 
   const reset = () => {
     setNome(''); setSku(''); setPreco('0.00'); setUnidade('un'); setCategoria(''); setImgUrl(''); setQntd('');
     setCodigoBarras('');
+    setAltura(''); setLargura(''); setComprimento(''); setPeso('');
     setHasVariations(false); setVariations([]);
     setSelectedEmbalagemId('');
     setNomeVariacao('');
     setOriginalVariationIds([]);
+    setUpCell(false);
+    setSelectedUpSellIds([]);
   }
 
-  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length }]);
+  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length, altura: undefined, largura: undefined, comprimento: undefined, peso: undefined }]);
   const updateVariation = (idx: number, patch: Partial<Variation>) => setVariations(v => v.map((it,i)=> i===idx ? { ...it, ...patch } : it));
   const removeVariation = (idx: number) => setVariations(v => v.filter((_,i)=> i!==idx));
 
@@ -75,11 +93,21 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         if (!v.sku || !v.sku.trim()) { toast({ title: `SKU da variação ${i + 1} é obrigatório` }); return; }
         if (isNaN(Number(v.valor))) { toast({ title: `Valor da variação ${i + 1} inválido` }); return; }
         if (v.qntd === undefined || v.qntd === null || isNaN(Number(v.qntd))) { toast({ title: `Quantidade da variação ${i + 1} inválida` }); return; }
+        // Validar campos de volume da variação
+        if (!v.altura || v.altura <= 0) { toast({ title: `Altura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
+        if (!v.largura || v.largura <= 0) { toast({ title: `Largura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
+        if (!v.comprimento || v.comprimento <= 0) { toast({ title: `Comprimento da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
+        if (!v.peso || v.peso <= 0) { toast({ title: `Peso da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
       }
     } else {
       // No variations: product-level validations apply
       if (!sku.trim()) { toast({ title: 'SKU é obrigatório' }); return; }
       if (isNaN(Number(preco))) { toast({ title: 'Preço inválido' }); return; }
+      // Validar campos de volume do produto
+      if (!altura || altura <= 0) { toast({ title: 'Altura é obrigatória', description: 'Por favor, preencha a altura do produto.', variant: 'destructive' }); return; }
+      if (!largura || largura <= 0) { toast({ title: 'Largura é obrigatória', description: 'Por favor, preencha a largura do produto.', variant: 'destructive' }); return; }
+      if (!comprimento || comprimento <= 0) { toast({ title: 'Comprimento é obrigatório', description: 'Por favor, preencha o comprimento do produto.', variant: 'destructive' }); return; }
+      if (!peso || peso <= 0) { toast({ title: 'Peso é obrigatório', description: 'Por favor, preencha o peso do produto.', variant: 'destructive' }); return; }
     }
 
   setSaving(true);
@@ -102,6 +130,12 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         nome_variacao: nomeVariacao || null,
         qntd: qntd === '' ? 0 : Number(qntd),
         empresa_id: empresaId || null,
+        up_cell: upCell,
+        lista_id_upsell: upCell && selectedUpSellIds.length > 0 ? selectedUpSellIds : null,
+        altura: hasVariations ? null : (altura || null),
+        largura: hasVariations ? null : (largura || null),
+        comprimento: hasVariations ? null : (comprimento || null),
+        peso: hasVariations ? null : (peso || null),
       } as any;
 
       console.log('Produto a ser inserido:', prodInsert);
@@ -123,11 +157,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
         const existing = variations.filter(v => v.id);
         for (const v of existing) {
-          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 0 }).eq('id', v.id);
+          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 0, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null }).eq('id', v.id);
           if (vUpdErr) throw vUpdErr;
         }
 
-        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx, empresa_id: empresaId || null }));
+        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx, empresa_id: empresaId || null, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null }));
         if (news.length > 0) {
           const { error: insErr } = await supabase.from('variacoes_produto').insert(news);
           if (insErr) throw insErr;
@@ -156,6 +190,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             codigo_barras_v: v.codigo_barras_v || null,
             ordem: v.ordem ?? idx,
             empresa_id: empresaId || null,
+            altura: v.altura || null,
+            largura: v.largura || null,
+            comprimento: v.comprimento || null,
+            peso: v.peso || null,
           }));
 
           const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
@@ -190,6 +228,27 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
     return () => { mounted = false };
   }, [embalagemModalOpen]);
 
+  // Load available products for up-sell selection
+  useEffect(() => {
+    if (!open) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('produtos')
+          .select('id, nome, sku, img_url')
+          .order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        // Include all products (mesmo produto pode ser upsell com variação diferente)
+        setAvailableProducts(data || []);
+      } catch (err: any) {
+        console.error('Erro ao carregar produtos:', err);
+      }
+    })();
+    return () => { mounted = false };
+  }, [open, product]);
+
   const handleSaveEmbalagem = async (data: any) => {
     try {
       if (selectedEmbalagemForModal && selectedEmbalagemForModal.id) {
@@ -221,12 +280,18 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
       setCategoria(p.categoria || '');
       setImgUrl(p.imagemUrl || '');
       setQntd(p.qntd ?? '');
+      setAltura(p.altura ?? '');
+      setLargura(p.largura ?? '');
+      setComprimento(p.comprimento ?? '');
+      setPeso(p.peso ?? '');
       const hasVar = Boolean((product as any).variacoes && (product as any).variacoes.length > 0);
       setHasVariations(hasVar);
       // If product has variations, barcode should live on variations; clear product-level barcode
       setCodigoBarras(hasVar ? '' : (p.codigo_barras || p.codigoBarras || ''));
       setNomeVariacao((product as any).nomeVariacao || '');
       setSelectedEmbalagemId((product as any).embalgens_id || '');
+      setUpCell(Boolean((product as any).up_cell || (product as any).upCell));
+      setSelectedUpSellIds((product as any).lista_id_upsell || []);
       // Seed variations from passed product object if present
       const seed = (p.variacoes || []).map((v: any) => ({
         id: v.id,
@@ -236,7 +301,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         img_url: v.img_url || '',
         qntd: v.qntd ?? 0,
         codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || '',
-        ordem: v.ordem ?? 0
+        ordem: v.ordem ?? 0,
+        altura: v.altura ?? undefined,
+        largura: v.largura ?? undefined,
+        comprimento: v.comprimento ?? undefined,
+        peso: v.peso ?? undefined,
       }));
       setVariations(seed);
       setOriginalVariationIds(seed.map((v: any) => v.id).filter(Boolean));
@@ -254,7 +323,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
               img_url: v.img_url || '',
               qntd: v.qntd ?? 0,
               codigo_barras_v: v.codigo_barras_v || v.codigo_barras || v.codigoBarrasV || v.codigoBarras || v.barcode || '',
-              ordem: v.ordem ?? 0
+              ordem: v.ordem ?? 0,
+              altura: v.altura ?? undefined,
+              largura: v.largura ?? undefined,
+              comprimento: v.comprimento ?? undefined,
+              peso: v.peso ?? undefined,
             }));
             setVariations(mappedDb);
             setOriginalVariationIds(mappedDb.map((v: any) => v.id).filter(Boolean));
@@ -371,11 +444,80 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             </div>
           </div>
 
-          <div className="mt-4">
+          {/* Dados de Volume - somente quando não tem variações */}
+          {!hasVariations && (
+            <div className="mt-4 p-4 border rounded-lg bg-blue-50">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-5 h-5 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold">!</div>
+                <h3 className="font-semibold text-sm">DADOS DO VOLUME</h3>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div>
+                  <Label>Altura* <span className="text-xs text-gray-500">(cm)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={altura as any} 
+                    onChange={(e)=>setAltura(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="10"
+                  />
+                </div>
+                <div>
+                  <Label>Largura* <span className="text-xs text-gray-500">(cm)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={largura as any} 
+                    onChange={(e)=>setLargura(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="40"
+                  />
+                </div>
+                <div>
+                  <Label>Comprimento* <span className="text-xs text-gray-500">(cm)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={comprimento as any} 
+                    onChange={(e)=>setComprimento(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="40"
+                  />
+                </div>
+                <div>
+                  <Label>Peso* <span className="text-xs text-gray-500">(kg)</span></Label>
+                  <Input 
+                    type="number" 
+                    value={peso as any} 
+                    onChange={(e)=>setPeso(e.target.value === '' ? '' : Number(e.target.value))}
+                    placeholder="6"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-4 flex items-center gap-6">
             <label className="flex items-center gap-2">
               <input type="checkbox" checked={hasVariations} onChange={(e)=>setHasVariations(e.target.checked)} />
               <span>Possui variações</span>
             </label>
+            
+            <label className="flex items-center gap-2">
+              <input 
+                type="checkbox" 
+                checked={upCell} 
+                onChange={(e) => setUpCell(e.target.checked)} 
+              />
+              <span>Produto com Up-Sell</span>
+            </label>
+            
+            {upCell && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setUpSellModalOpen(true)}
+                className="ml-auto"
+              >
+                Editar upseel ({selectedUpSellIds.length} selecionados)
+              </Button>
+            )}
           </div>
 
           {hasVariations && (
@@ -425,6 +567,53 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                           <Input value={v.img_url} onChange={(e)=>updateVariation(idx, { img_url: e.target.value })} />
                         </div>
                       </div>
+                      
+                      {/* Dados de Volume da Variação */}
+                      <div className="mt-3 p-3 border rounded bg-blue-50">
+                        <div className="text-xs font-semibold mb-2 text-blue-700">DADOS DO VOLUME</div>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                          <div>
+                            <Label className="text-xs">Altura* <span className="text-gray-500">(cm)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.altura as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { altura: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="10"
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Largura* <span className="text-gray-500">(cm)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.largura as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { largura: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="40"
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Comprimento* <span className="text-gray-500">(cm)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.comprimento as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { comprimento: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="40"
+                              className="h-8"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-xs">Peso* <span className="text-gray-500">(kg)</span></Label>
+                            <Input 
+                              type="number" 
+                              value={v.peso as any ?? ''} 
+                              onChange={(e)=>updateVariation(idx, { peso: e.target.value === '' ? undefined : Number(e.target.value) })}
+                              placeholder="6"
+                              className="h-8"
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
                     <div className="ml-4 flex flex-col gap-2">
                       <Button variant="outline" size="sm" onClick={() => { /* inline edit already available */ }}>{v.id ? 'Editar' : 'Editar'}</Button>
@@ -458,6 +647,135 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         </CardContent>
       </Card>
       <EmballagemModal open={embalagemModalOpen} onClose={() => setEmbalagemModalOpen(false)} onSave={handleSaveEmbalagem} embalagem={selectedEmbalagemForModal} />
+      
+      {/* Modal de seleção de produtos Up-Sell */}
+      <Dialog open={upSellModalOpen} onOpenChange={(open) => {
+        setUpSellModalOpen(open);
+        if (!open) setUpSellSearchTerm('');
+      }}>
+        <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Selecionar Produtos para Up-Sell</DialogTitle>
+            <p className="text-sm text-muted-foreground">Escolha os produtos que serão oferecidos como up-sell</p>
+          </DialogHeader>
+          
+          {/* Campo de busca */}
+          <div className="py-2">
+            <div className="relative">
+              <Input
+                placeholder="Buscar por nome ou SKU..."
+                value={upSellSearchTerm}
+                onChange={(e) => setUpSellSearchTerm(e.target.value)}
+                className="pl-3"
+              />
+            </div>
+          </div>
+
+          {/* Lista de produtos */}
+          <div className="flex-1 overflow-y-auto py-2 min-h-[300px]">
+            {(() => {
+              const filtered = availableProducts.filter(prod => 
+                prod.nome.toLowerCase().includes(upSellSearchTerm.toLowerCase()) ||
+                prod.sku.toLowerCase().includes(upSellSearchTerm.toLowerCase())
+              );
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                    <p className="text-sm">
+                      {upSellSearchTerm ? 'Nenhum produto encontrado' : 'Nenhum produto disponível'}
+                    </p>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-2 gap-3">
+                  {filtered.map((prod) => {
+                    const isSelected = selectedUpSellIds.includes(prod.id);
+                    return (
+                      <div
+                        key={prod.id}
+                        className={`flex items-center gap-3 p-3 border-2 rounded-lg cursor-pointer transition-all ${
+                          isSelected 
+                            ? 'border-amber-600 bg-amber-50' 
+                            : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                        }`}
+                        onClick={() => {
+                          setSelectedUpSellIds(prev => 
+                            prev.includes(prod.id) 
+                              ? prev.filter(id => id !== prod.id)
+                              : [...prev, prod.id]
+                          );
+                        }}
+                      >
+                        <div className="flex-shrink-0">
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ${
+                            isSelected ? 'bg-amber-600 border-amber-600' : 'border-gray-400'
+                          }`}>
+                            {isSelected && (
+                              <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {prod.img_url ? (
+                          <div className="w-12 h-12 flex-shrink-0">
+                            <img 
+                              src={prod.img_url} 
+                              alt={prod.nome} 
+                              className="w-full h-full object-cover rounded-md border"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-12 h-12 flex-shrink-0 bg-gray-100 rounded-md border flex items-center justify-center">
+                            <span className="text-gray-400 text-[10px]">Sem imagem</span>
+                          </div>
+                    )}
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="font-semibold text-sm text-gray-900 break-words line-clamp-2">{prod.nome}</div>
+                      <div className="text-xs text-gray-500 mt-0.5">SKU: {prod.sku}</div>
+                    </div>
+                  </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+
+          <DialogFooter className="border-t pt-4">
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm text-muted-foreground">
+                {selectedUpSellIds.length} {selectedUpSellIds.length === 1 ? 'produto selecionado' : 'produtos selecionados'}
+              </span>
+              <div className="flex gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setUpSellModalOpen(false);
+                    setUpSellSearchTerm('');
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={() => {
+                    setUpSellModalOpen(false);
+                    setUpSellSearchTerm('');
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  Confirmar
+                </Button>
+              </div>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
