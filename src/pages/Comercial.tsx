@@ -1,9 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Plus, Search, Filter, Eye, Edit, Copy, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -48,6 +49,7 @@ export function Comercial() {
   const urlClienteForm = params.get('cliente_formulario_enviado') === 'false';
   const urlLiberado = params.get('pedido_liberado') === 'false';
   const urlResponsavel = params.get('responsavel_id') || '';
+  const urlPlataforma = params.get('plataforma_id') || '';
   
   // State using URL as source of truth
   const [searchTerm, setSearchTerm] = useState(urlSearch);
@@ -71,9 +73,12 @@ export function Comercial() {
   const [processingRapid, setProcessingRapid] = useState<Record<string, boolean>>({});
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
   const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
+  const CANCELADO_STATUS_ID = '09ddb68a-cff3-4a69-a120-7459642cca6f';
   const [filterNotLiberado, setFilterNotLiberado] = useState(urlLiberado);
   const [filterResponsavelId, setFilterResponsavelId] = useState(urlResponsavel);
+  const [filterPlataformaId, setFilterPlataformaId] = useState(urlPlataforma);
   const [usuariosList, setUsuariosList] = useState<Array<{ id: string; nome: string }>>([]);
+  const [plataformasList, setPlataformasList] = useState<Array<{ id: string; nome: string }>>([]);
   const urlEnvioAdiado = params.get('envio_adiado') === 'true';
   const [filterEnvioAdiado, setFilterEnvioAdiado] = useState(urlEnvioAdiado);
   
@@ -81,6 +86,7 @@ export function Comercial() {
   const [tempFilterNotLiberado, setTempFilterNotLiberado] = useState(urlLiberado);
   const [tempFilterClienteFormNotSent, setTempFilterClienteFormNotSent] = useState(urlClienteForm);
   const [tempFilterResponsavelId, setTempFilterResponsavelId] = useState(urlResponsavel);
+  const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState(urlPlataforma);
   
   // Estados para filtro de produtos
   const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
@@ -89,6 +95,12 @@ export function Comercial() {
   const [showVariacoesModal, setShowVariacoesModal] = useState(false);
   const [variacoesList, setVariacoesList] = useState<Array<{ id: string; nome: string; produtoId: string; produtoNome: string }>>([]);
   const [selectedProdutoParaVariacao, setSelectedProdutoParaVariacao] = useState<{ id: string; nome: string } | null>(null);
+  
+  // Ref para o dropdown de filtros
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+  
+  // Estados para seleção de pedidos
+  const [selectedPedidosIds, setSelectedPedidosIds] = useState<Set<string>>(new Set());
   
   // Sync state from URL when location changes
   useEffect(() => {
@@ -100,6 +112,7 @@ export function Comercial() {
     const newClienteForm = params.get('cliente_formulario_enviado') === 'false';
     const newLiberado = params.get('pedido_liberado') === 'false';
     const newResponsavel = params.get('responsavel_id') || '';
+    const newPlataforma = params.get('plataforma_id') || '';
     const newEnvioAdiado = params.get('envio_adiado') === 'true';
     
     setPage(newPage);
@@ -109,13 +122,32 @@ export function Comercial() {
     setFilterClienteFormNotSent(newClienteForm);
     setFilterNotLiberado(newLiberado);
     setFilterResponsavelId(newResponsavel);
+    setFilterPlataformaId(newPlataforma);
     setFilterEnvioAdiado(newEnvioAdiado);
     
     // Sincronizar estados temporários
     setTempFilterNotLiberado(newLiberado);
     setTempFilterClienteFormNotSent(newClienteForm);
     setTempFilterResponsavelId(newResponsavel);
+    setTempFilterPlataformaId(newPlataforma);
   }, [location.search]);
+
+  // Fechar dropdown de filtros ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setShowFilters(false);
+      }
+    };
+
+    if (showFilters) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilters]);
 
   useEffect(() => {
     let mounted = true;
@@ -152,9 +184,10 @@ export function Comercial() {
           }
         }
 
-        // Exclude pedidos with 'Enviado' status from the main Comercial list
+        // Exclude pedidos with 'Enviado' and 'Cancelado' status from the main Comercial list
         // (those are shown in the dedicated PedidosEnviados page)
         (query as any).neq('status_id', ENVIADO_STATUS_ID);
+        (query as any).neq('status_id', CANCELADO_STATUS_ID);
 
         // apply pedido_liberado = FALSE filter when requested
         if (filterNotLiberado) {
@@ -171,6 +204,11 @@ export function Comercial() {
         // apply responsavel_id filter when requested
         if (filterResponsavelId) {
           (query as any).eq('responsavel_id', filterResponsavelId);
+        }
+
+        // apply plataforma_id filter when requested
+        if (filterPlataformaId) {
+          (query as any).eq('plataforma_id', filterPlataformaId);
         }
 
         // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
@@ -360,7 +398,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm, selectedProdutos]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterPlataformaId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm, selectedProdutos]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -379,6 +417,23 @@ export function Comercial() {
     return () => { mounted = false };
   }, []);
 
+  // load list of plataformas for filter dropdown
+  useEffect(() => {
+    let mounted = true;
+    const loadPlataformas = async () => {
+      try {
+        const { data, error } = await supabase.from('plataformas').select('id, nome').order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        setPlataformasList(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar plataformas:', err);
+      }
+    };
+    loadPlataformas();
+    return () => { mounted = false };
+  }, []);
+
   // load count of pedidos with the specific etiqueta id (to show next to filter)
   useEffect(() => {
     let mounted = true;
@@ -389,6 +444,7 @@ export function Comercial() {
           .select('id', { count: 'exact' })
           .eq('etiqueta_envio_id', ETIQUETA_FILTER_ID)
           .neq('status_id', ENVIADO_STATUS_ID)
+          .neq('status_id', CANCELADO_STATUS_ID)
           .limit(1);
         if (error) throw error;
         if (!mounted) return;
@@ -411,6 +467,7 @@ export function Comercial() {
           .select('id', { count: 'exact' })
           .not('tempo_ganho', 'is', null)
           .neq('status_id', ENVIADO_STATUS_ID)
+          .neq('status_id', CANCELADO_STATUS_ID)
           .limit(1);
         if (error) throw error;
         if (!mounted) return;
@@ -432,7 +489,8 @@ export function Comercial() {
           .from('pedidos')
           .select('tempo_ganho')
           .not('tempo_ganho', 'is', null)
-          .neq('status_id', ENVIADO_STATUS_ID);
+          .neq('status_id', ENVIADO_STATUS_ID)
+          .neq('status_id', CANCELADO_STATUS_ID);
         
         if (error) throw error;
         if (!mounted) return;
@@ -458,9 +516,10 @@ export function Comercial() {
   useEffect(() => {
     let mounted = true;
     const ENVIADO_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
+    const CANCELADO_ID = '09ddb68a-cff3-4a69-a120-7459642cca6f';
     const loadTotal = async () => {
       try {
-        const { count, error } = await supabase.from('pedidos').select('id', { count: 'exact' }).neq('status_id', ENVIADO_ID).limit(1);
+        const { count, error } = await supabase.from('pedidos').select('id', { count: 'exact' }).neq('status_id', ENVIADO_ID).neq('status_id', CANCELADO_ID).limit(1);
         if (error) throw error;
         if (!mounted) return;
         setTotalExcludingEnviados(count || 0);
@@ -1052,6 +1111,30 @@ export function Comercial() {
     }
   };
 
+  // Funções de seleção de pedidos
+  const toggleSelectPedido = (pedidoId: string) => {
+    setSelectedPedidosIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(pedidoId)) {
+        newSet.delete(pedidoId);
+      } else {
+        newSet.add(pedidoId);
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedPedidosIds.size === filteredPedidosComProdutos.length && filteredPedidosComProdutos.length > 0) {
+      setSelectedPedidosIds(new Set());
+    } else {
+      setSelectedPedidosIds(new Set(filteredPedidosComProdutos.map(p => p.id)));
+    }
+  };
+
+  const isAllSelected = filteredPedidosComProdutos.length > 0 && selectedPedidosIds.size === filteredPedidosComProdutos.length;
+  const isSomeSelected = selectedPedidosIds.size > 0 && selectedPedidosIds.size < filteredPedidosComProdutos.length;
+
   const totalPages = Math.max(1, Math.ceil((total || filteredPedidosComProdutos.length) / pageSize));
 
   const updatePageInUrl = (newPage: number) => {
@@ -1111,9 +1194,123 @@ export function Comercial() {
       {/* Filtros e busca */}
       <Card>
         <CardHeader>
-          <div className="flex items-center gap-4">
-            <div className="flex-1 max-w-md">
-              <div className="relative">
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <div className="relative" ref={filterDropdownRef}>
+                <Button variant="outline" size="sm" onClick={() => {
+                  // Sincronizar estados temporários com os filtros atuais ao abrir
+                  setTempFilterNotLiberado(filterNotLiberado);
+                  setTempFilterClienteFormNotSent(filterClienteFormNotSent);
+                  setTempFilterResponsavelId(filterResponsavelId);
+                  setTempFilterPlataformaId(filterPlataformaId);
+                  setShowFilters(s => !s);
+                }}>
+                  <Filter className="h-4 w-4 mr-2" />
+                  Filtrar
+                </Button>
+
+                {showFilters && (
+                  <div className="absolute left-0 top-full mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="text-sm font-medium">Filtros</div>
+                      <button className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <input id="filter-not-liberado" type="checkbox" checked={tempFilterNotLiberado} onChange={(e) => setTempFilterNotLiberado(e.target.checked)} />
+                      <label htmlFor="filter-not-liberado" className="text-sm">Somente pedidos não liberados</label>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <input id="filter-cliente-formulario" type="checkbox" checked={tempFilterClienteFormNotSent} onChange={(e) => setTempFilterClienteFormNotSent(e.target.checked)} />
+                      <label htmlFor="filter-cliente-formulario" className="text-sm">Somente pedidos com formulário não enviado</label>
+                    </div>
+                    <div className="mb-3">
+                      <label htmlFor="filter-responsavel" className="text-sm block mb-1">Filtrar por responsável</label>
+                      <select 
+                        id="filter-responsavel" 
+                        value={tempFilterResponsavelId} 
+                        onChange={(e) => setTempFilterResponsavelId(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">Todos</option>
+                        {usuariosList.map(user => (
+                          <option key={user.id} value={user.id}>{user.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-3">
+                      <label htmlFor="filter-plataforma" className="text-sm block mb-1">Filtrar por plataforma</label>
+                      <select 
+                        id="filter-plataforma" 
+                        value={tempFilterPlataformaId} 
+                        onChange={(e) => setTempFilterPlataformaId(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">Todas</option>
+                        {plataformasList.map(plataforma => (
+                          <option key={plataforma.id} value={plataforma.id}>{plataforma.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-3">
+                      <label htmlFor="filter-produto" className="text-sm block mb-1">Filtrar por produto</label>
+                      <div className="relative">
+                        <Input
+                          id="filter-produto"
+                          type="text"
+                          placeholder="Digite o nome do produto..."
+                          value={produtoSearchTerm}
+                          onChange={(e) => {
+                            setProdutoSearchTerm(e.target.value);
+                            buscarProdutos(e.target.value);
+                          }}
+                          className="w-full text-sm"
+                        />
+                        {produtosList.length > 0 && (
+                          <div className="absolute z-[100] w-full bg-white border rounded shadow-lg mt-1 max-h-48 overflow-y-auto">
+                            {produtosList.map(produto => (
+                              <div
+                                key={produto.id}
+                                className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                                onClick={() => selecionarProduto(produto)}
+                              >
+                                <div className="font-medium">{produto.nome}</div>
+                                {produto.sku && <div className="text-xs text-gray-500">{produto.sku}</div>}
+                                {produto.temVariacoes && <div className="text-xs text-purple-600">Com variações</div>}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button variant="outline" size="sm" onClick={() => {
+                        // clear temporary filters
+                        setTempFilterNotLiberado(false);
+                        setTempFilterClienteFormNotSent(false);
+                        setTempFilterResponsavelId('');
+                        setTempFilterPlataformaId('');
+                        setSelectedProdutos([]);
+                        setProdutoSearchTerm('');
+                        setProdutosList([]);
+                      }}>Limpar</Button>
+                      <Button size="sm" onClick={() => {
+                        // apply temporary filters to actual filters via query params
+                        const next = new URLSearchParams(location.search);
+                        if (tempFilterNotLiberado) next.set('pedido_liberado', 'false'); else next.delete('pedido_liberado');
+                        if (tempFilterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
+                        if (tempFilterResponsavelId) next.set('responsavel_id', tempFilterResponsavelId); else next.delete('responsavel_id');
+                        if (tempFilterPlataformaId) next.set('plataforma_id', tempFilterPlataformaId); else next.delete('plataforma_id');
+                        // ensure module param remains
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                        setShowFilters(false);
+                      }}>Aplicar</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
                   placeholder="Buscar pedidos..."
@@ -1123,350 +1320,332 @@ export function Comercial() {
                 />
               </div>
 
-              {/* Active filter tags (appear directly below the search input) */}
-              <div className="mt-2">
-                {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId || !!filterResponsavelId || filterEnvioAdiado || selectedProdutos.length > 0) && (
-                  <div className="flex flex-wrap items-center gap-2">
-                    {filterNotLiberado && (
-                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
-                        <span className="text-sm">Somente não liberados</span>
-                        <button
-                          className="text-gray-500 hover:text-gray-700"
-                          onClick={() => {
-                            setFilterNotLiberado(false);
-                            setPage(1);
-                            const next = new URLSearchParams(location.search);
-                            next.delete('pedido_liberado');
-                            if (!next.get('module')) next.set('module', 'comercial');
-                            navigate({ pathname: location.pathname, search: next.toString() });
-                          }}
-                          aria-label="Remover filtro não liberado"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    )}
-
-                    {filterClienteFormNotSent && (
-                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
-                        <span className="text-sm">Formulário não enviado</span>
-                        <button
-                          className="text-gray-500 hover:text-gray-700"
-                          onClick={() => {
-                            setFilterClienteFormNotSent(false);
-                            setPage(1);
-                            const next = new URLSearchParams(location.search);
-                            next.delete('cliente_formulario_enviado');
-                            if (!next.get('module')) next.set('module', 'comercial');
-                            navigate({ pathname: location.pathname, search: next.toString() });
-                          }}
-                          aria-label="Remover filtro formulário não enviado"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    )}
-
-                    {filterEtiquetaId === ETIQUETA_FILTER_ID && (
-                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
-                        <span className="text-sm">Etiqueta Pendente</span>
-                        <button
-                          className="text-gray-500 hover:text-gray-700"
-                          onClick={() => {
-                            setFilterEtiquetaId('');
-                            setPage(1);
-                            const next = new URLSearchParams(location.search);
-                            next.delete('etiqueta_envio_id');
-                            if (!next.get('module')) next.set('module', 'comercial');
-                            navigate({ pathname: location.pathname, search: next.toString() });
-                          }}
-                          aria-label="Remover filtro etiqueta pendente"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    )}
-
-                    {filterEnvioAdiado && (
-                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
-                        <span className="text-sm">
-                          Envio Adiado
-                          {filterEnvioAdiadoDate && ` - ${format(filterEnvioAdiadoDate, "dd/MM/yyyy", { locale: ptBR })}`}
-                        </span>
-                        {filterEnvioAdiadoDate && (
-                          <button
-                            className="text-gray-500 hover:text-gray-700"
-                            onClick={() => {
-                              setFilterEnvioAdiadoDate(undefined);
-                              setPage(1);
-                            }}
-                            aria-label="Remover filtro de data"
-                          >
-                            ⊗
-                          </button>
-                        )}
-                        <button
-                          className="text-gray-500 hover:text-gray-700"
-                          onClick={() => {
-                            setFilterEnvioAdiado(false);
-                            setFilterEnvioAdiadoDate(undefined);
-                            setPage(1);
-                            const next = new URLSearchParams(location.search);
-                            next.delete('envio_adiado');
-                            if (!next.get('module')) next.set('module', 'comercial');
-                            navigate({ pathname: location.pathname, search: next.toString() });
-                          }}
-                          aria-label="Remover filtro envio adiado"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    )}
-
-                    {filterResponsavelId && (
-                      <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
-                        <span className="text-sm">Responsável: {usuariosList.find(u => u.id === filterResponsavelId)?.nome || 'Selecionado'}</span>
-                        <button
-                          className="text-gray-500 hover:text-gray-700"
-                          onClick={() => {
-                            setFilterResponsavelId('');
-                            setPage(1);
-                            const next = new URLSearchParams(location.search);
-                            next.delete('responsavel_id');
-                            if (!next.get('module')) next.set('module', 'comercial');
-                            navigate({ pathname: location.pathname, search: next.toString() });
-                          }}
-                          aria-label="Remover filtro responsável"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    )}
-
-                    {selectedProdutos.map((produto) => (
-                      <div key={`${produto.tipo}-${produto.id}`} className="flex items-center gap-2 bg-purple-100 text-purple-800 px-3 py-1 rounded">
-                        <span className="text-sm">
-                          {produto.tipo === 'variacao' 
-                            ? `${produto.nome} - ${produto.variacaoNome}` 
-                            : produto.nome}
-                        </span>
-                        <button
-                          className="text-purple-600 hover:text-purple-800"
-                          onClick={() => removerProdutoFiltro(produto.id, produto.tipo)}
-                          aria-label="Remover filtro de produto"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+              <div className="flex items-center gap-2 ">
+                <Button
+                  size="sm"
+                  variant={filterEtiquetaId === ETIQUETA_FILTER_ID ? 'outline' : 'ghost'}
+                  onClick={() => {
+                    // toggle etiqueta filter and reset to page 1
+                    const next = new URLSearchParams(location.search);
+                    if (filterEtiquetaId === ETIQUETA_FILTER_ID) {
+                      setFilterEtiquetaId('');
+                      next.delete('etiqueta_envio_id');
+                    } else {
+                      setFilterEtiquetaId(ETIQUETA_FILTER_ID);
+                      next.set('etiqueta_envio_id', ETIQUETA_FILTER_ID);
+                    }
+                    // Ensure the module query is preserved so we don't unintentionally return to Dashboard
+                    if (!next.get('module')) next.set('module', 'comercial');
+                    setPage(1);
+                    navigate({ pathname: location.pathname, search: next.toString() });
+                  }}
+                  className="flex items-center gap-2 border border-gray-200 shadow-sm"
+                >
+                  <span className="text-sm">Etiqueta Pendente</span>
+                  <span className="inline-block bg-red-50 text-red-700 px-2 py-0.5 rounded text-sm">{etiquetaCount}</span>
+                </Button>
+                <Button
+                  size="sm"
+                  variant={filterEnvioAdiado ? 'outline' : 'ghost'}
+                  onClick={() => {
+                    // toggle envio adiado filter and reset to page 1
+                    const next = new URLSearchParams(location.search);
+                    if (filterEnvioAdiado) {
+                      setFilterEnvioAdiado(false);
+                      setFilterEnvioAdiadoDate(undefined);
+                      next.delete('envio_adiado');
+                    } else {
+                      setFilterEnvioAdiado(true);
+                      next.set('envio_adiado', 'true');
+                    }
+                    // Ensure the module query is preserved
+                    if (!next.get('module')) next.set('module', 'comercial');
+                    setPage(1);
+                    navigate({ pathname: location.pathname, search: next.toString() });
+                  }}
+                  className="flex items-center gap-2 border border-gray-200 shadow-sm"
+                >
+                  <span className="text-sm">Envio Adiado</span>
+                  <span className="inline-block bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-sm">{envioAdiadoCount}</span>
+                </Button>
+                {filterEnvioAdiado && (
+                  <Popover open={showEnvioAdiadoCalendar} onOpenChange={setShowEnvioAdiadoCalendar}>
+                    <PopoverTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="ml-2"
+                      >
+                        {filterEnvioAdiadoDate ? format(filterEnvioAdiadoDate, "dd/MM/yyyy", { locale: ptBR }) : "Filtrar por data"}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={filterEnvioAdiadoDate}
+                        onSelect={(date) => {
+                          setFilterEnvioAdiadoDate(date);
+                          setShowEnvioAdiadoCalendar(false);
+                          setPage(1);
+                        }}
+                        locale={ptBR}
+                        modifiers={{
+                          comPedidos: (date) => {
+                            const dateStr = format(date, 'yyyy-MM-dd');
+                            return diasComPedidos.has(dateStr);
+                          }
+                        }}
+                        modifiersStyles={{
+                          comPedidos: {
+                            position: 'relative',
+                          }
+                        }}
+                        modifiersClassNames={{
+                          comPedidos: 'has-pedidos'
+                        }}
+                        initialFocus
+                      />
+                      <style>{`
+                        .has-pedidos::after {
+                          content: '';
+                          position: absolute;
+                          bottom: 2px;
+                          left: 50%;
+                          transform: translateX(-50%);
+                          width: 6px;
+                          height: 6px;
+                          background-color: #ef4444;
+                          border-radius: 50%;
+                        }
+                      `}</style>
+                    </PopoverContent>
+                  </Popover>
                 )}
               </div>
             </div>
-              <div className="flex items-center gap-2 relative">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" onClick={() => {
-                      // Sincronizar estados temporários com os filtros atuais ao abrir
-                      setTempFilterNotLiberado(filterNotLiberado);
-                      setTempFilterClienteFormNotSent(filterClienteFormNotSent);
-                      setTempFilterResponsavelId(filterResponsavelId);
-                      setShowFilters(s => !s);
-                    }}>
-                      <Filter className="h-4 w-4 mr-2" />
-                      Filtrar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={filterEtiquetaId === ETIQUETA_FILTER_ID ? 'outline' : 'ghost'}
-                      onClick={() => {
-                        // toggle etiqueta filter and reset to page 1
-                        const next = new URLSearchParams(location.search);
-                        if (filterEtiquetaId === ETIQUETA_FILTER_ID) {
-                          setFilterEtiquetaId('');
-                          next.delete('etiqueta_envio_id');
-                        } else {
-                          setFilterEtiquetaId(ETIQUETA_FILTER_ID);
-                          next.set('etiqueta_envio_id', ETIQUETA_FILTER_ID);
-                        }
-                        // Ensure the module query is preserved so we don't unintentionally return to Dashboard
-                        if (!next.get('module')) next.set('module', 'comercial');
-                        setPage(1);
-                        navigate({ pathname: location.pathname, search: next.toString() });
-                      }}
-                      className="ml-2 flex items-center gap-2"
-                    >
-                      <span className="text-sm">Etiqueta Pendente</span>
-                      <span className="inline-block bg-red-50 text-red-700 px-2 py-0.5 rounded text-sm">{etiquetaCount}</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant={filterEnvioAdiado ? 'outline' : 'ghost'}
-                      onClick={() => {
-                        // toggle envio adiado filter and reset to page 1
-                        const next = new URLSearchParams(location.search);
-                        if (filterEnvioAdiado) {
-                          setFilterEnvioAdiado(false);
-                          setFilterEnvioAdiadoDate(undefined);
-                          next.delete('envio_adiado');
-                        } else {
-                          setFilterEnvioAdiado(true);
-                          next.set('envio_adiado', 'true');
-                        }
-                        // Ensure the module query is preserved
-                        if (!next.get('module')) next.set('module', 'comercial');
-                        setPage(1);
-                        navigate({ pathname: location.pathname, search: next.toString() });
-                      }}
-                      className="ml-2 flex items-center gap-2"
-                    >
-                      <span className="text-sm">Envio Adiado</span>
-                      <span className="inline-block bg-orange-50 text-orange-700 px-2 py-0.5 rounded text-sm">{envioAdiadoCount}</span>
-                    </Button>
-                    {filterEnvioAdiado && (
-                      <Popover open={showEnvioAdiadoCalendar} onOpenChange={setShowEnvioAdiadoCalendar}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="ml-2"
-                          >
-                            {filterEnvioAdiadoDate ? format(filterEnvioAdiadoDate, "dd/MM/yyyy", { locale: ptBR }) : "Filtrar por data"}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={filterEnvioAdiadoDate}
-                            onSelect={(date) => {
-                              setFilterEnvioAdiadoDate(date);
-                              setShowEnvioAdiadoCalendar(false);
-                              setPage(1);
-                            }}
-                            locale={ptBR}
-                            modifiers={{
-                              comPedidos: (date) => {
-                                const dateStr = format(date, 'yyyy-MM-dd');
-                                return diasComPedidos.has(dateStr);
-                              }
-                            }}
-                            modifiersStyles={{
-                              comPedidos: {
-                                position: 'relative',
-                              }
-                            }}
-                            modifiersClassNames={{
-                              comPedidos: 'has-pedidos'
-                            }}
-                            initialFocus
-                          />
-                          <style>{`
-                            .has-pedidos::after {
-                              content: '';
-                              position: absolute;
-                              bottom: 2px;
-                              left: 50%;
-                              transform: translateX(-50%);
-                              width: 6px;
-                              height: 6px;
-                              background-color: #ef4444;
-                              border-radius: 50%;
-                            }
-                          `}</style>
-                        </PopoverContent>
-                      </Popover>
-                    )}
-                  </div>
-                  {showFilters && (
-                    <div className="absolute right-0 mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="text-sm font-medium">Filtros</div>
-                        <button className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
-                      </div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <input id="filter-not-liberado" type="checkbox" checked={tempFilterNotLiberado} onChange={(e) => setTempFilterNotLiberado(e.target.checked)} />
-                        <label htmlFor="filter-not-liberado" className="text-sm">Somente pedidos não liberados</label>
-                      </div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <input id="filter-cliente-formulario" type="checkbox" checked={tempFilterClienteFormNotSent} onChange={(e) => setTempFilterClienteFormNotSent(e.target.checked)} />
-                        <label htmlFor="filter-cliente-formulario" className="text-sm">Somente pedidos com formulário não enviado</label>
-                      </div>
-                      <div className="mb-3">
-                        <label htmlFor="filter-responsavel" className="text-sm block mb-1">Filtrar por responsável</label>
-                        <select 
-                          id="filter-responsavel" 
-                          value={tempFilterResponsavelId} 
-                          onChange={(e) => setTempFilterResponsavelId(e.target.value)}
-                          className="w-full border rounded px-2 py-1 text-sm"
-                        >
-                          <option value="">Todos</option>
-                          {usuariosList.map(user => (
-                            <option key={user.id} value={user.id}>{user.nome}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="mb-3">
-                        <label htmlFor="filter-produto" className="text-sm block mb-1">Filtrar por produto</label>
-                        <div className="relative">
-                          <Input
-                            id="filter-produto"
-                            type="text"
-                            placeholder="Digite o nome do produto..."
-                            value={produtoSearchTerm}
-                            onChange={(e) => {
-                              setProdutoSearchTerm(e.target.value);
-                              buscarProdutos(e.target.value);
-                            }}
-                            className="w-full text-sm"
-                          />
-                          {produtosList.length > 0 && (
-                            <div className="absolute z-[100] w-full bg-white border rounded shadow-lg mt-1 max-h-48 overflow-y-auto">
-                              {produtosList.map(produto => (
-                                <div
-                                  key={produto.id}
-                                  className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                                  onClick={() => selecionarProduto(produto)}
-                                >
-                                  <div className="font-medium">{produto.nome}</div>
-                                  {produto.sku && <div className="text-xs text-gray-500">{produto.sku}</div>}
-                                  {produto.temVariacoes && <div className="text-xs text-purple-600">Com variações</div>}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="outline" size="sm" onClick={() => {
-                          // clear temporary filters
-                          setTempFilterNotLiberado(false);
-                          setTempFilterClienteFormNotSent(false);
-                          setTempFilterResponsavelId('');
-                          setSelectedProdutos([]);
-                          setProdutoSearchTerm('');
-                          setProdutosList([]);
-                        }}>Limpar</Button>
-                        <Button size="sm" onClick={() => {
-                          // apply temporary filters to actual filters via query params
-                          const next = new URLSearchParams(location.search);
-                          if (tempFilterNotLiberado) next.set('pedido_liberado', 'false'); else next.delete('pedido_liberado');
-                          if (tempFilterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
-                          if (tempFilterResponsavelId) next.set('responsavel_id', tempFilterResponsavelId); else next.delete('responsavel_id');
-                          // ensure module param remains
-                          if (!next.get('module')) next.set('module', 'comercial');
-                          navigate({ pathname: location.pathname, search: next.toString() });
-                          setShowFilters(false);
-                        }}>Aplicar</Button>
-                      </div>
-                    </div>
-                  )}
 
-                  
+            {/* Barra de ações em lote */}
+            {selectedPedidosIds.size > 0 && (
+              <div className="mt-4 p-3 rounded-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="text-sm font-medium text-purple-900">
+                      {selectedPedidosIds.size} {selectedPedidosIds.size === 1 ? 'pedido selecionado' : 'pedidos selecionados'}
+                    </span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedPedidosIds(new Set())}
+                      className="text-purple-600 hover:text-purple-800 hover:bg-purple-100 h-7"
+                    >
+                      Limpar seleção
+                    </Button>
                   </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={async () => {
+                      if (!confirm(`Tem certeza que deseja excluir ${selectedPedidosIds.size} ${selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}?`)) {
+                        return;
+                      }
+                      try {
+                        const idsArray = Array.from(selectedPedidosIds);
+                        const { error } = await supabase
+                          .from('pedidos')
+                          .delete()
+                          .in('id', idsArray);
+                        
+                        if (error) throw error;
+                        
+                        toast({
+                          title: 'Sucesso',
+                          description: `${idsArray.length} ${idsArray.length === 1 ? 'pedido excluído' : 'pedidos excluídos'} com sucesso`,
+                        });
+                        
+                        // Remover da lista local
+                        setPedidos(prev => prev.filter(p => !selectedPedidosIds.has(p.id)));
+                        setSelectedPedidosIds(new Set());
+                        
+                        // Forçar recarga atualizando o estado de página para re-executar o useEffect
+                        setPage(p => p);
+                      } catch (err: any) {
+                        console.error('Erro ao excluir pedidos:', err);
+                        toast({
+                          title: 'Erro',
+                          description: err?.message || 'Não foi possível excluir os pedidos',
+                          variant: 'destructive',
+                        });
+                      }
+                    }}
+                    className="flex items-center gap-2 h-8"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Excluir {selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}
+                  </Button>
                 </div>
               </div>
-                </CardHeader>
-              </Card>
+            )}
+
+            {/* Active filter tags */}
+            {(filterNotLiberado || filterClienteFormNotSent || !!filterEtiquetaId || !!filterResponsavelId || !!filterPlataformaId || filterEnvioAdiado || selectedProdutos.length > 0) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {filterNotLiberado && (
+                  <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                    <span className="text-sm">Somente não liberados</span>
+                    <button
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFilterNotLiberado(false);
+                        setPage(1);
+                        const next = new URLSearchParams(location.search);
+                        next.delete('pedido_liberado');
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      aria-label="Remover filtro não liberado"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {filterClienteFormNotSent && (
+                  <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                    <span className="text-sm">Formulário não enviado</span>
+                    <button
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFilterClienteFormNotSent(false);
+                        setPage(1);
+                        const next = new URLSearchParams(location.search);
+                        next.delete('cliente_formulario_enviado');
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      aria-label="Remover filtro formulário não enviado"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {filterEtiquetaId === ETIQUETA_FILTER_ID && (
+                  <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                    <span className="text-sm">Etiqueta Pendente</span>
+                    <button
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFilterEtiquetaId('');
+                        setPage(1);
+                        const next = new URLSearchParams(location.search);
+                        next.delete('etiqueta_envio_id');
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      aria-label="Remover filtro etiqueta pendente"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {filterEnvioAdiado && (
+                  <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                    <span className="text-sm">
+                      Envio Adiado
+                      {filterEnvioAdiadoDate && ` - ${format(filterEnvioAdiadoDate, "dd/MM/yyyy", { locale: ptBR })}`}
+                    </span>
+                    {filterEnvioAdiadoDate && (
+                      <button
+                        className="text-gray-500 hover:text-gray-700"
+                        onClick={() => {
+                          setFilterEnvioAdiadoDate(undefined);
+                          setPage(1);
+                        }}
+                        aria-label="Remover filtro de data"
+                      >
+                        ⊗
+                      </button>
+                    )}
+                    <button
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFilterEnvioAdiado(false);
+                        setFilterEnvioAdiadoDate(undefined);
+                        setPage(1);
+                        const next = new URLSearchParams(location.search);
+                        next.delete('envio_adiado');
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      aria-label="Remover filtro envio adiado"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {filterResponsavelId && (
+                  <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                    <span className="text-sm">Responsável: {usuariosList.find(u => u.id === filterResponsavelId)?.nome || 'Selecionado'}</span>
+                    <button
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFilterResponsavelId('');
+                        setPage(1);
+                        const next = new URLSearchParams(location.search);
+                        next.delete('responsavel_id');
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      aria-label="Remover filtro responsável"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {filterPlataformaId && (
+                  <div className="flex items-center gap-2 bg-gray-100 text-gray-800 px-3 py-1 rounded">
+                    <span className="text-sm">Plataforma: {plataformasList.find(p => p.id === filterPlataformaId)?.nome || 'Selecionada'}</span>
+                    <button
+                      className="text-gray-500 hover:text-gray-700"
+                      onClick={() => {
+                        setFilterPlataformaId('');
+                        setPage(1);
+                        const next = new URLSearchParams(location.search);
+                        next.delete('plataforma_id');
+                        if (!next.get('module')) next.set('module', 'comercial');
+                        navigate({ pathname: location.pathname, search: next.toString() });
+                      }}
+                      aria-label="Remover filtro plataforma"
+                    >
+                      ×
+                    </button>
+                  </div>
+                )}
+
+                {selectedProdutos.map((produto) => (
+                  <div key={`${produto.tipo}-${produto.id}`} className="flex items-center gap-2 bg-purple-100 text-purple-800 px-3 py-1 rounded">
+                    <span className="text-sm">
+                      {produto.tipo === 'variacao' 
+                        ? `${produto.nome} - ${produto.variacaoNome}` 
+                        : produto.nome}
+                    </span>
+                    <button
+                      className="text-purple-600 hover:text-purple-800"
+                      onClick={() => removerProdutoFiltro(produto.id, produto.tipo)}
+                      aria-label="Remover filtro de produto"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardHeader>
+      </Card>
 
       {/* Tabela de pedidos */}
       <Card>
@@ -1474,6 +1653,14 @@ export function Comercial() {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-12">
+                  <Checkbox 
+                    checked={isAllSelected}
+                    onCheckedChange={toggleSelectAll}
+                    aria-label="Selecionar todos"
+                    className={isSomeSelected ? "data-[state=checked]:bg-purple-600" : ""}
+                  />
+                </TableHead>
                 <TableHead>ID do Pedido</TableHead>
                 <TableHead className="text-center">Data</TableHead>
                 <TableHead>Cliente</TableHead>
@@ -1489,20 +1676,27 @@ export function Comercial() {
               {/* loading row intentionally removed per request */}
               {error && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-red-600">
+                  <TableCell colSpan={11} className="text-center text-red-600">
                     {error}
                   </TableCell>
                 </TableRow>
               )}
 
               {filteredPedidosComProdutos.map((pedido) => (
-                <TableRow key={pedido.id} className="hover:bg-muted/50 cursor-pointer" onClick={() => {
-                  const currentParams = new URLSearchParams(location.search);
-                  if (view === 'enviados') currentParams.set('readonly', '1');
-                  currentParams.set('returnTo', location.pathname + location.search);
-                  navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
-                }}>
-                  <TableCell className="font-medium">
+                <TableRow key={pedido.id} className="hover:bg-muted/50">
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <Checkbox 
+                      checked={selectedPedidosIds.has(pedido.id)}
+                      onCheckedChange={() => toggleSelectPedido(pedido.id)}
+                      aria-label={`Selecionar pedido ${pedido.idExterno}`}
+                    />
+                  </TableCell>
+                  <TableCell className="font-medium cursor-pointer" onClick={() => {
+                    const currentParams = new URLSearchParams(location.search);
+                    if (view === 'enviados') currentParams.set('readonly', '1');
+                    currentParams.set('returnTo', location.pathname + location.search);
+                    navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                  }}>
                     <div className="flex items-center gap-2">
                       {pedido.urgente && (
                         <div className="w-2 h-2 bg-red-500 rounded-full" />
@@ -1542,7 +1736,15 @@ export function Comercial() {
                           </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell 
+                    className="text-center cursor-pointer"
+                    onClick={() => {
+                      const currentParams = new URLSearchParams(location.search);
+                      if (view === 'enviados') currentParams.set('readonly', '1');
+                      currentParams.set('returnTo', location.pathname + location.search);
+                      navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                    }}
+                  >
                     {new Date(pedido.criadoEm).toLocaleDateString('pt-BR')}
                   </TableCell>
                   <TableCell>
@@ -1649,7 +1851,15 @@ export function Comercial() {
                       </div>
                   </TableCell>
 
-                  <TableCell className="text-center">
+                  <TableCell 
+                    className="text-center cursor-pointer"
+                    onClick={() => {
+                      const currentParams = new URLSearchParams(location.search);
+                      if (view === 'enviados') currentParams.set('readonly', '1');
+                      currentParams.set('returnTo', location.pathname + location.search);
+                      navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                    }}
+                  >
                     <div className="flex items-center justify-center">
                       {pedido.transportadora?.imagemUrl ? (
                         <div className="w-10 h-8 overflow-hidden flex items-center justify-center">

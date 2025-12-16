@@ -13,6 +13,7 @@ import NovoPedido from "./pages/NovoPedido";
 import InformacoesEntrega from "./pages/InformacoesEntrega";
 import Leads from "./pages/Leads";
 import PedidosEnviados from "./pages/PedidosEnviados";
+import PedidosCancelados from "./pages/PedidosCancelados";
 import { TermosServico } from "./pages/TermosServico";
 import { TermoPrivacidade } from "./pages/TermoPrivacidade";
 import { useEffect } from "react";
@@ -55,6 +56,11 @@ const App = () => {
             <Route path="/leads" element={
               <ProtectedRoute>
                 <Leads />
+              </ProtectedRoute>
+            } />
+            <Route path="/pedidos-cancelados" element={
+              <ProtectedRoute>
+                <PedidosCancelados />
               </ProtectedRoute>
             } />
             <Route path="/pedidos-enviados" element={
