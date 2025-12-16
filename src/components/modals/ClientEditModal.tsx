@@ -256,13 +256,15 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground">Complemento</label>
-            <Input value={cliente?.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
+            <label className="block text-sm text-muted-foreground">Complemento (máx. 17 caracteres)</label>
+            <Input maxLength={17} value={cliente?.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
+            <div className="text-xs text-muted-foreground mt-1">{(cliente?.complemento || '').length}/17 caracteres</div>
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground">Observação</label>
-            <textarea className="w-full p-2 border rounded-md" rows={3} value={cliente?.observacao || ''} onChange={(e) => updateField('observacao', e.target.value)} />
+            <label className="block text-sm text-muted-foreground">Observação (máx. 30 caracteres)</label>
+            <textarea className="w-full p-2 border rounded-md" rows={3} maxLength={30} value={cliente?.observacao || ''} onChange={(e) => updateField('observacao', e.target.value)} />
+            <div className="text-xs text-muted-foreground mt-1">{(cliente?.observacao || '').length}/30 caracteres</div>
           </div>
         </div>
 

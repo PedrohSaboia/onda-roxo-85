@@ -180,6 +180,7 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
           city: cliente?.cidade || cliente?.city || '',
           state_abbr: cliente?.estado || cliente?.state_abbr || '',
           country_id: cliente?.country_id || 'BR',
+          note: cliente?.observacao || '',
           postal_code: (cliente?.cep || cliente?.postal_code || '').replace(/\D/g, '')
         },
         options: {

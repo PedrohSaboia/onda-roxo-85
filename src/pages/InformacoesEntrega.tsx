@@ -353,11 +353,13 @@ export default function InformacoesEntrega() {
                   </div>
                 </div>
 
-                <label className="block text-sm font-medium text-gray-700">Complemento <span className="text-sm text-gray-500">(opcional)</span></label>
-                <input className="w-full p-3 border rounded-md mb-4" value={cliente.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
+                <label className="block text-sm font-medium text-gray-700">Complemento <span className="text-sm text-gray-500">(opcional - máx. 17 caracteres)</span></label>
+                <input className="w-full p-3 border rounded-md mb-1" maxLength={17} value={cliente.complemento || ''} onChange={(e) => updateField('complemento', e.target.value)} />
+                <div className="text-xs text-gray-500 mb-4">{(cliente.complemento || '').length}/17 caracteres</div>
 
-                <label className="block text-sm font-medium text-gray-700">Observação <span className="text-sm text-gray-500">(opcional)</span></label>
-                <textarea className="w-full p-3 border rounded-md mb-4" rows={3} value={cliente.observacao || ''} onChange={(e) => updateField('observacao', e.target.value)} />
+                <label className="block text-sm font-medium text-gray-700">Observação <span className="text-sm text-gray-500">(opcional - máx. 30 caracteres)</span></label>
+                <textarea className="w-full p-3 border rounded-md mb-4" rows={3} maxLength={30} value={cliente.observacao || ''} onChange={(e) => updateField('observacao', e.target.value)} />
+                <div className="text-xs text-gray-500 -mt-3 mb-4">{(cliente.observacao || '').length}/30 caracteres</div>
 
                 <div className="flex flex-col sm:flex-row justify-between gap-3">
                   <button type="button" onClick={() => { setSubmitted(false); setCepBuscado(false); setStep(1); }} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>
