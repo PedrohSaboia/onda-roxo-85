@@ -1379,7 +1379,7 @@ export function Comercial() {
                         {filterEnvioAdiadoDate ? format(filterEnvioAdiadoDate, "dd/MM/yyyy", { locale: ptBR }) : "Filtrar por data"}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
+                    <PopoverContent className="w-auto p-0 mr-5" align="start">
                       <Calendar
                         mode="single"
                         selected={filterEnvioAdiadoDate}
