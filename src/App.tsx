@@ -14,6 +14,7 @@ import InformacoesEntrega from "./pages/InformacoesEntrega";
 import Leads from "./pages/Leads";
 import PedidosEnviados from "./pages/PedidosEnviados";
 import PedidosCancelados from "./pages/PedidosCancelados";
+import ListaEmbalagens from "./pages/ListaEmbalagens";
 import { TermosServico } from "./pages/TermosServico";
 import { TermoPrivacidade } from "./pages/TermoPrivacidade";
 import { useEffect } from "react";
@@ -66,6 +67,11 @@ const App = () => {
             <Route path="/pedidos-enviados" element={
               <ProtectedRoute>
                 <PedidosEnviados />
+              </ProtectedRoute>
+            } />
+            <Route path="/estoque/embalagens" element={
+              <ProtectedRoute>
+                <ListaEmbalagens />
               </ProtectedRoute>
             } />
             <Route path="/termos-servico" element={<TermosServico />} />
