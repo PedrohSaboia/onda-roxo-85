@@ -1,4 +1,4 @@
-import { Search, Bell, User, Menu, LogOut } from 'lucide-react';
+import { Search, User, Menu, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -7,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth';
 import type { SyntheticEvent } from 'react';
 import SearchPanel from '@/components/layout/SearchPanel';
 import { useState, useEffect } from 'react';
+import { NotificacoesDropdown } from '@/components/notifications/NotificacoesDropdown';
 
 interface AppHeaderProps {
   onMenuClick?: () => void;
@@ -153,16 +154,7 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
 
         <SearchPanel open={searchOpen} onClose={() => setSearchOpen(false)} />
 
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-white hover:bg-white/10 relative"
-        >
-          <Bell className="h-5 w-5" />
-          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-            3
-          </span>
-        </Button>
+        <NotificacoesDropdown />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -120,3 +120,34 @@ All colors MUST be HSL.
     @apply bg-background text-foreground;
   }
 }
+
+/* Animação para notificação toast */
+@keyframes pulse-border-notification {
+  0%, 100% {
+    border-color: rgba(245, 158, 11, 0.6);
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.2), 0 0 40px rgba(245, 158, 11, 0.1);
+  }
+  50% {
+    border-color: rgba(245, 158, 11, 0.9);
+    box-shadow: 0 0 30px rgba(245, 158, 11, 0.4), 0 0 60px rgba(245, 158, 11, 0.2);
+  }
+}
+
+.notification-toast-custom {
+  animation: pulse-border-notification 2s ease-in-out infinite;
+}
+
+@keyframes slide-in-notification {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.notification-toast-custom {
+  animation: slide-in-notification 0.3s ease-out, pulse-border-notification 2s ease-in-out 0.3s infinite;
+}

@@ -109,6 +109,7 @@ export type Database = {
           produto_id: string | null
           quantidade: number
           variacao_id: string | null
+          status_up_sell: number | null
         }
         Insert: {
           atualizado_em?: string
@@ -119,6 +120,7 @@ export type Database = {
           produto_id?: string | null
           quantidade?: number
           variacao_id?: string | null
+          status_up_sell?: number | null
         }
         Update: {
           atualizado_em?: string
@@ -129,6 +131,7 @@ export type Database = {
           produto_id?: string | null
           quantidade?: number
           variacao_id?: string | null
+          status_up_sell?: number | null
         }
         Relationships: [
           {
@@ -171,6 +174,9 @@ export type Database = {
           responsavel_id: string | null
           status_id: string | null
           urgente: boolean
+          tempo_ganho: string | null
+          etiqueta_ml: boolean | null
+          pedido_liberado: boolean | null
         }
         Insert: {
           atualizado_em?: string
@@ -187,6 +193,9 @@ export type Database = {
           responsavel_id?: string | null
           status_id?: string | null
           urgente?: boolean
+          tempo_ganho?: string | null
+          etiqueta_ml?: boolean | null
+          pedido_liberado?: boolean | null
         }
         Update: {
           atualizado_em?: string
@@ -203,6 +212,9 @@ export type Database = {
           responsavel_id?: string | null
           status_id?: string | null
           urgente?: boolean
+          tempo_ganho?: string | null
+          etiqueta_ml?: boolean | null
+          pedido_liberado?: boolean | null
         }
         Relationships: [
           {
@@ -283,6 +295,9 @@ export type Database = {
           qntd: number | null
           sku: string
           unidade: string
+          up_cell: boolean | null
+          lista_id_upsell: string[] | null
+          contagem: number | null
         }
         Insert: {
           atualizado_em?: string
@@ -297,6 +312,9 @@ export type Database = {
           qntd?: number | null
           sku: string
           unidade?: string
+          up_cell?: boolean | null
+          lista_id_upsell?: string[] | null
+          contagem?: number | null
         }
         Update: {
           atualizado_em?: string
@@ -311,6 +329,9 @@ export type Database = {
           qntd?: number | null
           sku?: string
           unidade?: string
+          up_cell?: boolean | null
+          lista_id_upsell?: string[] | null
+          contagem?: number | null
         }
         Relationships: []
       }
@@ -338,6 +359,51 @@ export type Database = {
           id?: string
           nome?: string
           ordem?: number
+        }
+        Relationships: []
+      }
+      status_upsell: {
+        Row: {
+          id: number
+          status: string
+          criado_em: string
+          atualizado_em: string
+        }
+        Insert: {
+          id?: number
+          status: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Update: {
+          id?: number
+          status?: string
+          criado_em?: string
+          atualizado_em?: string
+        }
+        Relationships: []
+      }
+      metricas_upsell: {
+        Row: {
+          id: string
+          pedido_id: string
+          responsavel_id: string
+          status_upsell: number
+          criado_em: string
+        }
+        Insert: {
+          id?: string
+          pedido_id: string
+          responsavel_id: string
+          status_upsell: number
+          criado_em?: string
+        }
+        Update: {
+          id?: string
+          pedido_id?: string
+          responsavel_id?: string
+          status_upsell?: number
+          criado_em?: string
         }
         Relationships: []
       }

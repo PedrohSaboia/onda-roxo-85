@@ -64,6 +64,9 @@ export default function Pedido() {
   const [processingLabel, setProcessingLabel] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [liberando, setLiberando] = useState(false);
+  const [gerandoEtiquetaML, setGerandoEtiquetaML] = useState(false);
+  const [etiquetaMLModalOpen, setEtiquetaMLModalOpen] = useState(false);
+  const [etiquetaMLPdfUrl, setEtiquetaMLPdfUrl] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<Record<number, string> | null>(null);
   
   // Estados para gerenciar embalagem/remetente selecionados
@@ -838,6 +841,90 @@ export default function Pedido() {
     }
   };
 
+  const handleGerarEtiquetaML = async () => {
+    if (!pedido?.id_externo) {
+      toast({ 
+        title: 'Erro', 
+        description: 'O pedido não possui ID externo (id_externo) definido',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setGerandoEtiquetaML(true);
+
+    try {
+      const EDGE_FUNCTION_URL = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/gerar-etiqueta-ml';
+
+      const response = await fetch(EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id_externo: pedido.id_externo }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Erro desconhecido ao gerar etiqueta');
+      }
+
+      const data = await response.json();
+      const pdfBase64 = data.pdf_base64;
+
+      if (!pdfBase64) {
+        throw new Error('O Base64 do PDF não foi retornado.');
+      }
+
+      // Converte Base64 para Blob
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      
+      // Cria URL do Blob e abre o modal
+      const blobUrl = URL.createObjectURL(blob);
+      setEtiquetaMLPdfUrl(blobUrl);
+      setEtiquetaMLModalOpen(true);
+
+      toast({ title: 'Sucesso', description: 'Etiqueta gerada! Visualize e imprima.' });
+    } catch (error: any) {
+      console.error('Erro ao processar a etiqueta:', error);
+      toast({ 
+        title: 'Erro', 
+        description: `Erro ao processar a etiqueta: ${error.message}`,
+        variant: 'destructive'
+      });
+    } finally {
+      setGerandoEtiquetaML(false);
+    }
+  };
+
+  const handleImprimirEtiquetaML = () => {
+    if (!etiquetaMLPdfUrl) return;
+    
+    // Abre o PDF em nova janela e imprime
+    const printWindow = window.open(etiquetaMLPdfUrl, '_blank');
+    if (printWindow) {
+      printWindow.onload = () => {
+        setTimeout(() => {
+          printWindow.print();
+        }, 500);
+      };
+    }
+  };
+
+  const handleFecharModalEtiquetaML = () => {
+    if (etiquetaMLPdfUrl) {
+      URL.revokeObjectURL(etiquetaMLPdfUrl);
+    }
+    setEtiquetaMLPdfUrl(null);
+    setEtiquetaMLModalOpen(false);
+  };
+
   const handleDeletePedido = async () => {
     if (!pedido) return;
     try {
@@ -1522,30 +1609,55 @@ export default function Pedido() {
                     </Button>
                   </>
                 ) : (
-                  // Botões originais para calcular e enviar mais barato
+                  // Botões baseados no campo etiqueta_ml
                   <>
-                    <Button
-                      onClick={() => { if (!readonly) handleCalcularFrete(); }}
-                      disabled={calculandoFrete || readonly}
-                      className="bg-amber-500 hover:bg-amber-600"
-                    >
-                      {calculandoFrete ? (
-                        <>
-                          <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
-                          Calculando...
-                        </>
-                      ) : (
-                        '📦 Calcular Frete'
-                      )}
-                    </Button>
-                    
-                    <Button
-                      onClick={() => { if (!readonly) handleEnviarMaisBarato(); }}
-                      disabled={calculandoFrete || readonly}
-                      className="bg-purple-700 hover:bg-purple-800"
-                    >
-                      {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
-                    </Button>
+                    {pedido?.etiqueta_ml === true ? (
+                      // Botão para etiqueta Mercado Livre
+                      <Button
+                        onClick={() => {
+                          if (!readonly) {
+                            handleGerarEtiquetaML();
+                          }
+                        }}
+                        disabled={readonly || gerandoEtiquetaML}
+                        className="bg-yellow-500 hover:bg-yellow-600"
+                      >
+                        {gerandoEtiquetaML ? (
+                          <>
+                            <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                            Gerando...
+                          </>
+                        ) : (
+                          '📦 Etiqueta Mercado Livre'
+                        )}
+                      </Button>
+                    ) : (
+                      // Botões originais para calcular e enviar mais barato
+                      <>
+                        <Button
+                          onClick={() => { if (!readonly) handleCalcularFrete(); }}
+                          disabled={calculandoFrete || readonly}
+                          className="bg-amber-500 hover:bg-amber-600"
+                        >
+                          {calculandoFrete ? (
+                            <>
+                              <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                              Calculando...
+                            </>
+                          ) : (
+                            '📦 Calcular Frete'
+                          )}
+                        </Button>
+                        
+                        <Button
+                          onClick={() => { if (!readonly) handleEnviarMaisBarato(); }}
+                          disabled={calculandoFrete || readonly}
+                          className="bg-purple-700 hover:bg-purple-800"
+                        >
+                          {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
+                        </Button>
+                      </>
+                    )}
                   </>
                 ) }
               </div>
@@ -1730,6 +1842,32 @@ export default function Pedido() {
   <Dialog open={embalagensVisible} onOpenChange={(open) => { if (!readonly) setEmbalagensVisible(open); }}>
         <DialogContent className="max-w-4xl">
           <EmbalagensManager />
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Visualizar e Imprimir Etiqueta ML */}
+      <Dialog open={etiquetaMLModalOpen} onOpenChange={(open) => { if (!open) handleFecharModalEtiquetaML(); }}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>📦 Etiqueta Mercado Livre</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0">
+            {etiquetaMLPdfUrl && (
+              <iframe
+                src={etiquetaMLPdfUrl}
+                className="w-full h-full border rounded-lg"
+                title="Etiqueta ML PDF"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <div className="flex justify-between w-full">
+              <Button variant="outline" onClick={handleFecharModalEtiquetaML}>
+                Fechar
+              </Button>
+           
+            </div>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

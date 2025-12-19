@@ -1747,69 +1747,81 @@ export function Comercial() {
                   >
                     {new Date(pedido.criadoEm).toLocaleDateString('pt-BR')}
                   </TableCell>
-                  <TableCell>
+                  <TableCell
+                    className="cursor-pointer"
+                    onClick={() => {
+                      const currentParams = new URLSearchParams(location.search);
+                      if (view === 'enviados') currentParams.set('readonly', '1');
+                      currentParams.set('returnTo', location.pathname + location.search);
+                      navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
+                    }}
+                  >
                     <div>
-                      <div
-                        className="font-medium max-w-[260px] truncate overflow-hidden whitespace-nowrap cursor-pointer"
-                        title="Clique para copiar"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const text = String(pedido.clienteNome || '');
-                          try {
-                            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-                              navigator.clipboard.writeText(text).then(() => {
-                                toast({ title: 'Copiado', description: 'Nome do cliente copiado para a área de transferência.' });
-                              }).catch((err) => {
-                                console.error('Erro ao copiar:', err);
-                                toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'});
-                              });
-                            } else {
-                              const ta = document.createElement('textarea');
-                              ta.value = text;
-                              document.body.appendChild(ta);
-                              ta.select();
-                              try { document.execCommand('copy'); toast({ title: 'Copiado', description: 'Nome do cliente copiado para a área de transferência.' }); }
-                              catch (ex) { console.error('Fallback copy failed', ex); toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'}); }
-                              document.body.removeChild(ta);
+                      <div className="font-medium max-w-[260px] truncate overflow-hidden whitespace-nowrap">
+                        <span
+                          className="cursor-pointer hover:underline"
+                          title="Clique para copiar"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const text = String(pedido.clienteNome || '');
+                            try {
+                              if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(text).then(() => {
+                                  toast({ title: 'Copiado', description: 'Nome do cliente copiado para a área de transferência.' });
+                                }).catch((err) => {
+                                  console.error('Erro ao copiar:', err);
+                                  toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'});
+                                });
+                              } else {
+                                const ta = document.createElement('textarea');
+                                ta.value = text;
+                                document.body.appendChild(ta);
+                                ta.select();
+                                try { document.execCommand('copy'); toast({ title: 'Copiado', description: 'Nome do cliente copiado para a área de transferência.' }); }
+                                catch (ex) { console.error('Fallback copy failed', ex); toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'}); }
+                                document.body.removeChild(ta);
+                              }
+                            } catch (err) {
+                              console.error('Copy exception', err);
+                              toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'});
                             }
-                          } catch (err) {
-                            console.error('Copy exception', err);
-                            toast({ title: 'Erro', description: 'Não foi possível copiar o nome.' , variant: 'destructive'});
-                          }
-                        }}
-                      >
-                        {pedido.clienteNome}
+                          }}
+                        >
+                          {pedido.clienteNome}
+                        </span>
                       </div>
-                      <div
-                        className="text-sm text-muted-foreground max-w-[260px] truncate overflow-hidden whitespace-nowrap cursor-pointer"
-                        title="Clique para copiar"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const text = String(pedido.contato || '');
-                          try {
-                            if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-                              navigator.clipboard.writeText(text).then(() => {
-                                toast({ title: 'Copiado', description: 'Contato copiado para a área de transferência.' });
-                              }).catch((err) => {
-                                console.error('Erro ao copiar:', err);
-                                toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'});
-                              });
-                            } else {
-                              const ta = document.createElement('textarea');
-                              ta.value = text;
-                              document.body.appendChild(ta);
-                              ta.select();
-                              try { document.execCommand('copy'); toast({ title: 'Copiado', description: 'Contato copiado para a área de transferência.' }); }
-                              catch (ex) { console.error('Fallback copy failed', ex); toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'}); }
-                              document.body.removeChild(ta);
+                      <div className="text-sm text-muted-foreground max-w-[260px] truncate overflow-hidden whitespace-nowrap">
+                        <span
+                          className="cursor-pointer hover:underline"
+                          title="Clique para copiar"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const text = String(pedido.contato || '');
+                            try {
+                              if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                                navigator.clipboard.writeText(text).then(() => {
+                                  toast({ title: 'Copiado', description: 'Contato copiado para a área de transferência.' });
+                                }).catch((err) => {
+                                  console.error('Erro ao copiar:', err);
+                                  toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'});
+                                });
+                              } else {
+                                const ta = document.createElement('textarea');
+                                ta.value = text;
+                                document.body.appendChild(ta);
+                                ta.select();
+                                try { document.execCommand('copy'); toast({ title: 'Copiado', description: 'Contato copiado para a área de transferência.' }); }
+                                catch (ex) { console.error('Fallback copy failed', ex); toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'}); }
+                                document.body.removeChild(ta);
+                              }
+                            } catch (err) {
+                              console.error('Copy exception', err);
+                              toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'});
                             }
-                          } catch (err) {
-                            console.error('Copy exception', err);
-                            toast({ title: 'Erro', description: 'Não foi possível copiar o contato.' , variant: 'destructive'});
-                          }
-                        }}
-                      >
-                        {pedido.contato}
+                          }}
+                        >
+                          {pedido.contato}
+                        </span>
                       </div>
                     </div>
                   </TableCell>
