@@ -18,6 +18,7 @@ import PedidosCancelados from "./pages/PedidosCancelados";
 import ListaEmbalagens from "./pages/ListaEmbalagens";
 import { TermosServico } from "./pages/TermosServico";
 import { TermoPrivacidade } from "./pages/TermoPrivacidade";
+import Documentacao from "./pages/Documentacao";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -78,6 +79,7 @@ const App = () => {
             } />
             <Route path="/termos-servico" element={<TermosServico />} />
             <Route path="/politica-privacidade" element={<TermoPrivacidade />} />
+            <Route path="/documentacao" element={<Documentacao />} />
             <Route path="/" element={
               <ProtectedRoute>
                 <Index />
