@@ -1,49 +1,36 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { List, Users, Send, XCircle } from 'lucide-react'
+import { Package, Box } from 'lucide-react'
 
 const items = [
-  { id: 'pedidos', label: 'Lista de Pedidos', icon: List },
-  { id: 'leads', label: 'Lista de Leads', icon: Users },
-  { id: 'cancelados', label: 'Pedidos Cancelados', icon: XCircle },
-  { id: 'enviados', label: 'Pedidos Enviados', icon: Send },
+  { id: 'produtos', label: 'Lista de Produtos', icon: Package },
+  { id: 'embalagens', label: 'Lista de Embalagens', icon: Box },
 ]
 
-export function ComercialSidebar() {
+export function EstoqueSidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const params = new URLSearchParams(location.search)
-  const currentModule = params.get('module') || ''
-  const view = params.get('view') || 'pedidos'
+  const view = params.get('view') || 'produtos'
   const [isExpanded, setIsExpanded] = useState(false)
 
   const handleClick = (id: string) => {
-    // Special-case: open the dedicated Leads page
-    if (id === 'leads') {
-      navigate('/leads');
+    // Special-case: open the dedicated Embalagens page
+    if (id === 'embalagens') {
+      navigate('/estoque/embalagens');
       return;
     }
 
-    // Special-case: open the dedicated PedidosCancelados page
-    if (id === 'cancelados') {
-      navigate('/pedidos-cancelados');
+    // For produtos, stay on main page with module=estoque
+    if (id === 'produtos') {
+      navigate('/?module=estoque');
       return;
     }
 
-    // Special-case: open the dedicated PedidosEnviados page
-    if (id === 'enviados') {
-      navigate('/pedidos-enviados');
-      return;
-    }
-
-    // keep module=comercial while switching view for other items
+    // Default: update view parameter
     const next = new URLSearchParams(location.search)
-    next.set('module', 'comercial')
     next.set('view', id)
-    // If we're currently on a dedicated route like /leads or /pedidos-enviados, navigate back to the Comercial root
-    // so the Comercial page will receive the query params and render the requested view.
-    const targetPath = (location.pathname === '/leads' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados') ? '/' : location.pathname;
-    navigate({ pathname: targetPath, search: next.toString() })
+    navigate({ pathname: location.pathname, search: next.toString() })
   }
 
   // Sidebar begins below header because it's rendered inside the page's main area
@@ -63,20 +50,18 @@ export function ComercialSidebar() {
       }}
     >
       <div className="sticky top-0 h-full overflow-hidden">
-        <nav aria-label="Menu Comercial" className="h-full">
+        <nav aria-label="Menu Estoque" className="h-full">
           <ul className="px-2 py-3 space-y-2 h-full">
             {items.map((it) => {
               const Icon = it.icon
-              // When on the dedicated /leads or /pedidos-enviados route, mark the corresponding item active.
+              // When on the dedicated /estoque/embalagens route, mark the corresponding item active.
               let isActive = false;
-              if (location.pathname === '/leads') {
-                isActive = it.id === 'leads';
-              } else if (location.pathname === '/pedidos-cancelados') {
-                isActive = it.id === 'cancelados';
-              } else if (location.pathname === '/pedidos-enviados') {
-                isActive = it.id === 'enviados';
+              if (location.pathname === '/estoque/embalagens') {
+                isActive = it.id === 'embalagens';
+              } else if (location.pathname === '/' && params.get('module') === 'estoque') {
+                isActive = it.id === 'produtos';
               } else {
-                isActive = view === it.id && currentModule === 'comercial';
+                isActive = view === it.id;
               }
               return (
                 <li key={it.id}>
@@ -121,4 +106,4 @@ export function ComercialSidebar() {
   )
 }
 
-export default ComercialSidebar
+export default EstoqueSidebar

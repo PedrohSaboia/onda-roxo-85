@@ -9,6 +9,7 @@ import { mockProdutos } from '@/data/mockData';
 import { Produto } from '@/types';
 import ProductForm from '@/components/products/ProductForm';
 import { supabase } from '@/integrations/supabase/client';
+import EstoqueSidebar from '@/components/layout/EstoqueSidebar';
 
 export function Estoque() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -104,8 +105,11 @@ export function Estoque() {
   );
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-3 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="flex min-h-screen bg-gray-50">
+      <EstoqueSidebar />
+      
+      <div className="flex-1 space-y-4 sm:space-y-6 p-3 sm:p-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold">Estoque</h1>
           <p className="text-sm text-muted-foreground">
@@ -345,6 +349,7 @@ export function Estoque() {
             </CardContent>
           </Card>
         ))}
+      </div>
       </div>
     </div>
   );
