@@ -107,6 +107,7 @@ export interface Pedido {
   status?: Status;
   corDoPedido?: string;
   foiDuplicado?: boolean;
+  etiqueta_ml?: boolean;
   criadoEm: string;
   atualizadoEm: string;
   tempo_ganho?: string;

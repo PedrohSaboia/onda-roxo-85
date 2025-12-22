@@ -114,6 +114,45 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
 
   const updateField = (key: string, value: any) => setCliente((c: any) => c ? ({ ...c, [key]: value }) : c);
 
+  const gerarTelefoneGenerico = () => {
+    updateField('telefone', '99999999999'); // (99) 99999-9999
+  };
+
+  const gerarEmailGenerico = () => {
+    if (!cliente?.nome) {
+      toast({ title: 'Atenção', description: 'Preencha o nome primeiro', variant: 'destructive' });
+      return;
+    }
+    
+    // Normalizar nome: remover acentos e caracteres especiais
+    const normalizarTexto = (texto: string) => {
+      return texto
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '') // Remove caracteres especiais
+        .trim();
+    };
+    
+    const palavras = normalizarTexto(cliente.nome).split(/\s+/).filter(p => p.length > 0);
+    
+    if (palavras.length === 0) {
+      toast({ title: 'Atenção', description: 'Nome inválido', variant: 'destructive' });
+      return;
+    }
+    
+    let emailBase = '';
+    if (palavras.length === 1) {
+      emailBase = palavras[0];
+    } else {
+      // Primeiro nome + último sobrenome
+      emailBase = palavras[0] + '.' + palavras[palavras.length - 1];
+    }
+    
+    const emailGerado = `${emailBase}@emailgenerico.com`;
+    updateField('email', emailGerado);
+  };
+
   const validateAll = (c: any) => {
     const errs: Record<string, string | null> = {};
     if (!c) return errs;
@@ -214,13 +253,23 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
 
           <div>
             <label className="block text-sm text-muted-foreground">E-mail *</label>
-            <Input value={cliente?.email || ''} onChange={(e) => updateField('email', e.target.value.trim().toLowerCase())} />
+            <div className="flex gap-2">
+              <Input value={cliente?.email || ''} onChange={(e) => updateField('email', e.target.value.trim().toLowerCase())} className="flex-1" />
+              <Button type="button" variant="outline" size="sm" onClick={gerarEmailGenerico} className="shrink-0">
+                Gerar Email
+              </Button>
+            </div>
             {fieldErrors['email'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['email']}</div>}
           </div>
 
           <div>
             <label className="block text-sm text-muted-foreground">Telefone *</label>
-            <Input value={formatPhone(cliente?.telefone || '')} onChange={(e) => updateField('telefone', onlyDigits(e.target.value))} />
+            <div className="flex gap-2">
+              <Input value={formatPhone(cliente?.telefone || '')} onChange={(e) => updateField('telefone', onlyDigits(e.target.value))} className="flex-1" />
+              <Button type="button" variant="outline" size="sm" onClick={gerarTelefoneGenerico} className="shrink-0">
+                Gerar Tel.
+              </Button>
+            </div>
             {fieldErrors['telefone'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['telefone']}</div>}
           </div>
 
