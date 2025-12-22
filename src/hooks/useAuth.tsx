@@ -64,9 +64,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchAcesso = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('usuarios')
-        .select('acesso, img_url, empresa_id')
-        .eq('id', userId)
+        .from('usuarios_completos')
+        .select('acesso_nome, img_url, empresa_id')
+        .eq('user_id', userId)
         .maybeSingle();
 
       if (error) {

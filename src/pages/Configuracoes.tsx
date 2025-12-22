@@ -49,7 +49,7 @@ export function Configuracoes() {
   const [newFile, setNewFile] = useState<File | null>(null);
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
   // users list state
-  type Usuario = { id?: string; nome: string; email?: string; acesso?: string; ativo?: boolean; img_url?: string };
+  type Usuario = { id?: string; nome: string; email?: string; acesso_id?: number | null; acesso_nome?: string | null; ativo?: boolean; img_url?: string };
   const [users, setUsers] = useState<Usuario[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -59,7 +59,7 @@ export function Configuracoes() {
   const [editUserId, setEditUserId] = useState<string | undefined>(undefined);
   const [editNome, setEditNome] = useState('');
   const [editEmail, setEditEmail] = useState('');
-  const [editPapel, setEditPapel] = useState<'admin'|'operador'|'visualizador'>('operador');
+  const [editPapel, setEditPapel] = useState<string>('');
   const [editAtivo, setEditAtivo] = useState(true);
   const [editing, setEditing] = useState(false);
   const [editFile, setEditFile] = useState<File | null>(null);
@@ -109,9 +109,15 @@ export function Configuracoes() {
     setLoadingUsers(true);
     setUsersError(null);
     try {
-      const { data, error } = await supabase.from('usuarios').select('id, nome, email, acesso, ativo, img_url').order('nome', { ascending: true });
+      // Use the view usuarios_completos which returns acesso_nome junto com acesso_id
+      const { data, error } = await supabase
+        .from('usuarios_completos')
+        .select('user_id, nome, email, acesso_id, acesso_nome, ativo, img_url')
+        .order('nome', { ascending: true });
       if (error) throw error;
-      setUsers((data ?? []) as Usuario[]);
+      const rows = (data ?? []) as Array<any>;
+      const mapped = rows.map((r) => ({ id: r.user_id ?? r.id, nome: r.nome, email: r.email, acesso_id: r.acesso_id ?? null, acesso_nome: r.acesso_nome ?? null, ativo: r.ativo, img_url: r.img_url }));
+      setUsers(mapped as Usuario[]);
     } catch (err) {
       console.error('Erro ao buscar usuários:', err);
       setUsersError(String(err));
@@ -727,7 +733,8 @@ export function Configuracoes() {
                               }
 
                               // upsert into usuarios with same uuid
-                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso: newPapel ? Number(newPapel) : null, ativo: true };
+                              const selectedPapel = predefPapels.find(p => String(p.id) === String(newPapel));
+                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso_id: selectedPapel ? Number(selectedPapel.id) : null, ativo: true };
                               if (imgUrl) upsertObj.img_url = imgUrl;
                               if (empresaId) upsertObj.empresa_id = empresaId;
                               const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
@@ -739,7 +746,8 @@ export function Configuracoes() {
                               }
                             } else {
                               // fallback: insert without linking id — admin will need to reconcile
-                              const insertObj: any = { nome: newNome, email: newEmail, acesso: newPapel ? Number(newPapel) : null, ativo: true };
+                              const selectedPapel2 = predefPapels.find(p => String(p.id) === String(newPapel));
+                              const insertObj: any = { nome: newNome, email: newEmail, acesso_id: selectedPapel2 ? Number(selectedPapel2.id) : null, ativo: true };
                               if (empresaId) insertObj.empresa_id = empresaId;
                               const { error: insErr } = await supabase.from('usuarios').insert(insertObj).select();
                               if (insErr) {
@@ -814,8 +822,8 @@ export function Configuracoes() {
                         </TableCell>
                         <TableCell>{usuario.email}</TableCell>
                         <TableCell>
-                          <Badge variant={usuario.acesso === 'admin' ? 'default' : 'secondary'}>
-                            {usuario.acesso === 'admin' ? 'Administrador' : (usuario.acesso ?? 'Operador')}
+                          <Badge variant={usuario.acesso_nome && String(usuario.acesso_nome).toLowerCase().includes('admin') ? 'default' : 'secondary'}>
+                            {usuario.acesso_nome ?? 'Operador'}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -840,7 +848,8 @@ export function Configuracoes() {
                                     setEditUserId(usuario.id);
                                     setEditNome(usuario.nome ?? '');
                                     setEditEmail(usuario.email ?? '');
-                                    setEditPapel((usuario.acesso as 'admin'|'operador'|'visualizador') ?? 'operador');
+                                    // set edit papel to acesso_id from view (or empty string)
+                                    setEditPapel(String((usuario as any).acesso_id ?? ''));
                                     setEditAtivo(usuario.ativo ?? true);
                                     setEditOpen(true);
                                   }}
@@ -990,10 +999,16 @@ export function Configuracoes() {
               </div>
               <div className="space-y-1">
                 <Label htmlFor="edit-papel">Papel</Label>
-                <select id="edit-papel" value={editPapel} onChange={(e) => setEditPapel(e.target.value as 'admin'|'operador'|'visualizador')} className="border rounded px-2 py-1">
-                  <option value="operador">Operador</option>
-                  <option value="admin">Administrador</option>
-                  <option value="visualizador">Visualizador</option>
+                <select id="edit-papel" value={editPapel} onChange={(e) => setEditPapel(e.target.value)} className="border rounded px-2 py-1">
+                  {loadingPredefPapels ? (
+                    <option>Carregando...</option>
+                  ) : predefPapels.length === 0 ? (
+                    <option value="">Sem opções</option>
+                  ) : (
+                    predefPapels.map((p) => (
+                      <option key={p.id} value={String(p.id)}>{p.nome}</option>
+                    ))
+                  )}
                 </select>
               </div>
               <div className="space-y-1">
@@ -1049,7 +1064,7 @@ export function Configuracoes() {
                       }
                     }
 
-                    const updateObj: any = { nome: editNome, email: editEmail, acesso: editPapel, ativo: editAtivo };
+                    const updateObj: any = { nome: editNome, email: editEmail, acesso_id: editPapel ? Number(editPapel) : null, ativo: editAtivo };
                     if (imgUrl) updateObj.img_url = imgUrl;
                     const { error } = await supabase.from('usuarios').update(updateObj).eq('id', editUserId).select();
                     if (error) {
