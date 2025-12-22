@@ -1,5 +1,5 @@
 {
-  "event": "order.paid",
+  "event": "order.created",
   "time": "2025-01-01 12:00:00",
   "merchant": {
     "id": 123,

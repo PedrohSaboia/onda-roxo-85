@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Users, Tag, Palette, Building, Trash, GripVertical, Plus } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -9,6 +9,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { mockUsuarios, mockStatus, mockPlataformas } from '@/data/mockData';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -23,7 +24,7 @@ export function Configuracoes() {
     return stored === 'true';
   });
   const { toast } = useToast();
-  const { empresaId } = useAuth();
+  const { empresaId, user: currentUser, permissoes, hasPermissao } = useAuth();
 
   // Apply dark mode to document
   useEffect(() => {
@@ -40,7 +41,9 @@ export function Configuracoes() {
   const [openNewUser, setOpenNewUser] = useState(false);
   const [newNome, setNewNome] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const [newPapel, setNewPapel] = useState<'admin'|'operador'|'visualizador'>('operador');
+  const [newPapel, setNewPapel] = useState<string>('');
+  const [predefPapels, setPredefPapels] = useState<Array<{ id: number; nome: string }>>([]);
+  const [loadingPredefPapels, setLoadingPredefPapels] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [creating, setCreating] = useState(false);
   const [newFile, setNewFile] = useState<File | null>(null);
@@ -191,6 +194,146 @@ export function Configuracoes() {
     fetchPlataformas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const fetchPredefPapels = async () => {
+    setLoadingPredefPapels(true);
+    try {
+      const { data, error } = await supabase
+        .from('predefinicoes_permissoes')
+        .select('id, nome')
+        .order('nome', { ascending: true });
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ id: number; nome: string }>;
+      setPredefPapels(rows);
+      if (rows.length > 0 && !newPapel) setNewPapel(String(rows[0].id));
+    } catch (err) {
+      console.error('Erro ao carregar predefinicoes_permissoes:', err);
+      setPredefPapels([]);
+    } finally {
+      setLoadingPredefPapels(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPredefPapels();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // categorias de permissoes (para dropdown de filtro)
+  const [categoriasPermissoes, setCategoriasPermissoes] = useState<Array<{ id: number; categoria_nome: string }>>([]);
+  const [loadingCategoriasPermissoes, setLoadingCategoriasPermissoes] = useState(false);
+  const [selectedCategoriaPermissao, setSelectedCategoriaPermissao] = useState<number | null>(null);
+
+  // permissões lista principal
+  const [permissoesList, setPermissoesList] = useState<Array<{ id: number; permissao_nome: string; categoria_permissao_id?: number }>>([]);
+  const [loadingPermissoes, setLoadingPermissoes] = useState(false);
+
+  const fetchPermissoes = async () => {
+    setLoadingPermissoes(true);
+    try {
+      const { data, error } = await supabase
+        .from('permissoes')
+        .select('id, permissao_nome, categoria_permissao_id')
+        .order('permissao_nome', { ascending: true });
+      if (error) throw error;
+      setPermissoesList((data ?? []) as Array<{ id: number; permissao_nome: string; categoria_permissao_id?: number }>);
+    } catch (err) {
+      console.error('Erro ao carregar permissoes:', err);
+      setPermissoesList([]);
+    } finally {
+      setLoadingPermissoes(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPermissoes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fetchCategoriasPermissoes = async () => {
+    setLoadingCategoriasPermissoes(true);
+    try {
+      const { data, error } = await supabase
+        .from('categorias_permissoes')
+        .select('id, categoria_nome')
+        .order('categoria_nome', { ascending: true });
+      if (error) throw error;
+      setCategoriasPermissoes((data ?? []) as Array<{ id: number; categoria_nome: string }>);
+    } catch (err) {
+      console.error('Erro ao carregar categorias_permissoes:', err);
+      setCategoriasPermissoes([]);
+    } finally {
+      setLoadingCategoriasPermissoes(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchCategoriasPermissoes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // predefinições de permissões (popup)
+  const [predefOpen, setPredefOpen] = useState(false);
+  const [predefinicoes, setPredefinicoes] = useState<Array<{ id: number; nome: string }>>([]);
+  const [loadingPredefinicoes, setLoadingPredefinicoes] = useState(false);
+  const [selectedPredef, setSelectedPredef] = useState<number | null>(null);
+  const [predefPermissoes, setPredefPermissoes] = useState<Array<{ id: number; permissao_nome: string }>>([]);
+  const [loadingPredefPermissoes, setLoadingPredefPermissoes] = useState(false);
+
+  const fetchPredefinicoes = async () => {
+    setLoadingPredefinicoes(true);
+    try {
+      // A view vw_ass_predefinicao_perm_completo traz linhas (predefinicao_id, nome, permissao_id, permissao_nome)
+      // Buscamos todas as linhas e deduplicamos as predefinicoes pelo id no cliente.
+      const { data, error } = await supabase
+        .from('vw_ass_predefinicao_perm_completo')
+        .select('predefinicao_id, nome')
+        .order('nome', { ascending: true });
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ predefinicao_id: number; nome: string }>;
+      const map = new Map<number, string>();
+      rows.forEach((r) => {
+        const id = Number((r as any).predefinicao_id);
+        if (!map.has(id)) map.set(id, (r as any).nome ?? '');
+      });
+      const dedup = Array.from(map.entries()).map(([id, nome]) => ({ id, nome }));
+      setPredefinicoes(dedup);
+    } catch (err) {
+      console.error('Erro ao carregar predefinicoes:', err);
+      setPredefinicoes([]);
+    } finally {
+      setLoadingPredefinicoes(false);
+    }
+  };
+
+  const fetchPredefPermissoes = async (predefId: number) => {
+    setLoadingPredefPermissoes(true);
+    try {
+      // Agora usamos a view vw_ass_predefinicao_perm_completo para buscar as permissões
+      const { data, error } = await supabase
+        .from('vw_ass_predefinicao_perm_completo')
+        .select('permissao_id, permissao_nome')
+        .eq('predefinicao_id', predefId)
+        .order('permissao_nome', { ascending: true });
+      if (error) throw error;
+      const rows = (data ?? []) as Array<{ permissao_id: number; permissao_nome: string }>;
+      const perms = rows.map((r) => ({ id: Number((r as any).permissao_id), permissao_nome: (r as any).permissao_nome }));
+      setPredefPermissoes(perms);
+    } catch (err) {
+      console.error('Erro ao carregar permissoes da predefinicao:', err);
+      setPredefPermissoes([]);
+    } finally {
+      setLoadingPredefPermissoes(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!predefOpen) return;
+    fetchPredefinicoes();
+    setSelectedPredef(null);
+    setPredefPermissoes([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [predefOpen]);
 
   // create plataforma state
   const [createPlataformaOpen, setCreatePlataformaOpen] = useState(false);
@@ -429,7 +572,7 @@ export function Configuracoes() {
       </div>
 
       <Tabs defaultValue="usuarios" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="usuarios">
             <Users className="h-4 w-4 mr-2" />
             Usuários
@@ -446,6 +589,10 @@ export function Configuracoes() {
             <Settings className="h-4 w-4 mr-2" />
             Setores
           </TabsTrigger>
+          <TabsTrigger value="permissoes">
+            <Lock className="h-4 w-4 mr-2" />
+            Permissões
+          </TabsTrigger>
           <TabsTrigger value="preferencias">
             <Palette className="h-4 w-4 mr-2" />
             Preferências
@@ -459,7 +606,18 @@ export function Configuracoes() {
                 <CardTitle>Usuários do Sistema</CardTitle>
                 <Dialog open={openNewUser} onOpenChange={setOpenNewUser}>
                   <DialogTrigger asChild>
-                    <Button className="bg-purple-600 hover:bg-purple-700">Novo Usuário</Button>
+                    <Button 
+                      className="bg-purple-600 hover:bg-purple-700"
+                      onClick={(e) => {
+                        const canCreate = hasPermissao ? hasPermissao(4) : false;
+                        if (!canCreate) {
+                          e.preventDefault();
+                          toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
+                        }
+                      }}
+                    >
+                      Novo Usuário
+                    </Button>
                   </DialogTrigger>
                   <DialogContent>
                     <DialogHeader>
@@ -481,15 +639,21 @@ export function Configuracoes() {
                         <Input id="novo-senha" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="novo-papel">Papel</Label>
-                        <select id="novo-papel" value={newPapel} onChange={(e) => setNewPapel(e.target.value as 'admin'|'operador'|'visualizador')} className="border rounded px-2 py-1">
-                          <option value="operador">Operador</option>
-                          <option value="admin">Administrador</option>
-                          <option value="visualizador">Visualizador</option>
+                        <Label htmlFor="novo-papel">Acesso</Label>
+                        <select id="novo-papel" value={newPapel} onChange={(e) => setNewPapel(e.target.value)} className="border rounded px-2 py-1">
+                          {loadingPredefPapels ? (
+                            <option>Carregando...</option>
+                          ) : predefPapels.length === 0 ? (
+                            <option value="">Sem opções</option>
+                          ) : (
+                            predefPapels.map((p) => (
+                              <option key={p.id} value={String(p.id)}>{p.nome}</option>
+                            ))
+                          )}
                         </select>
                       </div>
                       <div className="space-y-1">
-                        <Label>Foto)</Label>
+                        <Label>Foto</Label>
                         <div
                           onClick={() => newFileInputRef.current?.click()}
                           onDragOver={(e) => e.preventDefault()}
@@ -563,7 +727,7 @@ export function Configuracoes() {
                               }
 
                               // upsert into usuarios with same uuid
-                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
+                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso: newPapel ? Number(newPapel) : null, ativo: true };
                               if (imgUrl) upsertObj.img_url = imgUrl;
                               if (empresaId) upsertObj.empresa_id = empresaId;
                               const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
@@ -575,7 +739,7 @@ export function Configuracoes() {
                               }
                             } else {
                               // fallback: insert without linking id — admin will need to reconcile
-                              const insertObj: any = { nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
+                              const insertObj: any = { nome: newNome, email: newEmail, acesso: newPapel ? Number(newPapel) : null, ativo: true };
                               if (empresaId) insertObj.empresa_id = empresaId;
                               const { error: insErr } = await supabase.from('usuarios').insert(insertObj).select();
                               if (insErr) {
@@ -595,7 +759,7 @@ export function Configuracoes() {
                             }
 
                             // reset form and close
-                            setNewNome(''); setNewEmail(''); setNewPassword(''); setNewPapel('operador'); setNewFile(null);
+                            setNewNome(''); setNewEmail(''); setNewPassword(''); setNewPapel(''); setNewFile(null);
                             // refresh list (in case creation succeeded)
                             fetchUsuarios();
                             setOpenNewUser(false);
@@ -661,20 +825,40 @@ export function Configuracoes() {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => {
-                              // open edit modal with user data
-                              setEditUserId(usuario.id);
-                              setEditNome(usuario.nome ?? '');
-                              setEditEmail(usuario.email ?? '');
-                              setEditPapel((usuario.acesso as 'admin'|'operador'|'visualizador') ?? 'operador');
-                              setEditAtivo(usuario.ativo ?? true);
-                              setEditOpen(true);
-                            }}>
-                              Editar
-                            </Button>
+                            {(() => {
+                              const canEdit = (currentUser?.id && usuario.id && currentUser.id === usuario.id) || (hasPermissao ? hasPermissao(5) : (permissoes ?? []).includes(5));
+                              return (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => {
+                                    if (!canEdit) {
+                                      toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
+                                      return;
+                                    }
+                                    // open edit modal with user data
+                                    setEditUserId(usuario.id);
+                                    setEditNome(usuario.nome ?? '');
+                                    setEditEmail(usuario.email ?? '');
+                                    setEditPapel((usuario.acesso as 'admin'|'operador'|'visualizador') ?? 'operador');
+                                    setEditAtivo(usuario.ativo ?? true);
+                                    setEditOpen(true);
+                                  }}
+                                >
+                                  Editar
+                                </Button>
+                              );
+                            })()}
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => {
+                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => {
+                                  const canDelete = hasPermissao ? hasPermissao(6) : (permissoes ?? []).includes(6);
+                                  if (!canDelete) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
+                                    return;
+                                  }
                                   setDeleteUserId(usuario.id);
                                   setDeleteUserName(usuario.nome);
                                 }}>
@@ -1594,6 +1778,169 @@ export function Configuracoes() {
           </DialogContent>
         </Dialog>
 
+        <TabsContent value="permissoes">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between w-full">
+                <div className="flex items-center gap-4">
+                  <CardTitle>Permissões</CardTitle>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="inline-flex items-center gap-2 px-3 py-1 border rounded-full bg-white text-sm">
+                        <span>{
+                          selectedCategoriaPermissao
+                            ? (categoriasPermissoes.find(c => c.id === selectedCategoriaPermissao)?.categoria_nome ?? 'filtro')
+                            : 'filtro'
+                        }</span>
+                        <ChevronDown className="w-4 h-4 text-gray-600" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent sideOffset={8} align="start" className="min-w-[12rem]">
+                      {loadingCategoriasPermissoes ? (
+                        <DropdownMenuItem>Carregando...</DropdownMenuItem>
+                      ) : (
+                        categoriasPermissoes.map((c) => {
+                          const active = selectedCategoriaPermissao === c.id;
+                          return (
+                            <DropdownMenuItem
+                              key={c.id}
+                              onSelect={() => setSelectedCategoriaPermissao(c.id)}
+                              className={active ? 'bg-accent text-accent-foreground' : ''}
+                            >
+                              {c.categoria_nome}
+                            </DropdownMenuItem>
+                          );
+                        })
+                      )}
+                      {selectedCategoriaPermissao != null && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={() => setSelectedCategoriaPermissao(null)}>Limpar filtro</DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+
+                <div>
+                  <Button className="bg-[#7a5a32] hover:bg-[#6b4927] text-white" onClick={() => setPredefOpen(true)}>
+                    Visualizar predefinições
+                  </Button>
+
+                  <Dialog open={predefOpen} onOpenChange={setPredefOpen}>
+                    <DialogContent className="sm:max-w-4xl max-w-[95vw] p-4">
+                      <DialogHeader>
+                        <DialogTitle>Gerenciar predefinições</DialogTitle>
+                        <DialogDescription>Clique em uma pré-definição para expandir e ver suas permissões.</DialogDescription>
+                      </DialogHeader>
+
+                      <div className="mt-3">
+                        <div className="h-[520px] sm:h-[420px] overflow-auto rounded-md border bg-white">
+                          {loadingPredefinicoes ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground">Carregando...</div>
+                          ) : predefinicoes.length === 0 ? (
+                            <div className="py-8 text-center text-sm text-muted-foreground">Nenhuma predefinição encontrada</div>
+                          ) : (
+                            <div className="divide-y">
+                              {predefinicoes.map((p) => (
+                                <div key={p.id} className="">
+                                  <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
+                                    <button
+                                      type="button"
+                                      className="text-left font-medium text-sm truncate"
+                                      onClick={() => {
+                                        if (selectedPredef === p.id) {
+                                          setSelectedPredef(null);
+                                          setPredefPermissoes([]);
+                                        } else {
+                                          setSelectedPredef(p.id);
+                                          fetchPredefPermissoes(p.id);
+                                        }
+                                      }}
+                                      aria-expanded={selectedPredef === p.id}
+                                    >
+                                      {p.nome}
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      aria-label={selectedPredef === p.id ? 'Recolher' : 'Expandir'}
+                                      onClick={() => {
+                                        if (selectedPredef === p.id) {
+                                          setSelectedPredef(null);
+                                          setPredefPermissoes([]);
+                                        } else {
+                                          setSelectedPredef(p.id);
+                                          fetchPredefPermissoes(p.id);
+                                        }
+                                      }}
+                                      className={`p-1 rounded-md transform transition-transform ${selectedPredef === p.id ? 'rotate-180' : ''}`}
+                                    >
+                                      <ChevronDown size={18} />
+                                    </button>
+                                  </div>
+
+                                  {selectedPredef === p.id && (
+                                    <div className="px-6 pb-4 bg-gray-50">
+                                      {loadingPredefPermissoes ? (
+                                        <div className="py-4 text-sm text-muted-foreground">Carregando permissões...</div>
+                                      ) : predefPermissoes.length === 0 ? (
+                                        <div className="py-4 text-sm text-muted-foreground">Nenhuma permissão encontrada para esta pré-definição</div>
+                                      ) : (
+                                        <ul className="mt-2 space-y-1">
+                                          {predefPermissoes.map((perm) => (
+                                            <li key={perm.id} className="px-2 py-1 text-sm text-muted-foreground">{perm.permissao_nome}</li>
+                                          ))}
+                                        </ul>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="h-[420px] border rounded-md p-4 bg-white overflow-auto">
+                {loadingPermissoes ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">Carregando permissões...</div>
+                ) : permissoesList.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">Nenhuma permissão cadastrada</div>
+                ) : (
+                  (() => {
+                    const filtered = selectedCategoriaPermissao != null
+                      ? permissoesList.filter(p => Number(p.categoria_permissao_id) === Number(selectedCategoriaPermissao))
+                      : permissoesList;
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="py-8 text-center text-sm text-muted-foreground">Nenhuma permissão encontrada para o filtro selecionado</div>
+                      );
+                    }
+                    return (
+                      <div className="space-y-2">
+                        {filtered.map((perm) => (
+                          <div key={perm.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 rounded">
+                            <div className="text-sm">{perm.permissao_nome}</div>
+                            <div className="text-xs text-muted-foreground">#{perm.id}</div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="preferencias">
           <div className="space-y-6">
             {/* Modo Escuro Card */}
@@ -1603,16 +1950,10 @@ export function Configuracoes() {
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Modo Escuro</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Alternar entre tema claro e escuro
-                    </p>
+                  <div>
+                    <p className="text-sm text-muted-foreground">Alternar entre tema claro e escuro</p>
                   </div>
-                  <Switch
-                    checked={darkMode}
-                    onCheckedChange={setDarkMode}
-                  />
+                  <Switch checked={darkMode} onCheckedChange={setDarkMode} />
                 </div>
               </CardContent>
             </Card>

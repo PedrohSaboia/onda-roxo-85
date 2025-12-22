@@ -11,6 +11,8 @@ interface AuthContextType {
   acesso?: string | null;
   imgUrl?: string | null;
   empresaId?: number | null;
+  permissoes?: number[];
+  hasPermissao?: (id: number) => boolean;
   signUp: (email: string, password: string, nome: string) => Promise<{ error: any }>;
   signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<{ error: any }>;
@@ -27,7 +29,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [acesso, setAcesso] = useState<string | null>(null);
   const [imgUrl, setImgUrl] = useState<string | null>(null);
   const [empresaId, setEmpresaId] = useState<number | null>(null);
+  const [permissoesUsuario, setPermissoesUsuario] = useState<number[]>([]);
   const { toast } = useToast();
+
+  const hasPermissao = (id: number) => {
+    try {
+      return (permissoesUsuario ?? []).map(Number).includes(Number(id));
+    } catch (err) {
+      return false;
+    }
+  };
 
   // Verificar se usuário está ativo
   const checkUserActive = async (userId: string) => {
@@ -70,6 +81,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchUserPermissoes = async (userId: string) => {
+    try {
+      // view group_usuarios_permissoes returns { user_id, permissoes: bigint[] }
+      const { data, error } = await supabase
+        .from('group_usuarios_permissoes')
+        .select('permissoes')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.error('Erro ao buscar permissoes do usuário:', error);
+        setPermissoesUsuario([]);
+        return [];
+      }
+
+      const perms = (data?.permissoes ?? []) as Array<any>;
+      const parsed = perms.map((p) => Number(p));
+      setPermissoesUsuario(parsed);
+      return parsed;
+    } catch (err) {
+      console.error('Erro ao buscar permissoes do usuário:', err);
+      setPermissoesUsuario([]);
+      return [];
+    }
+  };
+
   useEffect(() => {
     // Configurar listener de mudanças de autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -87,6 +124,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               setAcesso(userData.acesso);
               setImgUrl(userData.img_url);
               setEmpresaId(userData.empresa_id);
+              await fetchUserPermissoes(session.user.id);
               
               if (!active && event === 'SIGNED_IN') {
                 toast({
@@ -125,6 +163,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setAcesso(userData.acesso);
             setImgUrl(userData.img_url);
             setEmpresaId(userData.empresa_id);
+            await fetchUserPermissoes(session.user.id);
           } catch (error) {
             console.error('Erro ao verificar status do usuário:', error);
             setIsUserActive(false);
@@ -230,6 +269,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       setAcesso(null);
       setImgUrl(null);
+      setPermissoesUsuario([]);
       
       return { error: null };
     } catch (error: any) {
@@ -240,6 +280,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setAcesso(null);
         setImgUrl(null);
+        setPermissoesUsuario([]);
         return { error: null };
       }
       
@@ -280,6 +321,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     acesso,
     imgUrl,
     empresaId,
+    permissoes: permissoesUsuario,
+    hasPermissao,
     signUp,
     signIn,
     signOut,
