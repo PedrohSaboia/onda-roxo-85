@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -25,6 +26,8 @@ export function ListaEmbalagens() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(10);
   const [total, setTotal] = useState(0);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [embalagemToDelete, setEmbalagemToDelete] = useState<any | null>(null);
 
   const loadEmbalagens = async () => {
     setLoading(true);
@@ -92,22 +95,29 @@ export function ListaEmbalagens() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Deseja realmente excluir esta embalagem?')) return;
+  const handleDelete = async () => {
+    if (!embalagemToDelete) return;
     
     try {
       const { error } = await supabase
         .from('embalagens')
         .delete()
-        .eq('id', id);
+        .eq('id', embalagemToDelete.id);
       
       if (error) throw error;
       toast({ title: 'Embalagem excluída com sucesso!' });
       loadEmbalagens();
+      setDeleteConfirmOpen(false);
+      setEmbalagemToDelete(null);
     } catch (err: any) {
       console.error('Erro ao excluir embalagem:', err);
       toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
     }
+  };
+
+  const openDeleteConfirm = (embalagem: any) => {
+    setEmbalagemToDelete(embalagem);
+    setDeleteConfirmOpen(true);
   };
 
   const handleEdit = (embalagem: any) => {
@@ -211,7 +221,7 @@ export function ListaEmbalagens() {
                                 <Button
                                   variant="destructive"
                                   size="sm"
-                                  onClick={() => handleDelete(emb.id)}
+                                  onClick={() => openDeleteConfirm(emb)}
                                 >
                                   <Trash className="w-4 h-4" />
                                 </Button>
@@ -253,7 +263,7 @@ export function ListaEmbalagens() {
               </CardContent>
             </Card>
 
-                <EmballagemModal
+            <EmballagemModal
               open={modalOpen}
               onClose={() => {
                 setModalOpen(false);
@@ -262,6 +272,47 @@ export function ListaEmbalagens() {
               onSave={handleSaveEmbalagem}
               embalagem={editingEmbalagem}
             />
+
+            {/* Dialog de confirmação de exclusão */}
+            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Excluir Embalagem</DialogTitle>
+                </DialogHeader>
+                <div className="py-4">
+                  <p className="text-sm text-muted-foreground">
+                    Deseja realmente excluir esta embalagem?
+                  </p>
+                  {embalagemToDelete && (
+                    <div className="mt-3 p-3 bg-gray-50 rounded">
+                      <p className="font-medium">{embalagemToDelete.nome}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {embalagemToDelete.altura} × {embalagemToDelete.largura} × {embalagemToDelete.comprimento} cm - {embalagemToDelete.peso} kg
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <div className="flex justify-between w-full">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setDeleteConfirmOpen(false);
+                        setEmbalagemToDelete(null);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button 
+                      variant="destructive"
+                      onClick={handleDelete}
+                    >
+                      Sim, excluir
+                    </Button>
+                  </div>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </div>
       </main>

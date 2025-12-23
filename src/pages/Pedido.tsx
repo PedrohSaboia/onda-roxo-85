@@ -753,91 +753,50 @@ export default function Pedido() {
   };
 
   const handleEnviarMaisBarato = async () => {
-    // If there's already a frete_melhor_envio saved on the pedido, send that to the Melhor Envio cart
     if (!pedido) {
       toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
       return;
     }
 
-    // If there's a stored frete payload, attempt to send it directly
-    const stored = (pedido as any).frete_melhor_envio;
-    if (stored) {
-      try {
-        setCalculandoFrete(true);
+    try {
+      setCalculandoFrete(true);
 
-        // Build a minimal payload reusing stored data but filling from/to/products if missing
-        const insuranceValue = 1;
+      // Chamar a edge function processar_etiqueta_em_envio_de_pedido
+      const { data: response, error: functionError } = await supabase.functions.invoke('processar_etiqueta_em_envio_de_pedido', {
+        body: { pedido_id: pedido.id, empresa_id: empresaId }
+      });
 
-        const payload: any = {
-          from: {
-            name: selectedRemetente?.nome || stored.from?.name || '' ,
-            phone: selectedRemetente?.contato || selectedRemetente?.telefone || stored.from?.phone || '',
-            email: selectedRemetente?.email || stored.from?.email || 'contato@empresa.com',
-            document: selectedRemetente?.cpf || stored.from?.document || '',
-            address: selectedRemetente?.endereco || stored.from?.address || '',
-            number: selectedRemetente?.numero || stored.from?.number || '',
-            complement: selectedRemetente?.complemento || stored.from?.complement || '',
-            district: selectedRemetente?.bairro || stored.from?.district || '',
-            city: selectedRemetente?.cidade || stored.from?.city || '',
-            state_abbr: selectedRemetente?.estado || stored.from?.state_abbr || '',
-            country_id: stored.from?.country_id || 'BR',
-            postal_code: (selectedRemetente?.cep || stored.from?.postal_code || '').replace(/\D/g, '')
-          },
-          to: {
-            name: pedido?.cliente?.nome || stored.to?.name || '' ,
-            phone: pedido?.cliente?.telefone || pedido?.cliente?.contato || stored.to?.phone || '',
-            email: pedido?.cliente?.email || stored.to?.email || 'cliente@email.com',
-            document: pedido?.cliente?.cpf || stored.to?.document || '',
-            address: pedido?.cliente?.endereco || stored.to?.address || '',
-            number: pedido?.cliente?.numero || stored.to?.number || '',
-            complement: pedido?.cliente?.complemento || stored.to?.complement || '',
-            district: pedido?.cliente?.bairro || stored.to?.district || '',
-            city: pedido?.cliente?.cidade || stored.to?.city || '',
-            state_abbr: pedido?.cliente?.estado || stored.to?.state_abbr || '',
-            country_id: stored.to?.country_id || 'BR',
-            postal_code: (pedido?.cliente?.cep || stored.to?.postal_code || '').replace(/\D/g, '')
-          },
-          options: stored.options || { insurance_value: 1, receipt: false, own_hand: false, reverse: false, non_commercial: true },
-          products: (pedido?.itens || []).map((it: any) => ({ 
-            name: it.variacao?.nome ? `${it.produto?.nome} - ${it.variacao.nome}` : (it.produto?.nome || 'Produto'), 
-            quantity: String(it.quantidade || 1), 
-            unitary_value: String(Number(it.preco_unitario || it.preco || 0).toFixed(2)) 
-          })),
-          service: stored.service || stored.service_id || stored.raw_response?.service || stored.raw_response?.service_id,
-          volumes: stored.volumes || (selectedEmbalagem ? [{ height: selectedEmbalagem.altura, width: selectedEmbalagem.largura, length: selectedEmbalagem.comprimento, weight: selectedEmbalagem.peso, insurance_value: 1 }] : [{ height: 5, width: 20, length: 20, weight: 1, insurance_value: 1 }])
-        };
-
-        console.log('Enviando frete salvo ao carrinho ME:', payload);
-
-        const { data: carrinhoResp, error: carrinhoError } = await supabase.functions.invoke('adic-carrinho-melhorenvio', {
-          body: payload
-        });
-
-        if (carrinhoError) throw carrinhoError;
-
-        const melhorEnvioId = carrinhoResp?.id || carrinhoResp?.data?.id || carrinhoResp?.shipment?.id;
-
-        // update pedido to mark as sent to carrinho
-        const { error } = await supabase.from('pedidos').update({ id_melhor_envio: melhorEnvioId || null, carrinho_me: true, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
-        if (error) throw error;
-
-        toast({ title: 'Sucesso', description: 'Frete enviado ao carrinho do Melhor Envio' });
-        navigate(0);
-      } catch (err: any) {
-        console.error('Erro ao enviar frete salvo ao carrinho:', err);
-        toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
-      } finally {
-        setCalculandoFrete(false);
+      if (functionError) {
+        throw new Error(functionError.message || 'Erro ao processar etiqueta');
       }
-      return;
-    }
 
-    // Fallback: if no stored frete, calculate and pick cheapest as before
-    setCalculandoFrete(true);
-    await handleCalcularFrete();
-    if (cotacoes.length > 0) {
-      const maisBarato = cotacoes.reduce((prev, curr) => prev.preco < curr.preco ? prev : curr);
-      await handleSelectCotacao(maisBarato);
+      // Atualizar o status_id do pedido para 3473cae9-47c8-4b85-96af-b41fe0e15fa9
+      const { error: updateError } = await supabase
+        .from('pedidos')
+        .update({ 
+          status_id: '3473cae9-47c8-4b85-96af-b41fe0e15fa9',
+          atualizado_em: new Date().toISOString()
+        } as any)
+        .eq('id', pedido.id);
+
+      if (updateError) throw updateError;
+
+      toast({ 
+        title: 'Sucesso', 
+        description: 'Etiqueta processada e pedido atualizado com sucesso' 
+      });
+      
+      // Recarregar a página para atualizar os dados
+      navigate(0);
+    } catch (err: any) {
+      console.error('Erro ao processar etiqueta:', err);
+      toast({ 
+        title: 'Erro', 
+        description: err?.message || String(err), 
+        variant: 'destructive' 
+      });
+    } finally {
+      setCalculandoFrete(false);
     }
   };
 
