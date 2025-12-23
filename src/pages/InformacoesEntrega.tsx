@@ -34,32 +34,47 @@ export default function InformacoesEntrega() {
   useEffect(() => {
     const fetchCliente = async () => {
       if (!id) return setLoading(false);
-      const { data, error } = await supabase.from('clientes').select('*').eq('id', id).single();
+      // Use RPC that returns JSONB: either { mensagem: '...' } or the cliente object
+      const { data, error } = await supabase.rpc('trazer_cliente_info', { p_cliente_id: id });
       if (error) {
         console.error(error);
         toast({ title: 'Erro', description: 'Não foi possível carregar o cliente', variant: 'destructive' });
       } else {
-        setCliente({
-          id: data.id,
-          nome: data.nome || '',
-          // derive tipo locally from presence of cnpj (if table doesn't have 'tipo')
-          tipo: (data as any)?.cnpj ? 'pj' : 'pf',
-          documento: (data as any)?.cpf || (data as any)?.cnpj || '',
-          email: data.email || '',
-          telefone: data.telefone || '',
-          cep: data.cep || '',
-          endereco: data.endereco || '',
-          numero: data.numero || '',
-          complemento: data.complemento || '',
-          observacao: (data as any).observacao || '',
-          bairro: data.bairro || '',
-          cidade: data.cidade || '',
-          estado: data.estado || '',
-        });
-        // if this cliente already submitted the form, show confirmation immediately
-        if ((data as any).formulario_enviado) {
+        // supabase.rpc may return the value directly or wrapped in an array/object
+        let payload: any = data;
+        if (Array.isArray(payload)) payload = payload[0];
+        // some clients return { function_name: result }
+        if (payload && typeof payload === 'object' && Object.keys(payload).length === 1) {
+          const firstKey = Object.keys(payload)[0];
+          if (firstKey !== 'cliente_id' && payload[firstKey] && typeof payload[firstKey] === 'object') {
+            payload = payload[firstKey];
+          }
+        }
+
+        if (!payload) {
+          setCliente(null);
+        } else if (payload.mensagem) {
+          // mark as submitted and keep a minimal cliente so UI doesn't show "Cliente não encontrado"
           setSubmitted(true);
           setStep(2);
+          setCliente({ id });
+        } else {
+          setCliente({
+            id: payload.cliente_id ?? id,
+            nome: payload.cliente_nome ?? '',
+            tipo: payload.cliente_cnpj ? 'pj' : 'pf',
+            documento: payload.cliente_cpf ?? payload.cliente_cnpj ?? '',
+            email: payload.cliente_email ?? '',
+            telefone: payload.cliente_telefone ?? '',
+            cep: payload.cliente_cep ?? '',
+            endereco: payload.cliente_endereco ?? '',
+            numero: payload.cliente_numero ?? '',
+            complemento: payload.cliente_complemento ?? '',
+            observacao: payload.cliente_observacao ?? '',
+            bairro: payload.cliente_bairro ?? '',
+            cidade: payload.cliente_cidade ?? '',
+            estado: payload.cliente_uf ?? '',
+          });
         }
       }
       setLoading(false);
@@ -213,34 +228,51 @@ export default function InformacoesEntrega() {
     }
     setSalvando(true);
     try {
-      const payload: any = {
-        nome: cliente.nome,
-        // do not send 'tipo' to the DB; not all schemas have this column
-        cpf: cliente.tipo === 'pf' ? cliente.documento : null,
-        cnpj: cliente.tipo === 'pj' ? cliente.documento : null,
-        email: cliente.email,
-        telefone: cliente.telefone,
-        cep: cliente.cep,
-        endereco: cliente.endereco,
-        numero: cliente.numero,
-        complemento: cliente.complemento || null,
-        observacao: cliente.observacao || null,
-        bairro: cliente.bairro,
-        cidade: cliente.cidade,
-        estado: cliente.estado,
-        formulario_enviado: true,
-        atualizado_em: new Date().toISOString()
+      if (!cliente.id) {
+        toast({ title: 'Erro', description: 'Cliente sem identificador', variant: 'destructive' });
+        return;
+      }
+
+      const params: any = {
+        p_cliente_id: cliente.id,
+        p_nome: cliente.nome ?? null,
+        p_cpf: cliente.tipo === 'pf' ? cliente.documento ?? null : null,
+        p_cnpj: cliente.tipo === 'pj' ? cliente.documento ?? null : null,
+        p_email: cliente.email ?? null,
+        p_telefone: cliente.telefone ?? null,
+        p_cep: cliente.cep ?? null,
+        p_endereco: cliente.endereco ?? null,
+        p_numero: cliente.numero ?? null,
+        p_complemento: cliente.complemento ?? null,
+        p_observacao: cliente.observacao ?? null,
+        p_bairro: cliente.bairro ?? null,
+        p_cidade: cliente.cidade ?? null,
+        p_estado: cliente.estado ?? null
       };
 
-      const { error } = await supabase.from('clientes').update(payload as any).eq('id', cliente.id);
+      const { data, error } = await supabase.rpc('enviar_informacoes_cliente', params as any);
       if (error) {
         console.error(error);
         toast({ title: 'Erro', description: 'Não foi possível salvar os dados', variant: 'destructive' });
       } else {
-        toast({ title: 'Sucesso', description: 'Dados salvos com sucesso' });
-        // mark as submitted and remain on step 2 to show confirmation
-        setSubmitted(true);
-        setStep(2);
+        let result: any = data;
+        if (Array.isArray(result)) result = result[0];
+        // unwrap possible wrapper
+        if (result && typeof result === 'object' && Object.keys(result).length === 1) {
+          const k = Object.keys(result)[0];
+          if (result[k] && typeof result[k] === 'object') result = result[k];
+        }
+
+        if (!result) {
+          toast({ title: 'Erro', description: 'Resposta inválida do servidor', variant: 'destructive' });
+        } else if (result.success === false) {
+          const msg = result.message ?? 'Erro ao salvar: cliente não encontrado';
+          toast({ title: 'Erro', description: msg, variant: 'destructive' });
+        } else {
+          toast({ title: 'Sucesso', description: 'Dados salvos com sucesso' });
+          setSubmitted(true);
+          setStep(2);
+        }
       }
     } finally {
       setSalvando(false);

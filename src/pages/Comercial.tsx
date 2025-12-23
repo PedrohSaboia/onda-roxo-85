@@ -1212,7 +1212,7 @@ export function Comercial() {
                   ? `${filteredPedidosComProdutos.length} pedidos enviados`
                   : filterNotLiberado
                     ? `${total} pedidos encontrados`
-                    : `${totalExcludingEnviados} pedidos encont rados`}
+                    : `${totalExcludingEnviados} pedidos encontrados`}
               </p>
             </div>
             <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => navigate('/novo-pedido')}>
