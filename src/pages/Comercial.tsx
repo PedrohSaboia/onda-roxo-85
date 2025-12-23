@@ -101,6 +101,7 @@ export function Comercial() {
   
   // Estados para seleção de pedidos
   const [selectedPedidosIds, setSelectedPedidosIds] = useState<Set<string>>(new Set());
+  const [selectedMelhorEnvioIds, setSelectedMelhorEnvioIds] = useState<string[]>([]);
   
   // Sync state from URL when location changes
   useEffect(() => {
@@ -288,14 +289,16 @@ export function Comercial() {
         // If the view doesn't expose cor_do_pedido, fetch it directly from pedidos table
         const pedidoIds = (data || []).map((r: any) => r.pedido_id).filter(Boolean);
         let corMap: Record<string, string | undefined> = {};
+        let melhorEnvioMap: Record<string, string | undefined> = {};
         if (pedidoIds.length) {
           try {
-            const { data: corData, error: corErr } = await supabase.from('pedidos').select('id, cor_do_pedido').in('id', pedidoIds as any[]);
-            if (!corErr && corData) {
-              corMap = (corData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.cor_do_pedido || undefined, acc), {} as Record<string, string>);
+            const { data: pedidosData, error: pedidosErr } = await supabase.from('pedidos').select('id, cor_do_pedido, id_melhor_envio').in('id', pedidoIds as any[]);
+            if (!pedidosErr && pedidosData) {
+              corMap = (pedidosData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.cor_do_pedido || undefined, acc), {} as Record<string, string>);
+              melhorEnvioMap = (pedidosData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.id_melhor_envio || undefined, acc), {} as Record<string, string>);
             }
-          } catch (fetchCorErr) {
-            console.warn('Não foi possível carregar cor_do_pedido separadamente:', fetchCorErr);
+          } catch (fetchErr) {
+            console.warn('Não foi possível carregar dados adicionais da tabela pedidos:', fetchErr);
           }
         }
 
@@ -334,6 +337,7 @@ export function Comercial() {
             dataPrevista: row.data_prevista || undefined,
             observacoes: row.observacoes || '',
             itens: [],
+            id_melhor_envio: melhorEnvioMap[row.pedido_id] || undefined,
             responsavel: usuarioRow
               ? {
                   id: usuarioRow.id,
@@ -1146,8 +1150,24 @@ export function Comercial() {
       const newSet = new Set(prev);
       if (newSet.has(pedidoId)) {
         newSet.delete(pedidoId);
+        // Remover id_melhor_envio correspondente
+        const pedido = pedidos.find(p => p.id === pedidoId);
+        if (pedido && (pedido as any).id_melhor_envio) {
+          setSelectedMelhorEnvioIds(prevIds => prevIds.filter(id => id !== (pedido as any).id_melhor_envio));
+        }
       } else {
         newSet.add(pedidoId);
+        // Adicionar id_melhor_envio correspondente
+        const pedido = pedidos.find(p => p.id === pedidoId);
+        console.log('Pedido selecionado:', pedido);
+        console.log('id_melhor_envio:', (pedido as any)?.id_melhor_envio);
+        if (pedido && (pedido as any).id_melhor_envio) {
+          setSelectedMelhorEnvioIds(prevIds => {
+            const newIds = [...prevIds, (pedido as any).id_melhor_envio];
+            console.log('IDs Melhor Envio atualizados:', newIds);
+            return newIds;
+          });
+        }
       }
       return newSet;
     });
@@ -1156,8 +1176,14 @@ export function Comercial() {
   const toggleSelectAll = () => {
     if (selectedPedidosIds.size === filteredPedidosComProdutos.length && filteredPedidosComProdutos.length > 0) {
       setSelectedPedidosIds(new Set());
+      setSelectedMelhorEnvioIds([]);
     } else {
       setSelectedPedidosIds(new Set(filteredPedidosComProdutos.map(p => p.id)));
+      // Coletar todos os id_melhor_envio dos pedidos filtrados
+      const melhorEnvioIds = filteredPedidosComProdutos
+        .filter(p => (p as any).id_melhor_envio)
+        .map(p => (p as any).id_melhor_envio);
+      setSelectedMelhorEnvioIds(melhorEnvioIds);
     }
   };
 
@@ -1465,53 +1491,111 @@ export function Comercial() {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => setSelectedPedidosIds(new Set())}
+                      onClick={() => {
+                        setSelectedPedidosIds(new Set());
+                        setSelectedMelhorEnvioIds([]);
+                      }}
                       className="text-purple-600 hover:text-purple-800 hover:bg-purple-100 h-7"
                     >
                       Limpar seleção
                     </Button>
                   </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={async () => {
-                      if (!confirm(`Tem certeza que deseja excluir ${selectedPedidosIds.size} ${selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}?`)) {
-                        return;
-                      }
-                      try {
-                        const idsArray = Array.from(selectedPedidosIds);
-                        const { error } = await supabase
-                          .from('pedidos')
-                          .delete()
-                          .in('id', idsArray);
-                        
-                        if (error) throw error;
-                        
-                        toast({
-                          title: 'Sucesso',
-                          description: `${idsArray.length} ${idsArray.length === 1 ? 'pedido excluído' : 'pedidos excluídos'} com sucesso`,
-                        });
-                        
-                        // Remover da lista local
-                        setPedidos(prev => prev.filter(p => !selectedPedidosIds.has(p.id)));
-                        setSelectedPedidosIds(new Set());
-                        
-                        // Forçar recarga atualizando o estado de página para re-executar o useEffect
-                        setPage(p => p);
-                      } catch (err: any) {
-                        console.error('Erro ao excluir pedidos:', err);
-                        toast({
-                          title: 'Erro',
-                          description: err?.message || 'Não foi possível excluir os pedidos',
-                          variant: 'destructive',
-                        });
-                      }
-                    }}
-                    className="flex items-center gap-2 h-8"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Excluir {selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          toast({
+                            title: 'Processando',
+                            description: 'Gerando etiquetas em lote...',
+                          });
+
+                          console.log('Enviando IDs para impressão:', selectedMelhorEnvioIds);
+
+                          const { data, error } = await supabase.functions.invoke('impressao_em_lote_melhor_envio', {
+                            body: { shipment_ids: selectedMelhorEnvioIds }
+                          });
+
+                          if (error) {
+                            throw new Error(error.message || 'Erro ao gerar etiquetas em lote');
+                          }
+
+                          console.log('Resposta da impressão em lote:', data);
+
+                          // Abrir o link da etiqueta em nova guia
+                          if (data && data.url) {
+                            window.open(data.url, '_blank');
+                            toast({
+                              title: 'Sucesso',
+                              description: `${selectedMelhorEnvioIds.length} etiqueta(s) gerada(s) com sucesso`,
+                            });
+                          } else {
+                            toast({
+                              title: 'Sucesso',
+                              description: 'Etiquetas geradas, mas nenhum link foi retornado',
+                            });
+                          }
+                        } catch (err: any) {
+                          console.error('Erro ao imprimir etiquetas em lote:', err);
+                          toast({
+                            title: 'Erro',
+                            description: err?.message || 'Não foi possível gerar as etiquetas',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      className="flex items-center gap-2 h-8 bg-purple-600 text-white hover:bg-purple-700 hover:text-white"
+                      disabled={selectedMelhorEnvioIds.length === 0}
+                    >
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                      </svg>
+                      Imprimir etiquetas em lote ({selectedMelhorEnvioIds.length})
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={async () => {
+                        if (!confirm(`Tem certeza que deseja excluir ${selectedPedidosIds.size} ${selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}?`)) {
+                          return;
+                        }
+                        try {
+                          const idsArray = Array.from(selectedPedidosIds);
+                          const { error } = await supabase
+                            .from('pedidos')
+                            .delete()
+                            .in('id', idsArray);
+                          
+                          if (error) throw error;
+                          
+                          toast({
+                            title: 'Sucesso',
+                            description: `${idsArray.length} ${idsArray.length === 1 ? 'pedido excluído' : 'pedidos excluídos'} com sucesso`,
+                          });
+                          
+                          // Remover da lista local
+                          setPedidos(prev => prev.filter(p => !selectedPedidosIds.has(p.id)));
+                          setSelectedPedidosIds(new Set());
+                          setSelectedMelhorEnvioIds([]);
+                          
+                          // Forçar recarga atualizando o estado de página para re-executar o useEffect
+                          setPage(p => p);
+                        } catch (err: any) {
+                          console.error('Erro ao excluir pedidos:', err);
+                          toast({
+                            title: 'Erro',
+                            description: err?.message || 'Não foi possível excluir os pedidos',
+                            variant: 'destructive',
+                          });
+                        }
+                      }}
+                      className="flex items-center gap-2 h-8"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                      Excluir {selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}
+                    </Button>
+                  </div>
                 </div>
               </div>
             )}
