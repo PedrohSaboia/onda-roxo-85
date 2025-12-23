@@ -1522,18 +1522,38 @@ export function Comercial() {
                           }
 
                           console.log('Resposta da impressão em lote:', data);
+                          console.log('Tipo de data:', typeof data);
+                          console.log('Keys de data:', Object.keys(data || {}));
+                          console.log('data.url:', data?.url);
+
+                          // Tentar pegar a URL de diferentes estruturas possíveis
+                          const url = data?.url || (typeof data === 'string' ? JSON.parse(data).url : null);
+                          
+                          console.log('URL extraída:', url);
 
                           // Abrir o link da etiqueta em nova guia
-                          if (data && data.url) {
-                            window.open(data.url, '_blank');
-                            toast({
-                              title: 'Sucesso',
-                              description: `${selectedMelhorEnvioIds.length} etiqueta(s) gerada(s) com sucesso`,
-                            });
+                          if (url) {
+                            console.log('Abrindo URL:', url);
+                            const janela = window.open(url, '_blank', 'noopener,noreferrer');
+                            
+                            if (janela) {
+                              toast({
+                                title: 'Sucesso',
+                                description: `${selectedMelhorEnvioIds.length} etiqueta(s) gerada(s) e abrindo em nova guia`,
+                              });
+                            } else {
+                              toast({
+                                title: 'Aviso',
+                                description: 'Etiquetas geradas! Por favor, permita pop-ups no navegador.',
+                                variant: 'destructive',
+                              });
+                            }
                           } else {
+                            console.warn('Nenhuma URL retornada na resposta:', data);
                             toast({
-                              title: 'Sucesso',
+                              title: 'Aviso',
                               description: 'Etiquetas geradas, mas nenhum link foi retornado',
+                              variant: 'destructive',
                             });
                           }
                         } catch (err: any) {
