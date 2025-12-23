@@ -790,7 +790,7 @@ export function Configuracoes() {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Email</TableHead>
-                    <TableHead>Papel</TableHead>
+                    <TableHead>Acesso</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
@@ -998,7 +998,7 @@ export function Configuracoes() {
                 <Input id="edit-email" type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="edit-papel">Papel</Label>
+                <Label htmlFor="edit-papel">Acesso</Label>
                 <select id="edit-papel" value={editPapel} onChange={(e) => setEditPapel(e.target.value)} className="border rounded px-2 py-1">
                   {loadingPredefPapels ? (
                     <option>Carregando...</option>
