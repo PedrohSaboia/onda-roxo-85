@@ -372,16 +372,67 @@ export function PedidosCancelados() {
       const itens = (pedidoRow as any).itens_pedido || [];
       if (itens && itens.length) {
         try {
-          const itensPayload = itens.map((it: any) => ({
-            pedido_id: newPedidoId,
-            produto_id: it.produto_id,
-            variacao_id: it.variacao_id || null,
-            quantidade: it.quantidade || 1,
-            preco_unitario: it.preco_unitario || it.preco || 0,
-            codigo_barras: it.codigo_barras || null,
-            criado_em: new Date().toISOString(),
-            empresa_id: empresaId || null
-          }));
+          const itensPayload = [];
+          for (const it of itens) {
+            // Buscar dimensões do produto ou variação
+            let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
+            
+            try {
+              // Se tem variação, buscar da variação primeiro
+              if (it.variacao_id) {
+                const { data: variacaoData } = await supabase
+                  .from('variacoes_produto')
+                  .select('altura, largura, comprimento, peso')
+                  .eq('id', it.variacao_id)
+                  .maybeSingle();
+                
+                if (variacaoData) {
+                  dimensoes = {
+                    altura: variacaoData.altura,
+                    largura: variacaoData.largura,
+                    comprimento: variacaoData.comprimento,
+                    peso: variacaoData.peso
+                  };
+                }
+              }
+              
+              // Se não tem variação ou a variação não tem dimensões, buscar do produto
+              if (!dimensoes.altura && !dimensoes.peso) {
+                const { data: produtoData } = await supabase
+                  .from('produtos')
+                  .select('altura, largura, comprimento, peso')
+                  .eq('id', it.produto_id)
+                  .maybeSingle();
+                
+                if (produtoData) {
+                  dimensoes = {
+                    altura: produtoData.altura,
+                    largura: produtoData.largura,
+                    comprimento: produtoData.comprimento,
+                    peso: produtoData.peso
+                  };
+                }
+              }
+            } catch (err) {
+              console.error('Erro ao buscar dimensões:', err);
+            }
+            
+            itensPayload.push({
+              pedido_id: newPedidoId,
+              produto_id: it.produto_id,
+              variacao_id: it.variacao_id || null,
+              quantidade: it.quantidade || 1,
+              preco_unitario: it.preco_unitario || it.preco || 0,
+              codigo_barras: it.codigo_barras || null,
+              altura: dimensoes.altura,
+              largura: dimensoes.largura,
+              comprimento: dimensoes.comprimento,
+              peso: dimensoes.peso,
+              criado_em: new Date().toISOString(),
+              empresa_id: empresaId || null
+            });
+          }
+          
           const { error: itensError } = await supabase.from('itens_pedido').insert(itensPayload as any);
           if (itensError) console.error('Erro ao duplicar itens do pedido:', itensError);
         } catch (itErr) {

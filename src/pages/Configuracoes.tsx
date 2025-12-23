@@ -46,7 +46,7 @@ export function Configuracoes() {
   const [newFile, setNewFile] = useState<File | null>(null);
   const newFileInputRef = useRef<HTMLInputElement | null>(null);
   // users list state
-  type Usuario = { id?: string; nome: string; email?: string; acesso?: string; ativo?: boolean; img_url?: string };
+  type Usuario = { id?: string; nome: string; email?: string; acesso_id?: string; ativo?: boolean; img_url?: string };
   const [users, setUsers] = useState<Usuario[]>([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [usersError, setUsersError] = useState<string | null>(null);
@@ -106,7 +106,7 @@ export function Configuracoes() {
     setLoadingUsers(true);
     setUsersError(null);
     try {
-      const { data, error } = await supabase.from('usuarios').select('id, nome, email, acesso, ativo, img_url').order('nome', { ascending: true });
+      const { data, error } = await supabase.from('usuarios').select('id, nome, email, acesso_id, ativo, img_url').order('nome', { ascending: true });
       if (error) throw error;
       setUsers((data ?? []) as Usuario[]);
     } catch (err) {
@@ -563,7 +563,7 @@ export function Configuracoes() {
                               }
 
                               // upsert into usuarios with same uuid
-                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
+                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso_id: newPapel, ativo: true };
                               if (imgUrl) upsertObj.img_url = imgUrl;
                               if (empresaId) upsertObj.empresa_id = empresaId;
                               const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
@@ -575,7 +575,7 @@ export function Configuracoes() {
                               }
                             } else {
                               // fallback: insert without linking id — admin will need to reconcile
-                              const insertObj: any = { nome: newNome, email: newEmail, acesso: newPapel, ativo: true };
+                              const insertObj: any = { nome: newNome, email: newEmail, acesso_id: newPapel, ativo: true };
                               if (empresaId) insertObj.empresa_id = empresaId;
                               const { error: insErr } = await supabase.from('usuarios').insert(insertObj).select();
                               if (insErr) {
@@ -650,8 +650,8 @@ export function Configuracoes() {
                         </TableCell>
                         <TableCell>{usuario.email}</TableCell>
                         <TableCell>
-                          <Badge variant={usuario.acesso === 'admin' ? 'default' : 'secondary'}>
-                            {usuario.acesso === 'admin' ? 'Administrador' : (usuario.acesso ?? 'Operador')}
+                          <Badge variant={usuario.acesso_id === 'admin' ? 'default' : 'secondary'}>
+                            {usuario.acesso_id === 'admin' ? 'Administrador' : (usuario.acesso_id ?? 'Operador')}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -666,7 +666,7 @@ export function Configuracoes() {
                               setEditUserId(usuario.id);
                               setEditNome(usuario.nome ?? '');
                               setEditEmail(usuario.email ?? '');
-                              setEditPapel((usuario.acesso as 'admin'|'operador'|'visualizador') ?? 'operador');
+                              setEditPapel((usuario.acesso_id as 'admin'|'operador'|'visualizador') ?? 'operador');
                               setEditAtivo(usuario.ativo ?? true);
                               setEditOpen(true);
                             }}>
@@ -865,7 +865,7 @@ export function Configuracoes() {
                       }
                     }
 
-                    const updateObj: any = { nome: editNome, email: editEmail, acesso: editPapel, ativo: editAtivo };
+                    const updateObj: any = { nome: editNome, email: editEmail, acesso_id: editPapel, ativo: editAtivo };
                     if (imgUrl) updateObj.img_url = imgUrl;
                     const { error } = await supabase.from('usuarios').update(updateObj).eq('id', editUserId).select();
                     if (error) {

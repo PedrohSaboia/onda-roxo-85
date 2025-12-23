@@ -226,23 +226,71 @@ export default function NovoPedido() {
       }
 
       // prepare itens_pedido: expand each cart item into N rows (one per unit)
-      const itens = cart.reduce((acc: any[], it) => {
+      const itens = [];
+      for (const it of cart) {
         const [produtoId, variacaoId] = String(it.id).split(':');
         const qty = Number(it.quantidade || 1);
+        
+        // Buscar dimensões do produto ou variação
+        let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
+        
+        try {
+          // Se tem variação, buscar da variação primeiro
+          if (variacaoId) {
+            const { data: variacaoData } = await supabase
+              .from('variacoes_produto')
+              .select('altura, largura, comprimento, peso')
+              .eq('id', variacaoId)
+              .maybeSingle();
+            
+            if (variacaoData) {
+              dimensoes = {
+                altura: variacaoData.altura,
+                largura: variacaoData.largura,
+                comprimento: variacaoData.comprimento,
+                peso: variacaoData.peso
+              };
+            }
+          }
+          
+          // Se não tem variação ou a variação não tem dimensões, buscar do produto
+          if (!dimensoes.altura && !dimensoes.peso) {
+            const { data: produtoData } = await supabase
+              .from('produtos')
+              .select('altura, largura, comprimento, peso')
+              .eq('id', it.produtoId || produtoId)
+              .maybeSingle();
+            
+            if (produtoData) {
+              dimensoes = {
+                altura: produtoData.altura,
+                largura: produtoData.largura,
+                comprimento: produtoData.comprimento,
+                peso: produtoData.peso
+              };
+            }
+          }
+        } catch (err) {
+          console.error('Erro ao buscar dimensões:', err);
+        }
+        
         for (let i = 0; i < qty; i++) {
-          acc.push({
+          itens.push({
             pedido_id: pedidoId,
             produto_id: it.produtoId || produtoId,
             variacao_id: variacaoId || null,
             quantidade: 1,
             preco_unitario: it.preco || 0,
             codigo_barras: it.codigo_barras || null,
+            altura: dimensoes.altura,
+            largura: dimensoes.largura,
+            comprimento: dimensoes.comprimento,
+            peso: dimensoes.peso,
             criado_em: new Date().toISOString(),
             empresa_id: empresaId || null
           });
         }
-        return acc;
-      }, [] as any[]);
+      }
 
       const { error: itensError } = await supabase.from('itens_pedido').insert(itens as any);
       if (itensError) throw itensError;
