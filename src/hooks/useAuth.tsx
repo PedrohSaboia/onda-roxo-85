@@ -71,10 +71,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Erro ao buscar acesso do usuário:', error);
-        return { acesso: null, img_url: null, empresa_id: null };
+        return { acesso_id: null, img_url: null, empresa_id: null };
       }
 
-      return { acesso: data?.acesso ?? null, img_url: data?.img_url ?? null, empresa_id: data?.empresa_id ?? null };
+      return { acesso_id: data?.acesso_id ?? null, img_url: data?.img_url ?? null, empresa_id: data?.empresa_id ?? null };
     } catch (err) {
       console.error('Erro ao buscar acesso do usuário:', err);
       return { acesso: null, img_url: null, empresa_id: null };
@@ -121,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               const active = await checkUserActive(session.user.id);
               setIsUserActive(active);
               const userData = await fetchAcesso(session.user.id);
-              setAcesso(userData.acesso);
+              setAcesso(userData.acesso_id);
               setImgUrl(userData.img_url);
               setEmpresaId(userData.empresa_id);
               await fetchUserPermissoes(session.user.id);
@@ -160,7 +160,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const active = await checkUserActive(session.user.id);
             setIsUserActive(active);
             const userData = await fetchAcesso(session.user.id);
-            setAcesso(userData.acesso);
+            setAcesso(userData.acesso_id);
             setImgUrl(userData.img_url);
             setEmpresaId(userData.empresa_id);
             await fetchUserPermissoes(session.user.id);

@@ -10,14 +10,70 @@ import { mockPedidos } from '@/data/mockData';
 import { Pedido, EtiquetaEnvio } from '@/types';
 import { useToast } from '@/hooks/use-toast';
 import { Avatar } from '@/components/ui/avatar';
+import { useAuth } from '@/hooks/useAuth';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export function Logistica() {
   const [barcode, setBarcode] = useState('');
   const barcodeRef = useRef<HTMLInputElement | null>(null);
+  const { user, empresaId } = useAuth();
+  
+  // Estados para a etiqueta ML
+  const [gerandoEtiquetaML, setGerandoEtiquetaML] = useState(false);
+  const [etiquetaMLModalOpen, setEtiquetaMLModalOpen] = useState(false);
+  const [etiquetaMLPdfUrl, setEtiquetaMLPdfUrl] = useState<string | null>(null);
+
+  // Estados para o modal de etiqueta padrão
+  const [etiquetaModalOpen, setEtiquetaModalOpen] = useState(false);
+  const [etiquetaUrl, setEtiquetaUrl] = useState<string | null>(null);
+
+  // Estados para saldo Melhor Envio
+  const [saldoMelhorEnvio, setSaldoMelhorEnvio] = useState<number | null>(null);
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
+
+  // Buscar saldo do Melhor Envio
+  const fetchSaldoMelhorEnvio = async () => {
+    setLoadingSaldo(true);
+    try {
+      // Obter token de sessão do usuário autenticado
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        console.error('Usuário não autenticado');
+        return;
+      }
+      
+      const response = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
+        throw new Error(errorData.message || 'Erro ao buscar saldo');
+      }
+
+      const data = await response.json();
+      console.log('Saldo Melhor Envio:', data);
+      
+      if (data?.balance !== undefined) {
+        setSaldoMelhorEnvio(data.balance);
+      }
+    } catch (error) {
+      console.error('Erro ao buscar saldo do Melhor Envio:', error);
+    } finally {
+      setLoadingSaldo(false);
+    }
+  };
 
   useEffect(() => {
     // focus on mount
     setTimeout(() => barcodeRef.current?.focus(), 50);
+    // buscar saldo ao carregar a página
+    fetchSaldoMelhorEnvio();
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -87,6 +143,83 @@ export function Logistica() {
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
   const allItemsBipado = items.length > 0 && items.every((it: any) => (foundItemIds || []).includes(it.id) || it.bipado === true);
+  
+  // Verifica se deve mostrar o botão da etiqueta ML
+  // Prioridade: shipping_id deve ter valor (não null, não vazio)
+  // Secundário: deve ser da plataforma Mercado Livre
+  const shouldShowMLButton = foundPedido?.plataforma_id === '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec' 
+                            && foundPedido?.shipping_id 
+                            && String(foundPedido.shipping_id).trim() !== '';
+
+  const handleGerarEtiquetaML = async () => {
+    if (!foundPedido?.id_externo) {
+      toast({ 
+        title: 'Erro', 
+        description: 'O pedido não possui ID externo (id_externo) definido',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setGerandoEtiquetaML(true);
+
+    try {
+      const EDGE_FUNCTION_URL = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/gerar-etiqueta-ml';
+
+      const response = await fetch(EDGE_FUNCTION_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id_externo: foundPedido.id_externo }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Erro desconhecido ao gerar etiqueta');
+      }
+
+      const data = await response.json();
+      const pdfBase64 = data.pdf_base64;
+
+      if (!pdfBase64) {
+        throw new Error('O Base64 do PDF não foi retornado.');
+      }
+
+      // Converte Base64 para Blob
+      const byteCharacters = atob(pdfBase64);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { type: 'application/pdf' });
+      
+      // Cria URL do Blob e abre o modal
+      const blobUrl = URL.createObjectURL(blob);
+      setEtiquetaMLPdfUrl(blobUrl);
+      setEtiquetaMLModalOpen(true);
+
+      toast({ title: 'Sucesso', description: 'Etiqueta gerada! Visualize e imprima.' });
+    } catch (error: any) {
+      console.error('Erro ao processar a etiqueta:', error);
+      toast({ 
+        title: 'Erro', 
+        description: `Erro ao processar a etiqueta: ${error.message}`,
+        variant: 'destructive'
+      });
+    } finally {
+      setGerandoEtiquetaML(false);
+    }
+  };
+
+  const handleFecharModalEtiquetaML = () => {
+    setEtiquetaMLModalOpen(false);
+    if (etiquetaMLPdfUrl) {
+      URL.revokeObjectURL(etiquetaMLPdfUrl);
+      setEtiquetaMLPdfUrl(null);
+    }
+  };
 
   const handleScan = async (code: string) => {
     if (!code) return;
@@ -121,8 +254,8 @@ export function Logistica() {
       let pedidoRow: any = null;
       let pedErr: any = null;
 
-  const selectWithBipado = `id,id_externo,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras,bipado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
-  const selectWithoutBipado = `id,id_externo,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const selectWithBipado = `id,id_externo,plataforma_id,shipping_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras,bipado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const selectWithoutBipado = `id,id_externo,plataforma_id,shipping_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       // first attempt including bipado
       const res1: any = await supabase
@@ -146,6 +279,8 @@ export function Logistica() {
       }
 
       if (pedErr) throw pedErr;
+
+      console.log('Pedido encontrado:', pedidoRow);
 
       setFoundPedido(pedidoRow);
       // merge the newly found id into existing state and focus next missing item based on the merged list
@@ -195,10 +330,26 @@ export function Logistica() {
  return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold">Logística</h1>
-        <p className="text-muted-foreground">
-          Gerencie etiquetas de envio e conferência de pedidos
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Logística</h1>
+            <p className="text-muted-foreground">
+              Gerencie etiquetas de envio e conferência de pedidos
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">Saldo Melhor Envio</div>
+            <div className="text-2xl font-bold text-green-600">
+              {loadingSaldo ? (
+                <span className="text-base">Carregando...</span>
+              ) : saldoMelhorEnvio !== null ? (
+                `R$ ${saldoMelhorEnvio.toFixed(2)}`
+              ) : (
+                <span className="text-base text-muted-foreground">--</span>
+              )}
+            </div>
+          </div>
+        </div>
 
         <div className="mt-6">
           <div className="flex items-center gap-4">
@@ -274,11 +425,11 @@ export function Logistica() {
                   <div className="flex items-center justify-between w-full">
                     <div className="flex items-center gap-4">
                         <div className="flex items-center">
-                          <Avatar>
+                          <Avatar className="h-10 w-10">
                             {foundPedido.responsavel?.img_url ? (
-                              <img src={foundPedido.responsavel.img_url} alt={foundPedido.responsavel?.nome} />
+                              <img src={foundPedido.responsavel.img_url} alt={foundPedido.responsavel?.nome} className="h-full w-full object-cover rounded-full" />
                             ) : (
-                              <div className="w-8 h-8 flex items-center justify-center bg-white/20 rounded text-sm font-medium text-white">{(foundPedido.responsavel?.nome || '—').split(' ').map((n: string) => n[0]).slice(0,2).join('')}</div>
+                              <div className="w-full h-full flex items-center justify-center bg-white/20 rounded-full text-sm font-medium text-white">{(foundPedido.responsavel?.nome || '—').split(' ').map((n: string) => n[0]).slice(0,2).join('')}</div>
                             )}
                           </Avatar>
                         </div>
@@ -338,11 +489,9 @@ export function Logistica() {
                                       if (next) {
                                         setTimeout(() => itemRefs.current[next.id]?.focus(), 0);
                                       } else {
-                                        setTimeout(() => barcodeRef.current?.focus(), 0);
+                                        // Todos os itens foram bipados - não foca no input principal
+                                        // O botão de imprimir etiqueta será habilitado automaticamente
                                       }
-
-                      // call server RPC to persist the bipagem and refresh cards
-                      await handleScan(val);
                                     } else {
                                       // error UI: clear the input but keep focus so the user can bip again
                                       setItemStatus(prev => ({ ...prev, [it.id]: 'error' }));
@@ -369,62 +518,189 @@ export function Logistica() {
                 </CardContent>
                 {allItemsBipado && (
                   <div className="p-4 flex justify-center">
-                    <Button
-                      onClick={async () => {
-                        const link = foundPedido?.link_etiqueta;
-                        if (link) {
-                          // open etiqueta in new tab immediately
-                          window.open(link, '_blank');
-                        }
+                    {shouldShowMLButton ? (
+                      // Botão Etiqueta Mercado Livre
+                      <Button
+                        onClick={handleGerarEtiquetaML}
+                        disabled={gerandoEtiquetaML}
+                        className="bg-yellow-500 hover:bg-yellow-600"
+                      >
+                        {gerandoEtiquetaML ? (
+                          <>
+                            <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                            Gerando...
+                          </>
+                        ) : (
+                          '📦 Etiqueta Mercado Livre'
+                        )}
+                      </Button>
+                    ) : (
+                      // Botão Imprimir Etiqueta original
+                      <Button
+                        disabled={loadingScan}
+                        onClick={async () => {
+                          try {
+                            setLoadingScan(true);
 
-                        // attempt to conclude the pedido by updating status_id
-                        try {
-                          setLoadingScan(true);
-                          const { data, error } = await supabase
-                            .from('pedidos')
-                            .update({ 
-                              status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
-                              data_enviado: new Date().toISOString()
-                            })
-                            .eq('id', foundPedido?.id)
-                            .select()
-                            .single();
+                            // Buscar empresa_id do usuário logado
+                            if (!empresaId) {
+                              throw new Error('Empresa do usuário não encontrada');
+                            }
 
-                          if (error) throw error;
+                            // Chamar Edge Function para processar etiqueta
+                            const edgeFunctionUrl = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/processar_etiqueta_em_envio_de_pedido';
+                            const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-                          toast({ title: 'Pedido concluído', description: 'Status atualizado com sucesso', variant: 'default' });
+                            console.log('Chamando Edge Function para processar etiqueta...');
+                            const edgeResponse = await fetch(edgeFunctionUrl, {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${supabaseKey}`,
+                              },
+                              body: JSON.stringify({
+                                pedido_id: foundPedido?.id,
+                                empresa_id: empresaId,
+                              }),
+                            });
 
-                          // hide everything and reset state
-                          setFoundPedido(null);
-                          setFoundItemIds([]);
-                          setItemInputs({});
-                          setItemStatus({});
+                            if (!edgeResponse.ok) {
+                              const errorData = await edgeResponse.json().catch(() => ({ error: 'Erro desconhecido' }));
+                              throw new Error(errorData.error || `Erro ao processar etiqueta: ${edgeResponse.status}`);
+                            }
 
-                                  // refresh logistics cards after concluding pedido
-                                  try {
-                                    await fetchLogItems();
-                                  } catch (e) {
-                                    // ignore — fetchLogItems logs its own errors
-                                  }
+                            const etiquetaData = await edgeResponse.json();
+                            console.log('Etiqueta processada com sucesso:', etiquetaData);
 
-                          // focus main input for next scan
-                          setTimeout(() => barcodeRef.current?.focus(), 0);
-                        } catch (err: any) {
-                          console.error('Erro ao concluir pedido:', err);
-                          toast({ title: 'Erro ao concluir pedido', description: err.message || String(err), variant: 'destructive' });
-                        } finally {
-                          setLoadingScan(false);
-                        }
-                      }}
-                    >
-                      IMPRIMIR ETIQUETA
-                    </Button>
+                            // Atualizar status do pedido
+                            const { data, error } = await supabase
+                              .from('pedidos')
+                              .update({ 
+                                status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
+                                data_enviado: new Date().toISOString()
+                              })
+                              .eq('id', foundPedido?.id)
+                              .select('id, id_externo')
+                              .single();
+
+                            if (error) throw error;
+
+                            console.log('=== APÓS ATUALIZAÇÃO DO PEDIDO ===');
+                            console.log('Pedido atualizado (data):', data);
+                            
+                            // Usar link da etiqueta retornado pela Edge Function
+                            const link = etiquetaData?.etiqueta?.link_etiqueta;
+                            console.log('Link extraído da Edge Function:', link);
+                            console.log('Tipo do link:', typeof link);
+                            console.log('Link é truthy?', !!link);
+                            
+                            if (link) {
+                              console.log('Tentando abrir link:', link);
+                              window.open(link, '_blank');
+                              console.log('window.open executado');
+                            } else {
+                              console.log('Link não encontrado na resposta da Edge Function');
+                            }
+
+                            toast({ 
+                              title: 'Pedido concluído', 
+                              description: 'Etiqueta processada e status atualizado com sucesso', 
+                              variant: 'default' 
+                            });
+
+                            // Limpar estado e resetar
+                            setFoundPedido(null);
+                            setFoundItemIds([]);
+                            setItemInputs({});
+                            setItemStatus({});
+
+                            // Atualizar cards de logística
+                            try {
+                              await fetchLogItems();
+                            } catch (e) {
+                              // ignore — fetchLogItems logs its own errors
+                            }
+
+                            // Focar no input principal
+                            setTimeout(() => barcodeRef.current?.focus(), 0);
+                          } catch (err: any) {
+                            console.error('Erro ao processar pedido:', err);
+                            toast({ 
+                              title: 'Erro ao processar pedido', 
+                              description: err.message || String(err), 
+                              variant: 'destructive' 
+                            });
+                          } finally {
+                            setLoadingScan(false);
+                          }
+                        }}
+                      >
+                        {loadingScan ? 'PROCESSANDO...' : 'IMPRIMIR ETIQUETA'}
+                      </Button>
+                    )}
                   </div>
                 )}
               </Card>
             </div>
           )}
       </div>
+      
+      {/* Modal: Etiqueta Mercado Livre */}
+      <Dialog open={etiquetaMLModalOpen} onOpenChange={(open) => { if (!open) handleFecharModalEtiquetaML(); }}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>📦 Etiqueta Mercado Livre</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0">
+            {etiquetaMLPdfUrl && (
+              <iframe
+                src={etiquetaMLPdfUrl}
+                className="w-full h-full border rounded-lg"
+                title="Etiqueta ML PDF"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <div className="flex justify-between w-full">
+              <Button variant="outline" onClick={handleFecharModalEtiquetaML}>
+                Fechar
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Etiqueta Padrão */}
+      <Dialog open={etiquetaModalOpen} onOpenChange={setEtiquetaModalOpen}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>📄 Etiqueta de Envio</DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0">
+            {etiquetaUrl && (
+              <iframe
+                src={etiquetaUrl}
+                className="w-full h-full border rounded-lg"
+                title="Etiqueta de Envio"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <div className="flex justify-between w-full">
+              <Button variant="outline" onClick={() => setEtiquetaModalOpen(false)}>
+                Fechar
+              </Button>
+              <Button onClick={() => {
+                if (etiquetaUrl) {
+                  window.open(etiquetaUrl, '_blank');
+                }
+              }}>
+                Abrir em Nova Guia
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

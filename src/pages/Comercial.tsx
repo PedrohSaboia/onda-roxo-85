@@ -211,6 +211,11 @@ export function Comercial() {
           (query as any).eq('plataforma_id', filterPlataformaId);
         }
 
+        // apply cliente formulario not sent filter (formulario_enviado = false)
+        if (filterClienteFormNotSent) {
+          (query as any).eq('formulario_enviado', false);
+        }
+
         // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
         if (filterEnvioAdiado) {
           if (filterEnvioAdiadoDate) {
@@ -531,36 +536,9 @@ export function Comercial() {
     return () => { mounted = false };
   }, [/* run on mount and when relevant filters change in future */]);
 
-  // normalize helper: remove diacritics and lower-case
-  const normalize = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
-  const digitsOnly = (s?: string) => (s || '').replace(/\D/g, '').trim();
-
-  const normalizedSearch = normalize(searchTerm);
-  const normalizedDigits = digitsOnly(searchTerm);
-
-  const filteredPedidos = pedidos.filter(pedido => {
-    const idExterno = normalize(pedido.idExterno);
-    const cliente = normalize(pedido.clienteNome);
-    const contatoText = normalize(pedido.contato);
-    const contatoDigits = digitsOnly(pedido.contato);
-    const clienteEmail = normalize((pedido as any).clienteEmail);
-    const clienteCpfDigits = digitsOnly((pedido as any).clienteCpf || '');
-    const clienteCnpjDigits = digitsOnly((pedido as any).clienteCnpj || '');
-
-    // match by id_externo, cliente_nome or contato (text)
-    if (idExterno.includes(normalizedSearch) || cliente.includes(normalizedSearch) || contatoText.includes(normalizedSearch) || clienteEmail.includes(normalizedSearch)) return true;
-
-    // if user typed digits (or phone with formatting), match contato ignoring formatting (numbers-only)
-    if (normalizedDigits.length > 0 && (contatoDigits.includes(normalizedDigits) || clienteCpfDigits.includes(normalizedDigits) || clienteCnpjDigits.includes(normalizedDigits))) return true;
-
-    return false;
-  });
-
-  // apply client-formulario filter client-side: only include pedidos whose cliente.formulario_enviado === false
-  const filteredPedidosWithClienteFilter = filterClienteFormNotSent ? filteredPedidos.filter(p => !(p as any).formularioEnviado) : filteredPedidos;
-
-  // O filtro de produtos agora é feito no backend, então não precisamos mais fazer client-side
-  const filteredPedidosComProdutos = filteredPedidosWithClienteFilter;
+  // A busca e todos os filtros são feitos server-side, então não precisamos filtrar client-side
+  // O count retornado pelo servidor já reflete todos os filtros aplicados
+  const filteredPedidosComProdutos = pedidos;
 
   // Status edit modal state
   const [statusEditOpen, setStatusEditOpen] = useState(false);
@@ -1058,16 +1036,67 @@ export function Comercial() {
       const itens = (pedidoRow as any).itens_pedido || [];
       if (itens && itens.length) {
         try {
-          const itensPayload = itens.map((it: any) => ({
-            pedido_id: newPedidoId,
-            produto_id: it.produto_id,
-            variacao_id: it.variacao_id || null,
-            quantidade: it.quantidade || 1,
-            preco_unitario: it.preco_unitario || it.preco || 0,
-            codigo_barras: it.codigo_barras || null,
-            criado_em: new Date().toISOString(),
-            empresa_id: empresaId || null
-          }));
+          const itensPayload = [];
+          for (const it of itens) {
+            // Buscar dimensões do produto ou variação
+            let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
+            
+            try {
+              // Se tem variação, buscar da variação primeiro
+              if (it.variacao_id) {
+                const { data: variacaoData } = await supabase
+                  .from('variacoes_produto')
+                  .select('altura, largura, comprimento, peso')
+                  .eq('id', it.variacao_id)
+                  .maybeSingle();
+                
+                if (variacaoData) {
+                  dimensoes = {
+                    altura: variacaoData.altura,
+                    largura: variacaoData.largura,
+                    comprimento: variacaoData.comprimento,
+                    peso: variacaoData.peso
+                  };
+                }
+              }
+              
+              // Se não tem variação ou a variação não tem dimensões, buscar do produto
+              if (!dimensoes.altura && !dimensoes.peso) {
+                const { data: produtoData } = await supabase
+                  .from('produtos')
+                  .select('altura, largura, comprimento, peso')
+                  .eq('id', it.produto_id)
+                  .maybeSingle();
+                
+                if (produtoData) {
+                  dimensoes = {
+                    altura: produtoData.altura,
+                    largura: produtoData.largura,
+                    comprimento: produtoData.comprimento,
+                    peso: produtoData.peso
+                  };
+                }
+              }
+            } catch (err) {
+              console.error('Erro ao buscar dimensões:', err);
+            }
+            
+            itensPayload.push({
+              pedido_id: newPedidoId,
+              produto_id: it.produto_id,
+              variacao_id: it.variacao_id || null,
+              quantidade: it.quantidade || 1,
+              preco_unitario: it.preco_unitario || it.preco || 0,
+              codigo_barras: it.codigo_barras || null,
+              altura: dimensoes.altura,
+              largura: dimensoes.largura,
+              comprimento: dimensoes.comprimento,
+              peso: dimensoes.peso,
+              criado_em: new Date().toISOString(),
+              empresa_id: empresaId || null
+            });
+          }
+          
           const { error: itensError } = await supabase.from('itens_pedido').insert(itensPayload as any);
           if (itensError) console.error('Erro ao duplicar itens do pedido:', itensError);
         } catch (itErr) {
@@ -1135,7 +1164,8 @@ export function Comercial() {
   const isAllSelected = filteredPedidosComProdutos.length > 0 && selectedPedidosIds.size === filteredPedidosComProdutos.length;
   const isSomeSelected = selectedPedidosIds.size > 0 && selectedPedidosIds.size < filteredPedidosComProdutos.length;
 
-  const totalPages = Math.max(1, Math.ceil((total || filteredPedidosComProdutos.length) / pageSize));
+  // Usar sempre o count do servidor para paginação correta
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const updatePageInUrl = (newPage: number) => {
     const params = new URLSearchParams(location.search);
@@ -1197,7 +1227,7 @@ export function Comercial() {
           <div className="space-y-4">
             <div className="flex items-center gap-4">
               <div className="relative" ref={filterDropdownRef}>
-                <Button variant="outline" size="sm" onClick={() => {
+                <Button type="button" variant="outline" size="sm" onClick={() => {
                   // Sincronizar estados temporários com os filtros atuais ao abrir
                   setTempFilterNotLiberado(filterNotLiberado);
                   setTempFilterClienteFormNotSent(filterClienteFormNotSent);
@@ -1213,7 +1243,7 @@ export function Comercial() {
                   <div className="absolute left-0 top-full mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-sm font-medium">Filtros</div>
-                      <button className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
+                      <button type="button" className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <input id="filter-not-liberado" type="checkbox" checked={tempFilterNotLiberado} onChange={(e) => setTempFilterNotLiberado(e.target.checked)} />
@@ -1283,7 +1313,7 @@ export function Comercial() {
                       </div>
                     </div>
                     <div className="flex items-center justify-end gap-2">
-                      <Button variant="outline" size="sm" onClick={() => {
+                      <Button type="button" variant="outline" size="sm" onClick={() => {
                         // clear temporary filters
                         setTempFilterNotLiberado(false);
                         setTempFilterClienteFormNotSent(false);
@@ -1293,7 +1323,7 @@ export function Comercial() {
                         setProdutoSearchTerm('');
                         setProdutosList([]);
                       }}>Limpar</Button>
-                      <Button size="sm" onClick={() => {
+                      <Button type="button" size="sm" onClick={() => {
                         // apply temporary filters to actual filters via query params
                         const next = new URLSearchParams(location.search);
                         if (tempFilterNotLiberado) next.set('pedido_liberado', 'false'); else next.delete('pedido_liberado');

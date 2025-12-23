@@ -110,6 +110,10 @@ export type Database = {
           quantidade: number
           variacao_id: string | null
           status_up_sell: number | null
+          altura: number | null
+          largura: number | null
+          comprimento: number | null
+          peso: number | null
         }
         Insert: {
           atualizado_em?: string
@@ -121,6 +125,10 @@ export type Database = {
           quantidade?: number
           variacao_id?: string | null
           status_up_sell?: number | null
+          altura?: number | null
+          largura?: number | null
+          comprimento?: number | null
+          peso?: number | null
         }
         Update: {
           atualizado_em?: string
@@ -132,6 +140,10 @@ export type Database = {
           quantidade?: number
           variacao_id?: string | null
           status_up_sell?: number | null
+          altura?: number | null
+          largura?: number | null
+          comprimento?: number | null
+          peso?: number | null
         }
         Relationships: [
           {
@@ -298,6 +310,10 @@ export type Database = {
           up_cell: boolean | null
           lista_id_upsell: string[] | null
           contagem: number | null
+          altura: number | null
+          largura: number | null
+          comprimento: number | null
+          peso: number | null
         }
         Insert: {
           atualizado_em?: string
@@ -315,6 +331,10 @@ export type Database = {
           up_cell?: boolean | null
           lista_id_upsell?: string[] | null
           contagem?: number | null
+          altura?: number | null
+          largura?: number | null
+          comprimento?: number | null
+          peso?: number | null
         }
         Update: {
           atualizado_em?: string
@@ -332,6 +352,10 @@ export type Database = {
           up_cell?: boolean | null
           lista_id_upsell?: string[] | null
           contagem?: number | null
+          altura?: number | null
+          largura?: number | null
+          comprimento?: number | null
+          peso?: number | null
         }
         Relationships: []
       }
@@ -436,7 +460,7 @@ export type Database = {
       }
       usuarios: {
         Row: {
-          acesso: string
+          acesso_id: string
           ativo: boolean
           atualizado_em: string
           criado_em: string
@@ -446,7 +470,7 @@ export type Database = {
           nome: string
         }
         Insert: {
-          acesso: string
+          acesso_id: string
           ativo?: boolean
           atualizado_em?: string
           criado_em?: string
@@ -456,7 +480,7 @@ export type Database = {
           nome: string
         }
         Update: {
-          acesso?: string
+          acesso_id?: string
           ativo?: boolean
           atualizado_em?: string
           criado_em?: string
@@ -478,6 +502,10 @@ export type Database = {
           qntd: number | null
           sku: string
           valor: number
+          altura: number | null
+          largura: number | null
+          comprimento: number | null
+          peso: number | null
         }
         Insert: {
           atualizado_em?: string
@@ -489,6 +517,10 @@ export type Database = {
           qntd?: number | null
           sku: string
           valor: number
+          altura?: number | null
+          largura?: number | null
+          comprimento?: number | null
+          peso?: number | null
         }
         Update: {
           atualizado_em?: string
@@ -500,6 +532,10 @@ export type Database = {
           qntd?: number | null
           sku?: string
           valor?: number
+          altura?: number | null
+          largura?: number | null
+          comprimento?: number | null
+          peso?: number | null
         }
         Relationships: [
           {

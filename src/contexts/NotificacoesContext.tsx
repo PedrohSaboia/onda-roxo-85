@@ -70,33 +70,34 @@ interface NotificacaoToastProps {
 
 const NotificacaoToast = ({ notificacao, onCopiar }: NotificacaoToastProps) => {
   return (
-    <div className="flex flex-col gap-2 min-w-[320px]">
+    <div className="flex flex-col gap-3 min-w-[380px]">
       <div className="flex items-center gap-3">
-        <div className="p-2.5 bg-amber-100 rounded-full">
-          <Bell className="h-5 w-5 text-amber-600" />
+        <div className="p-3 bg-gradient-to-br from-amber-100 to-amber-200 rounded-xl shadow-sm">
+          <Bell className="h-6 w-6 text-amber-700" />
         </div>
         <span className="font-bold text-gray-900 text-lg">{notificacao.titulo || 'Nova Notificação'}</span>
       </div>
       
-      <p className="text-gray-600 text-sm leading-relaxed pl-12">
+      <p className="text-gray-700 text-sm leading-relaxed pl-1">
         {notificacao.mensagem || 'Você recebeu uma nova notificação'}
       </p>
       
       {notificacao.id_externo && (
-        <div className="flex items-center gap-2 mt-2 ml-12 p-2.5 bg-gray-50 rounded-lg border border-gray-200">
-          <code className="text-amber-700 text-xs font-mono flex-1 truncate">
+        <div className="flex items-center gap-2 mt-1 p-3 bg-gradient-to-r from-gray-50 to-amber-50 rounded-xl border-2 border-amber-200 shadow-sm">
+          <code className="text-amber-800 text-xs font-semibold font-mono flex-1 truncate">
             ID: {notificacao.id_externo}
           </code>
           <Button
             size="sm"
             variant="ghost"
-            className="h-7 px-2 hover:bg-amber-100 text-gray-500 hover:text-amber-700 transition-all"
+            className="h-8 px-3 hover:bg-amber-200 text-gray-600 hover:text-amber-800 transition-all rounded-lg font-medium"
             onClick={(e) => {
               e.stopPropagation();
               copiarParaClipboard(notificacao.id_externo!, onCopiar);
             }}
           >
-            <Copy className="h-3.5 w-3.5" />
+            <Copy className="h-4 w-4 mr-1" />
+            <span className="text-xs">Copiar</span>
           </Button>
         </div>
       )}
@@ -267,9 +268,10 @@ export const NotificacoesProvider: React.FC<{ children: React.ReactNode }> = ({ 
     toast.custom(
       () => (
         <div 
-          className="bg-white border-2 border-amber-500 rounded-xl p-4 shadow-2xl"
+          className="bg-white border-2 border-amber-400 rounded-2xl p-5 shadow-2xl backdrop-blur-sm"
           style={{
-            boxShadow: '0 10px 40px rgba(0, 0, 0, 0.15), 0 0 20px rgba(245, 158, 11, 0.2)',
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.2), 0 0 30px rgba(245, 158, 11, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.9)',
+            background: 'linear-gradient(to bottom right, #ffffff 0%, #fffbeb 100%)',
           }}
         >
           <NotificacaoToast notificacao={notificacao} onCopiar={handleCopiar} />
@@ -277,7 +279,7 @@ export const NotificacoesProvider: React.FC<{ children: React.ReactNode }> = ({ 
       ),
       {
         duration: 10000,
-        position: 'top-right',
+        position: 'bottom-left',
       }
     );
   };

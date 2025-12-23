@@ -1,4 +1,4 @@
-import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle } from 'lucide-react';
+import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -6,9 +6,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth, subMonths, parseISO, eachDayOfInterval } from 'date-fns';
+import { format, startOfMonth, subMonths, parseISO, eachDayOfInterval, isSameDay, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -26,6 +26,8 @@ interface DashboardMetrics {
   vendasPorPlataformaPorPeriodo: { periodo: string; plataformas: { nome: string; valor: number; cor: string }[] }[];
   vendasPorStatus: { nome: string; pedidos: number; cor: string }[];
   vendasTotaisPorDia: { data: string; valor: number }[];
+  enviosPorPlataforma: { nome: string; quantidade: number; cor: string }[];
+  enviosPorDia: { data: string; quantidade: number }[];
   isPeriodoCurto: boolean;
 }
 
@@ -39,6 +41,11 @@ export function Dashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
+  const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState<number>(() => new Date().getFullYear());
 
   const fetchMetrics = useCallback(async () => {
     // Cancelar requisição anterior se existir
@@ -55,11 +62,11 @@ export function Dashboard() {
       const startISO = new Date(startDate + 'T00:00:00').toISOString();
       const endISO = new Date(endDate + 'T23:59:59').toISOString();
 
-      // Buscar pedidos com joins - otimizado removendo campos desnecessários
+      // Buscar pedidos criados no período
       const { data: pedidos, error: pedidosError } = await supabase
         .from('pedidos')
         .select(`
-          criado_em, valor_total, data_enviado, id_melhor_envio, carrinho_me,
+          criado_em, atualizado_em, valor_total, data_enviado, id_melhor_envio, carrinho_me,
           plataformas(nome, cor),
           status(nome, cor_hex),
           itens_pedido(quantidade, preco_unitario, produto:produtos(nome, img_url))
@@ -73,9 +80,52 @@ export function Dashboard() {
         if (pedidosError.message.includes('aborted')) return;
         throw pedidosError;
       }
+      
+      // Buscar pedidos com status "Enviado" atualizados no período
+      const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
+      const { data: pedidosEnviadosData, error: pedidosEnviadosError } = await supabase
+        .from('pedidos')
+        .select('id, atualizado_em, plataformas(nome, cor)')
+        .eq('status_id', ENVIADO_STATUS_ID)
+        .gte('atualizado_em', startISO)
+        .lte('atualizado_em', endISO)
+        .abortSignal(signal);
+
+      if (pedidosEnviadosError) {
+        if (pedidosEnviadosError.message.includes('aborted')) return;
+        throw pedidosEnviadosError;
+      }
+      
       if (signal.aborted) return;
 
-        const pedidosData = pedidos || [];
+        const pedidosData = (pedidos || []) as any[];
+        const pedidosEnviadosArray = (pedidosEnviadosData || []) as any[];
+        const pedidosEnviadosCount = pedidosEnviadosArray.length;
+
+        // Calcular envios por plataforma
+        const enviosPlataformaMap: Record<string, { quantidade: number; cor: string }> = {};
+        pedidosEnviadosArray.forEach(p => {
+          const nome = (p.plataformas as any)?.nome || 'Sem Plataforma';
+          const cor = (p.plataformas as any)?.cor || '#cccccc';
+          if (!enviosPlataformaMap[nome]) {
+            enviosPlataformaMap[nome] = { quantidade: 0, cor };
+          }
+          enviosPlataformaMap[nome].quantidade += 1;
+        });
+        const enviosPorPlataforma = Object.entries(enviosPlataformaMap).map(([nome, data]) => ({ nome, ...data }));
+
+        // Calcular envios por dia
+        const enviosPorDiaMap: Record<string, number> = {};
+        pedidosEnviadosArray.forEach(p => {
+          const dia = format(parseISO(p.atualizado_em), 'yyyy-MM-dd');
+          if (!enviosPorDiaMap[dia]) {
+            enviosPorDiaMap[dia] = 0;
+          }
+          enviosPorDiaMap[dia] += 1;
+        });
+        const enviosPorDia = Object.entries(enviosPorDiaMap)
+          .map(([data, quantidade]) => ({ data, quantidade }))
+          .sort((a, b) => a.data.localeCompare(b.data));
 
         // Calcular métricas
         const totalPedidos = pedidosData.length;
@@ -85,7 +135,8 @@ export function Dashboard() {
         const hoje = new Date().toDateString();
         const pedidosHoje = pedidosData.filter(p => new Date(p.criado_em).toDateString() === hoje).length;
 
-        const pedidosEnviados = pedidosData.filter(p => p.data_enviado || p.id_melhor_envio || p.carrinho_me).length;
+        // Usar contagem da query separada de pedidos enviados no período
+        const pedidosEnviados = pedidosEnviadosCount;
 
         // Determinar se é período curto (dia ou semana - até 7 dias)
         const diffDays = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
@@ -198,6 +249,8 @@ export function Dashboard() {
           vendasPorPlataformaPorPeriodo,
           vendasPorStatus,
           vendasTotaisPorDia,
+          enviosPorPlataforma,
+          enviosPorDia,
           isPeriodoCurto,
         });
 
@@ -237,6 +290,144 @@ export function Dashboard() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }, []);
 
+  const handleDateClick = (date: Date) => {
+    if (!tempStartDate || (tempStartDate && tempEndDate)) {
+      // Primeira data ou resetar seleção
+      setTempStartDate(date);
+      setTempEndDate(null);
+    } else {
+      // Segunda data
+      if (date < tempStartDate) {
+        setTempEndDate(tempStartDate);
+        setTempStartDate(date);
+      } else {
+        setTempEndDate(date);
+      }
+    }
+  };
+
+  const applyCustomDates = () => {
+    if (tempStartDate) {
+      setStartDate(format(tempStartDate, 'yyyy-MM-dd'));
+      if (tempEndDate) {
+        setEndDate(format(tempEndDate, 'yyyy-MM-dd'));
+      } else {
+        setEndDate(format(tempStartDate, 'yyyy-MM-dd'));
+      }
+    }
+    setPickerOpen(false);
+  };
+
+  const handlePreset = (presetFn: () => void) => {
+    presetFn();
+    setTempStartDate(null);
+    setTempEndDate(null);
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      if (calendarMonth === 0) {
+        setCalendarMonth(11);
+        setCalendarYear(calendarYear - 1);
+      } else {
+        setCalendarMonth(calendarMonth - 1);
+      }
+    } else {
+      if (calendarMonth === 11) {
+        setCalendarMonth(0);
+        setCalendarYear(calendarYear + 1);
+      } else {
+        setCalendarMonth(calendarMonth + 1);
+      }
+    }
+  };
+
+  const renderCalendar = () => {
+    const today = new Date();
+    
+    // Gerar dias do mês selecionado
+    const firstDay = new Date(calendarYear, calendarMonth, 1);
+    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    
+    // Dias vazios antes do primeiro dia
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(<div key={`empty-${i}`} className="h-8" />);
+    }
+    
+    // Dias do mês
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(calendarYear, calendarMonth, day);
+      const isSelected = tempStartDate && isSameDay(date, tempStartDate) || 
+                        tempEndDate && isSameDay(date, tempEndDate);
+      const isInRange = tempStartDate && tempEndDate && 
+                       isWithinInterval(date, { start: tempStartDate, end: tempEndDate });
+      const isHovered = hoverDate && tempStartDate && !tempEndDate &&
+                       isWithinInterval(date, { 
+                         start: tempStartDate < hoverDate ? tempStartDate : hoverDate,
+                         end: tempStartDate < hoverDate ? hoverDate : tempStartDate
+                       });
+      const isToday = isSameDay(date, today);
+      
+      days.push(
+        <button
+          key={day}
+          onClick={() => handleDateClick(date)}
+          onMouseEnter={() => setHoverDate(date)}
+          onMouseLeave={() => setHoverDate(null)}
+          className={`
+            h-8 w-full rounded text-sm transition-colors
+            ${isSelected ? 'bg-primary text-primary-foreground font-semibold' : ''}
+            ${isInRange || isHovered ? 'bg-primary/20' : ''}
+            ${!isSelected && !isInRange && !isHovered ? 'hover:bg-accent' : ''}
+            ${isToday && !isSelected ? 'border border-primary' : ''}
+          `}
+        >
+          {day}
+        </button>
+      );
+    }
+    
+    return (
+      <div className="p-3">
+        <div className="flex items-center justify-between mb-3">
+          <button
+            onClick={() => navigateMonth('prev')}
+            className="p-1 hover:bg-accent rounded transition-colors"
+            type="button"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <div className="text-center font-semibold">
+            {format(firstDay, 'MMMM yyyy', { locale: ptBR })}
+          </div>
+          <button
+            onClick={() => navigateMonth('next')}
+            className="p-1 hover:bg-accent rounded transition-colors"
+            type="button"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-muted-foreground text-center">
+          <div>Dom</div>
+          <div>Seg</div>
+          <div>Ter</div>
+          <div>Qua</div>
+          <div>Qui</div>
+          <div>Sex</div>
+          <div>Sáb</div>
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {days}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between">
@@ -246,69 +437,104 @@ export function Dashboard() {
         </div>
         <div className="flex items-center gap-2">
           <label className="text-sm text-muted-foreground">Período</label>
-          <Button variant="outline" onClick={() => setPickerOpen(true)} className="flex items-center gap-2">
-            <CalendarIcon className="h-4 w-4" />
-            <span className="text-sm">{format(parseISO(startDate), 'dd/MM/yy', { locale: ptBR })} → {format(parseISO(endDate), 'dd/MM/yy', { locale: ptBR })}</span>
-          </Button>
+          <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="flex items-center gap-2">
+                <CalendarIcon className="h-4 w-4" />
+                <span className="text-sm">{format(parseISO(startDate), 'dd/MM/yy', { locale: ptBR })} → {format(parseISO(endDate), 'dd/MM/yy', { locale: ptBR })}</span>
+                <ChevronDown className="h-4 w-4 opacity-50" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0" align="end">
+              <div className="flex">
+                {/* Presets */}
+                <div className="w-48 border-r p-3">
+                  <div className="text-sm font-semibold mb-2">Períodos rápidos</div>
+                  <div className="space-y-1">
+                    {[
+                      { label: 'Hoje', fn: () => { const d = format(new Date(), 'yyyy-MM-dd'); setStartDate(d); setEndDate(d); setPickerOpen(false); } },
+                      { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = format(d, 'yyyy-MM-dd'); setStartDate(s); setEndDate(s); setPickerOpen(false); } },
+                      { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
+                      { label: 'Últimos 15 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 14); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
+                      { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
+                      { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
+                      { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
+                    ].map((preset, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => handlePreset(preset.fn)}
+                        className="w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors text-sm"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                
+                {/* Calendário e inputs */}
+                <div className="p-3">
+                  <div className="text-sm font-semibold mb-3">Período personalizado</div>
+                  
+                  {/* Calendário */}
+                  {renderCalendar()}
+                  
+                  {/* Inputs de data */}
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Data início</label>
+                      <input
+                        type="date"
+                        value={tempStartDate ? format(tempStartDate, 'yyyy-MM-dd') : startDate}
+                        onChange={(e) => {
+                          const date = new Date(e.target.value + 'T00:00:00');
+                          setTempStartDate(date);
+                        }}
+                        className="w-full border rounded px-2 py-1 mt-1 text-sm"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground">Data fim</label>
+                      <input
+                        type="date"
+                        value={tempEndDate ? format(tempEndDate, 'yyyy-MM-dd') : endDate}
+                        onChange={(e) => {
+                          const date = new Date(e.target.value + 'T00:00:00');
+                          setTempEndDate(date);
+                        }}
+                        className="w-full border rounded px-2 py-1 mt-1 text-sm"
+                      />
+                    </div>
+                  </div>
+                  
+                  {/* Botões */}
+                  <div className="flex gap-2 mt-4">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => {
+                        setTempStartDate(null);
+                        setTempEndDate(null);
+                        setPickerOpen(false);
+                      }}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={applyCustomDates}
+                      disabled={!tempStartDate}
+                    >
+                      Aplicar
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
-
-      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
-        <DialogContent className="max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>Selecionar Período</DialogTitle>
-          </DialogHeader>
-          <div className="flex gap-4">
-            <div className="w-1/3 border-r pr-4">
-              <div className="space-y-1">
-                {[
-                  { label: 'Hoje', fn: () => { const d = format(new Date(), 'yyyy-MM-dd'); setStartDate(d); setEndDate(d); } },
-                  { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = format(d, 'yyyy-MM-dd'); setStartDate(s); setEndDate(s); } },
-                  { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); } },
-                  { label: 'Últimos 15 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 14); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); } },
-                  { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); } },
-                  { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); } },
-                  { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); } },
-                ].map((preset, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => preset.fn()}
-                    className="w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors text-sm"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="flex-1">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Data início</label>
-                  <input
-                    type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
-                    className="w-full border rounded px-3 py-2 mt-1"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Data fim</label>
-                  <input
-                    type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
-                    className="w-full border rounded px-3 py-2 mt-1"
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPickerOpen(false)}>Cancelar</Button>
-            <Button onClick={() => setPickerOpen(false)}>Aplicar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {error && (
         <Card className="border-destructive">
@@ -361,181 +587,9 @@ export function Dashboard() {
             />
           </div>
 
-          {/* Gráficos de Vendas por Plataforma e Pedidos por Status */}
-          {metrics.isPeriodoCurto ? (
-            // Layout para período curto - cada dia em card separado com ambos gráficos
-            <div className="space-y-6">
-              {metrics.vendasPorPlataformaPorPeriodo.map((periodo) => {
-                const chartData = periodo.plataformas.map(p => ({
-                  nome: p.nome,
-                  valor: p.valor,
-                  cor: p.cor
-                }));
-                return (
-                  <div key={periodo.periodo} className="grid gap-6 md:grid-cols-2">
-                    <Card>
-                      <Tabs defaultValue="plataformas" className="w-full">
-                        <CardHeader>
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <CardTitle>Vendas por Plataforma</CardTitle>
-                              <CardDescription>
-                                {format(parseISO(periodo.periodo), "dd 'de' MMMM", { locale: ptBR })}
-                              </CardDescription>
-                            </div>
-                            <TabsList>
-                              <TabsTrigger value="plataformas">Por Plataforma</TabsTrigger>
-                              <TabsTrigger value="total">Total</TabsTrigger>
-                            </TabsList>
-                          </div>
-                        </CardHeader>
-                        <CardContent className="pt-6">
-                          <TabsContent value="plataformas" className="mt-0">
-                            <ResponsiveContainer width="100%" height={300}>
-                              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 60 }}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                <XAxis 
-                                  dataKey="nome" 
-                                  angle={0}
-                                  textAnchor="middle"
-                                  height={60}
-                                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                                />
-                                <YAxis 
-                                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                                  tickFormatter={(value) => formatCurrency(value)}
-                                />
-                                <Tooltip 
-                                  formatter={(value: any) => formatCurrency(Number(value))}
-                                  contentStyle={{ 
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                                    border: '1px solid #e5e7eb',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                                  }}
-                                />
-                                <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
-                                  {chartData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.cor} />
-                                  ))}
-                                </Bar>
-                              </BarChart>
-                            </ResponsiveContainer>
-                            <div className="flex flex-wrap gap-4 justify-center mt-6">
-                              {periodo.plataformas.map((plat) => (
-                                <div key={plat.nome} className="flex items-center gap-2">
-                                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
-                                  <span className="text-sm font-medium">{plat.nome}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </TabsContent>
-                          <TabsContent value="total" className="mt-0">
-                            <ResponsiveContainer width="100%" height={300}>
-                              <LineChart 
-                                data={metrics.vendasTotaisPorDia}
-                                margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                              >
-                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                                <XAxis 
-                                  dataKey="data"
-                                  angle={0}
-                                  textAnchor="middle"
-                                  height={60}
-                                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                                  tickFormatter={(value) => format(parseISO(value), 'dd/MM', { locale: ptBR })}
-                                />
-                                <YAxis 
-                                  tick={{ fill: '#6b7280', fontSize: 12 }}
-                                  tickFormatter={(value) => formatCurrency(value)}
-                                />
-                                <Tooltip 
-                                  labelFormatter={(value) => format(parseISO(value as string), "dd 'de' MMMM", { locale: ptBR })}
-                                  formatter={(value: any) => [formatCurrency(Number(value)), 'Vendas']}
-                                  contentStyle={{ 
-                                    backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                                    border: '1px solid #e5e7eb',
-                                    borderRadius: '8px',
-                                    boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                                  }}
-                                />
-                                <Line 
-                                  type="monotone" 
-                                  dataKey="valor" 
-                                  stroke="#8b5cf6" 
-                                  strokeWidth={3}
-                                  dot={{ fill: '#8b5cf6', r: 5 }}
-                                  activeDot={{ r: 7 }}
-                                />
-                              </LineChart>
-                            </ResponsiveContainer>
-                          </TabsContent>
-                        </CardContent>
-                      </Tabs>
-                    </Card>
-
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Pedidos por Status</CardTitle>
-                        <CardDescription>
-                          {format(parseISO(periodo.periodo), "dd 'de' MMMM", { locale: ptBR })}
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent className="pt-6">
-                        <ResponsiveContainer width="100%" height={300}>
-                          <BarChart 
-                            data={metrics.vendasPorStatus.map(s => ({
-                              nome: s.nome,
-                              pedidos: s.pedidos,
-                              cor: s.cor
-                            }))}
-                            margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
-                          >
-                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                            <XAxis 
-                              dataKey="nome"
-                              angle={0}
-                              textAnchor="middle"
-                              height={60}
-                              tick={{ fill: '#6b7280', fontSize: 12 }}
-                            />
-                            <YAxis 
-                              tick={{ fill: '#6b7280', fontSize: 12 }}
-                              allowDecimals={false}
-                            />
-                            <Tooltip 
-                              formatter={(value: any) => [value, 'Pedidos']}
-                              contentStyle={{ 
-                                backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                                border: '1px solid #e5e7eb',
-                                borderRadius: '8px',
-                                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                              }}
-                            />
-                            <Bar dataKey="pedidos" radius={[8, 8, 0, 0]}>
-                              {metrics.vendasPorStatus.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={entry.cor} />
-                              ))}
-                            </Bar>
-                          </BarChart>
-                        </ResponsiveContainer>
-                        <div className="flex flex-wrap gap-4 justify-center mt-6">
-                          {metrics.vendasPorStatus.map((status) => (
-                            <div key={status.nome} className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.cor }} />
-                              <span className="text-sm font-medium">{status.nome}</span>
-                              <Badge variant="secondary" className="text-xs">{status.pedidos} pedidos</Badge>
-                            </div>
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            // Layout para período longo - gráficos lado a lado
+          {/* Gráficos de Vendas por Plataforma, Envios e Pedidos por Status */}
+          {/* Layout unificado - gráficos lado a lado */}
+          <>
             <div className="grid gap-6 md:grid-cols-2">
               <Card>
                 <Tabs defaultValue="plataformas" className="w-full">
@@ -651,62 +705,172 @@ export function Dashboard() {
                 </Tabs>
               </Card>
 
+              {/* Gráfico de Envios por Plataforma */}
               <Card>
-                <CardHeader>
-                  <CardTitle>Pedidos por Status</CardTitle>
-                  <CardDescription>Distribuição atual dos pedidos</CardDescription>
-                </CardHeader>
-                <CardContent className="pt-6">
-                  <ResponsiveContainer width="100%" height={400}>
-                    <BarChart 
-                      data={metrics.vendasPorStatus.map(s => ({
-                        nome: s.nome,
-                        pedidos: s.pedidos,
-                        cor: s.cor
-                      }))}
-                      margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis 
-                        dataKey="nome"
-                        angle={0}
-                        textAnchor="middle"
-                        height={80}
-                        tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
-                      />
-                      <YAxis 
-                        tick={{ fill: '#6b7280', fontSize: 12 }}
-                        allowDecimals={false}
-                      />
-                      <Tooltip 
-                        formatter={(value: any) => [value, 'Pedidos']}
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                          border: '1px solid #e5e7eb',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-                        }}
-                      />
-                      <Bar dataKey="pedidos" radius={[8, 8, 0, 0]}>
-                        {metrics.vendasPorStatus.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.cor} />
-                        ))}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <div className="flex flex-wrap gap-4 justify-center mt-6">
-                    {metrics.vendasPorStatus.map((status) => (
-                      <div key={status.nome} className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.cor }} />
-                        <span className="text-sm font-medium">{status.nome}</span>
-                        <Badge variant="secondary" className="text-xs">{status.pedidos} pedidos</Badge>
+                <Tabs defaultValue="plataformas" className="w-full">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Envios por Plataforma</CardTitle>
+                        <CardDescription>Pedidos enviados por plataforma no período</CardDescription>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
+                      <TabsList>
+                        <TabsTrigger value="plataformas">Por Plataforma</TabsTrigger>
+                        <TabsTrigger value="total">Total</TabsTrigger>
+                      </TabsList>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-6">
+                    <TabsContent value="plataformas" className="mt-0">
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart 
+                          data={metrics.enviosPorPlataforma.map(p => ({
+                            nome: p.nome,
+                            quantidade: p.quantidade,
+                            cor: p.cor
+                          }))}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="nome"
+                            angle={0}
+                            textAnchor="middle"
+                            height={80}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                          />
+                          <YAxis 
+                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            allowDecimals={false}
+                          />
+                          <Tooltip 
+                            formatter={(value: any) => [value, 'Envios']}
+                            labelFormatter={(label) => `${label}`}
+                            contentStyle={{ 
+                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                            }}
+                          />
+                          <Bar dataKey="quantidade" radius={[8, 8, 0, 0]}>
+                            {metrics.enviosPorPlataforma.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.cor} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <div className="flex flex-wrap gap-4 justify-center mt-6">
+                        {metrics.enviosPorPlataforma.map((plat) => (
+                          <div key={plat.nome} className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ backgroundColor: plat.cor }} />
+                            <span className="text-sm font-medium">{plat.nome}</span>
+                            <Badge variant="secondary" className="text-xs">{plat.quantidade} envios</Badge>
+                          </div>
+                        ))}
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="total" className="mt-0">
+                      <ResponsiveContainer width="100%" height={400}>
+                        <LineChart 
+                          data={metrics.enviosPorDia}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                        >
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis 
+                            dataKey="data"
+                            angle={0}
+                            textAnchor="middle"
+                            height={80}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                            tickFormatter={(value) => format(parseISO(value), 'dd/MM')}
+                          />
+                          <YAxis 
+                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            allowDecimals={false}
+                          />
+                          <Tooltip 
+                            formatter={(value: any) => [value, 'Envios']}
+                            labelFormatter={(label) => format(parseISO(label), 'dd/MM/yyyy')}
+                            contentStyle={{ 
+                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                            }}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="quantidade" 
+                            stroke="#10b981" 
+                            strokeWidth={3}
+                            dot={{ fill: '#10b981', r: 5 }}
+                            activeDot={{ r: 7 }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </TabsContent>
+                  </CardContent>
+                </Tabs>
               </Card>
             </div>
-          )}
+
+            {/* Pedidos por Status - Largura total */}
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Pedidos por Status</CardTitle>
+                <CardDescription>Distribuição atual dos pedidos criados no período</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-6">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart 
+                    data={metrics.vendasPorStatus.map(s => ({
+                      nome: s.nome,
+                      pedidos: s.pedidos,
+                      cor: s.cor
+                    }))}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <XAxis 
+                      dataKey="nome"
+                      angle={0}
+                      textAnchor="middle"
+                      height={60}
+                      tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                    />
+                    <YAxis 
+                      tick={{ fill: '#6b7280', fontSize: 12 }}
+                      allowDecimals={false}
+                    />
+                    <Tooltip 
+                      formatter={(value: any) => [value, 'Pedidos']}
+                      contentStyle={{ 
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                        border: '1px solid #e5e7eb',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                      }}
+                    />
+                    <Bar dataKey="pedidos" radius={[8, 8, 0, 0]}>
+                      {metrics.vendasPorStatus.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.cor} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex flex-wrap gap-4 justify-center mt-6">
+                  {metrics.vendasPorStatus.map((status) => (
+                    <div key={status.nome} className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: status.cor }} />
+                      <span className="text-sm font-medium">{status.nome}</span>
+                      <Badge variant="secondary" className="text-xs">{status.pedidos} pedidos</Badge>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+            </>
 
           {/* Top Produtos e Produtos com Maior Ticket Médio */}
           <div className="grid gap-6 md:grid-cols-2">

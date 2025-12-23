@@ -16,6 +16,9 @@ export function Estoque() {
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [total, setTotal] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -23,11 +26,25 @@ export function Estoque() {
       setLoading(true);
       setError(null);
       try {
+        // Buscar com paginação
+        const from = (page - 1) * pageSize;
+        const to = from + pageSize - 1;
+
+        // Buscar total primeiro para paginação
+        const { count: totalCount } = await supabase
+          .from('produtos')
+          .select('*', { count: 'exact', head: true });
+
+        if (totalCount !== null) {
+          setTotal(totalCount);
+        }
+
         const { data, error: supaError } = await supabase
           .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
+          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem,altura,largura,comprimento,peso, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
           .order('contagem', { ascending: false, nullsFirst: false })
-          .order('criado_em', { ascending: false });
+          .order('criado_em', { ascending: false })
+          .range(from, to);
 
         if (supaError) throw supaError;
         if (!mounted) return;
@@ -48,6 +65,10 @@ export function Estoque() {
           up_cell: p.up_cell,
           upCell: p.up_cell,
           lista_id_upsell: p.lista_id_upsell,
+          altura: p.altura ?? null,
+          largura: p.largura ?? null,
+          comprimento: p.comprimento ?? null,
+          peso: p.peso ?? null,
           criadoEm: p.criado_em,
           atualizadoEm: p.atualizado_em,
         }));
@@ -63,7 +84,7 @@ export function Estoque() {
 
     fetchProdutos();
     return () => { mounted = false };
-  }, []);
+  }, [page, pageSize]);
 
   const [showNewProduct, setShowNewProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -74,7 +95,18 @@ export function Estoque() {
     // refetch produtos after modal close
     (async () => {
       setLoading(true);
-      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('contagem', { ascending: false, nullsFirst: false }).order('criado_em', { ascending: false });
+      const from = (page - 1) * pageSize;
+      const to = from + pageSize - 1;
+
+      const { count: totalCount } = await supabase
+        .from('produtos')
+        .select('*', { count: 'exact', head: true });
+
+      if (totalCount !== null) {
+        setTotal(totalCount);
+      }
+
+      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem,altura,largura,comprimento,peso, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('contagem', { ascending: false, nullsFirst: false }).order('criado_em', { ascending: false }).range(from, to);
       if (data) setProdutos(data.map((p: any) => ({
         id: p.id,
         nome: p.nome,
@@ -91,6 +123,10 @@ export function Estoque() {
         up_cell: p.up_cell,
         upCell: p.up_cell,
         lista_id_upsell: p.lista_id_upsell,
+        altura: p.altura ?? null,
+        largura: p.largura ?? null,
+        comprimento: p.comprimento ?? null,
+        peso: p.peso ?? null,
         criadoEm: p.criado_em,
         atualizadoEm: p.atualizado_em,
       })));
@@ -110,17 +146,17 @@ export function Estoque() {
       
       <div className="flex-1 space-y-4 sm:space-y-6 p-3 sm:p-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold">Estoque</h1>
-          <p className="text-sm text-muted-foreground">
-            {filteredProdutos.length} produtos cadastrados
-          </p>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold">Estoque</h1>
+            <p className="text-sm text-muted-foreground">
+              {total} produtos cadastrados
+            </p>
+          </div>
+          <Button className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto" onClick={()=>{ setEditingProduct(null); setShowNewProduct(true); }}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Produto
+          </Button>
         </div>
-        <Button className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto" onClick={()=>{ setEditingProduct(null); setShowNewProduct(true); }}>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Produto
-        </Button>
-      </div>
 
       {/* Métricas resumidas */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
@@ -134,7 +170,7 @@ export function Estoque() {
                 <div className="text-sm text-muted-foreground">Carregando...</div>
               ) : (
                 <>
-                  <div className="text-xl sm:text-2xl font-bold">{produtos.length}</div>
+                  <div className="text-xl sm:text-2xl font-bold">{total}</div>
                   <p className="text-xs text-muted-foreground">produtos ativos</p>
                 </>
               )}
@@ -277,8 +313,53 @@ export function Estoque() {
                 </TableRow>
               ))}
             </TableBody>
-          </Table>
-        </CardContent>
+          </Table>          
+          {/* Paginação - Desktop */}
+          <div className="flex items-center justify-between p-4 border-t">
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-muted-foreground">
+                Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total)}</strong> de <strong>{total}</strong>
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-muted-foreground">Mostrar</label>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    const newSize = Number(e.target.value);
+                    setPageSize(newSize);
+                    setPage(1);
+                  }}
+                  className="border rounded px-2 py-1 text-sm"
+                >
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={30}>30</option>
+                  <option value={50}>50</option>
+                </select>
+                <span className="text-sm text-muted-foreground">/ página</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setPage(p => Math.max(1, p - 1))} 
+                disabled={page <= 1}
+              >
+                Anterior
+              </Button>
+              <div className="text-sm">{page} / {Math.max(1, Math.ceil(total / pageSize))}</div>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))} 
+                disabled={page >= Math.ceil(total / pageSize)}
+              >
+                Próximo
+              </Button>
+            </div>
+          </div>        </CardContent>
       </Card>
 
       {/* Lista de produtos - Mobile */}
@@ -349,6 +430,56 @@ export function Estoque() {
             </CardContent>
           </Card>
         ))}
+        
+        {/* Paginação - Mobile */}
+        {!loading && !error && (
+          <Card>
+            <CardContent className="p-4">
+              <div className="flex flex-col items-center gap-4">
+                <div className="text-sm text-muted-foreground text-center">
+                  Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total)}</strong> de <strong>{total}</strong>
+                </div>
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-muted-foreground">Mostrar</label>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      const newSize = Number(e.target.value);
+                      setPageSize(newSize);
+                      setPage(1);
+                    }}
+                    className="border rounded px-2 py-1 text-sm"
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={30}>30</option>
+                    <option value={50}>50</option>
+                  </select>
+                  <span className="text-sm text-muted-foreground">/ página</span>
+                </div>
+                <div className="flex items-center gap-2 w-full justify-center">
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => setPage(p => Math.max(1, p - 1))} 
+                    disabled={page <= 1}
+                  >
+                    Anterior
+                  </Button>
+                  <div className="text-sm">{page} / {Math.max(1, Math.ceil(total / pageSize))}</div>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => setPage(p => Math.min(Math.ceil(total / pageSize), p + 1))} 
+                    disabled={page >= Math.ceil(total / pageSize)}
+                  >
+                    Próximo
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
       </div>
     </div>
