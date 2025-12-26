@@ -27,6 +27,7 @@ type Variation = {
   largura?: number;
   comprimento?: number;
   peso?: number;
+  bling_id?: string;
 }
 
 export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
@@ -56,6 +57,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const [embalagemModalOpen, setEmbalagemModalOpen] = useState(false);
   const [selectedEmbalagemForModal, setSelectedEmbalagemForModal] = useState<any | undefined>(undefined);
   const [selectedEmbalagemId, setSelectedEmbalagemId] = useState<string | ''>('');
+  const [blingId, setBlingId] = useState<string>('');
   const [nomeVariacao, setNomeVariacao] = useState<string>('');
   const [upCell, setUpCell] = useState<boolean>(false);
   const [upSellModalOpen, setUpSellModalOpen] = useState<boolean>(false);
@@ -71,13 +73,14 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
     setAltura(''); setLargura(''); setComprimento(''); setPeso('');
     setHasVariations(false); setVariations([]);
     setSelectedEmbalagemId('');
+    setBlingId('');
     setNomeVariacao('');
     setOriginalVariationIds([]);
     setUpCell(false);
     setSelectedUpSellIds([]);
   }
 
-  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length, altura: undefined, largura: undefined, comprimento: undefined, peso: undefined }]);
+  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length, altura: undefined, largura: undefined, comprimento: undefined, peso: undefined, bling_id: '' }]);
   const updateVariation = (idx: number, patch: Partial<Variation>) => setVariations(v => v.map((it,i)=> i===idx ? { ...it, ...patch } : it));
   const removeVariation = (idx: number) => setVariations(v => v.filter((_,i)=> i!==idx));
 
@@ -137,6 +140,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         largura: hasVariations ? null : (largura || null),
         comprimento: hasVariations ? null : (comprimento || null),
         peso: hasVariations ? null : (peso || null),
+        bling_id: hasVariations ? null : (blingId || null),
       } as any;
 
       console.log('Produto a ser inserido:', prodInsert);
@@ -158,11 +162,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
         const existing = variations.filter(v => v.id);
         for (const v of existing) {
-          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 0, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null }).eq('id', v.id);
+          const { error: vUpdErr } = await supabase.from('variacoes_produto').update({ nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? 0, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null, bling_id: v.bling_id || null }).eq('id', v.id);
           if (vUpdErr) throw vUpdErr;
         }
 
-        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx, empresa_id: empresaId || null, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null }));
+        const news = variations.filter(v => !v.id).map((v, idx) => ({ produto_id: produtoId, nome: v.nome, sku: v.sku, valor: Number(v.valor), img_url: v.img_url || null, qntd: v.qntd ?? 0, codigo_barras_v: v.codigo_barras_v || null, ordem: v.ordem ?? idx, empresa_id: empresaId || null, altura: v.altura || null, largura: v.largura || null, comprimento: v.comprimento || null, peso: v.peso || null, bling_id: v.bling_id || null }));
         if (news.length > 0) {
           const { error: insErr } = await supabase.from('variacoes_produto').insert(news);
           if (insErr) throw insErr;
@@ -195,6 +199,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
             largura: v.largura || null,
             comprimento: v.comprimento || null,
             peso: v.peso || null,
+            bling_id: v.bling_id || null,
           }));
 
           const { error: varErr } = await supabase.from('variacoes_produto').insert(toInsert);
@@ -285,6 +290,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
       setLargura(p.largura ?? '');
       setComprimento(p.comprimento ?? '');
       setPeso(p.peso ?? '');
+      setBlingId(p.bling_id || '');
       const hasVar = Boolean((product as any).variacoes && (product as any).variacoes.length > 0);
       setHasVariations(hasVar);
       // If product has variations, barcode should live on variations; clear product-level barcode
@@ -307,6 +313,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         largura: v.largura ?? undefined,
         comprimento: v.comprimento ?? undefined,
         peso: v.peso ?? undefined,
+        bling_id: v.bling_id || '',
       }));
       setVariations(seed);
       setOriginalVariationIds(seed.map((v: any) => v.id).filter(Boolean));
@@ -329,6 +336,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
               largura: v.largura ?? undefined,
               comprimento: v.comprimento ?? undefined,
               peso: v.peso ?? undefined,
+              bling_id: v.bling_id || '',
             }));
             setVariations(mappedDb);
             setOriginalVariationIds(mappedDb.map((v: any) => v.id).filter(Boolean));
@@ -338,20 +346,22 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         }
       })();
 
-      // If product has no variations and barcode not present in the passed product object,
-      // fetch the product row to obtain `codigo_barras` (some APIs omit that field in the prop)
+      // If product has no variations and barcode/bling_id not present in the passed product object,
+      // fetch the product row to obtain `codigo_barras` and `bling_id` (some APIs omit that field in the prop)
       (async () => {
         try {
           if (!hasVar && p.id) {
-            const { data: prodRow, error: prodErr } = await supabase.from('produtos').select('codigo_barras').eq('id', p.id).single();
+            const { data: prodRow, error: prodErr } = await supabase.from('produtos').select('codigo_barras, bling_id').eq('id', p.id).single();
             if (!prodErr && prodRow) {
               const row: any = prodRow as any;
               const cb = row.codigo_barras || row.codigoBarras || '';
+              const bid = row.bling_id || '';
               setCodigoBarras(cb || '');
+              setBlingId(bid || '');
             }
           }
         } catch (err: any) {
-          console.error('Erro ao carregar codigo_barras do produto do DB:', err);
+          console.error('Erro ao carregar codigo_barras e bling_id do produto do DB:', err);
         }
       })();
     } else {
@@ -425,26 +435,16 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
               <Label>Quantidade (qntd)</Label>
               <Input type="number" value={qntd as any} onChange={(e)=>setQntd(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
-            <div>
-              <Label>Embalagem</Label>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-                <Select value={selectedEmbalagemId} onValueChange={setSelectedEmbalagemId}>
-                  <SelectTrigger className="flex-1 min-w-0">
-                    <SelectValue placeholder="-- Selecionar --" />
-                  </SelectTrigger>
-                  <SelectContent side="bottom" position="popper" className="max-h-[300px]">
-                    {embalagens.map(em => (
-                      <SelectItem key={em.id} value={em.id} className='cursor-pointer'>
-                        {em.nome} ({em.comprimento}×{em.largura}×{em.altura} cm - {em.peso} kg)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button size="sm" variant="outline" className="sm:flex-shrink-0" onClick={() => { setSelectedEmbalagemForModal(undefined); setEmbalagemModalOpen(true); }}>
-                  Nova
-                </Button>
+            {!hasVariations && (
+              <div>
+                <Label>Bling ID</Label>
+                <Input 
+                  value={blingId} 
+                  onChange={(e)=>setBlingId(e.target.value)} 
+                  placeholder="ID do produto no Bling"
+                />
               </div>
-            </div>
+            )}
             <div className="md:col-span-2">
               <Label>Imagem URL (img_url)</Label>
               <Input value={imgUrl} onChange={(e)=>setImgUrl(e.target.value)} />
@@ -568,6 +568,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         <div>
                           <Label>Ordem</Label>
                           <Input type="number" value={v.ordem ?? idx} onChange={(e)=>updateVariation(idx, { ordem: Number(e.target.value) })} />
+                        </div>
+                        <div>
+                          <Label>Bling ID</Label>
+                          <Input value={v.bling_id || ''} onChange={(e)=>updateVariation(idx, { bling_id: e.target.value })} placeholder="ID no Bling" />
                         </div>
                         <div>
                           <Label>Imagem URL</Label>

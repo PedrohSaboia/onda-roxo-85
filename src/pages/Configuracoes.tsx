@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -605,6 +605,79 @@ export function Configuracoes() {
     }
   };
 
+  // formas de pagamento state
+  type FormaPagamento = { id?: string; nome: string; img_url?: string; created_at?: string };
+  const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
+  const [loadingFormasPagamento, setLoadingFormasPagamento] = useState(false);
+  const [formasPagamentoError, setFormasPagamentoError] = useState<string | null>(null);
+
+  const fetchFormasPagamento = async () => {
+    setLoadingFormasPagamento(true);
+    setFormasPagamentoError(null);
+    try {
+      const { data, error } = await supabase
+        .from('formas_pagamentos')
+        .select('id, nome, img_url, created_at')
+        .order('nome', { ascending: true });
+      if (error) throw error;
+      setFormasPagamento((data ?? []) as FormaPagamento[]);
+    } catch (err) {
+      console.error('Erro ao buscar formas de pagamento:', err);
+      setFormasPagamentoError(String(err));
+      setFormasPagamento([]);
+    } finally {
+      setLoadingFormasPagamento(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFormasPagamento();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // create forma pagamento state
+  const [createFormaPagamentoOpen, setCreateFormaPagamentoOpen] = useState(false);
+  const [createFormaPagamentoNome, setCreateFormaPagamentoNome] = useState('');
+  const [createFormaPagamentoFile, setCreateFormaPagamentoFile] = useState<File | null>(null);
+  const createFormaPagamentoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [creatingFormaPagamento, setCreatingFormaPagamento] = useState(false);
+
+  // edit forma pagamento state
+  const [editFormaPagamentoOpen, setEditFormaPagamentoOpen] = useState(false);
+  const [editFormaPagamentoId, setEditFormaPagamentoId] = useState<string | undefined>(undefined);
+  const [editFormaPagamentoNome, setEditFormaPagamentoNome] = useState('');
+  const [editFormaPagamentoFile, setEditFormaPagamentoFile] = useState<File | null>(null);
+  const editFormaPagamentoFileInputRef = useRef<HTMLInputElement | null>(null);
+  const [editingFormaPagamento, setEditingFormaPagamento] = useState(false);
+
+  // delete forma pagamento state
+  const [deleteFormaPagamentoId, setDeleteFormaPagamentoId] = useState<string | undefined>(undefined);
+  const [deleteFormaPagamentoNome, setDeleteFormaPagamentoNome] = useState('');
+  const [deletingFormaPagamento, setDeletingFormaPagamento] = useState(false);
+
+  // helper to upload forma pagamento image
+  const uploadFormaPagamentoImage = async (file: File, formaPagamentoId: string) => {
+    try {
+      const parts = file.name.split('.');
+      const ext = parts.length > 1 ? parts.pop() : 'jpg';
+      const filename = `${Date.now()}.${ext}`;
+      const path = `FormasPagamento/${formaPagamentoId}/${filename}`;
+
+      const { error: uploadErr } = await supabase.storage.from('Usuarios').upload(path, file, { upsert: true });
+      if (uploadErr) {
+        console.error('Erro upload imagem:', uploadErr);
+        return null;
+      }
+
+      const pub = supabase.storage.from('Usuarios').getPublicUrl(path as string) as any;
+      const publicUrl = pub?.data?.publicUrl ?? pub?.publicUrl ?? null;
+      return publicUrl;
+    } catch (err) {
+      console.error('Erro ao enviar imagem:', err);
+      return null;
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -615,7 +688,7 @@ export function Configuracoes() {
       </div>
 
       <Tabs defaultValue="usuarios" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="usuarios">
             <Users className="h-4 w-4 mr-2" />
             Usuários
@@ -635,6 +708,10 @@ export function Configuracoes() {
           <TabsTrigger value="permissoes">
             <Lock className="h-4 w-4 mr-2" />
             Permissões
+          </TabsTrigger>
+          <TabsTrigger value="formas-pagamento">
+            <CreditCard className="h-4 w-4 mr-2" />
+            Formas de Pagamentos
           </TabsTrigger>
           <TabsTrigger value="preferencias">
             <Palette className="h-4 w-4 mr-2" />
@@ -2083,6 +2160,382 @@ export function Configuracoes() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="formas-pagamento">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Formas de Pagamentos</CardTitle>
+                <Dialog open={createFormaPagamentoOpen} onOpenChange={setCreateFormaPagamentoOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-purple-600 hover:bg-purple-700">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Nova Forma de Pagamento
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Nova Forma de Pagamento</DialogTitle>
+                      <DialogDescription>Adicione uma nova forma de pagamento ao sistema</DialogDescription>
+                    </DialogHeader>
+
+                    <div className="grid gap-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="create-forma-nome">Nome</Label>
+                        <Input
+                          id="create-forma-nome"
+                          value={createFormaPagamentoNome}
+                          onChange={(e) => setCreateFormaPagamentoNome(e.target.value)}
+                          placeholder="Ex: Cartão de Crédito, PIX, Boleto..."
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label>Imagem/Logo</Label>
+                        <div className="flex flex-col gap-2">
+                          {!createFormaPagamentoFile ? (
+                            <Button
+                              variant="outline"
+                              onClick={() => createFormaPagamentoFileInputRef.current?.click()}
+                              className="w-full"
+                            >
+                              Selecionar Imagem
+                            </Button>
+                          ) : (
+                            <div className="flex items-center gap-4">
+                              <img
+                                src={createPreviewUrl(createFormaPagamentoFile) ?? ''}
+                                alt="preview"
+                                className="w-24 h-24 object-cover rounded border"
+                              />
+                              <div className="flex flex-col gap-2">
+                                <Button
+                                  variant="outline"
+                                  onClick={() => createFormaPagamentoFileInputRef.current?.click()}
+                                >
+                                  Trocar
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  onClick={() => setCreateFormaPagamentoFile(null)}
+                                >
+                                  Remover
+                                </Button>
+                              </div>
+                            </div>
+                          )}
+                          <input
+                            ref={createFormaPagamentoFileInputRef}
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => setCreateFormaPagamentoFile(e.target.files?.[0] ?? null)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <DialogFooter>
+                      <Button variant="ghost" onClick={() => {
+                        setCreateFormaPagamentoOpen(false);
+                        setCreateFormaPagamentoNome('');
+                        setCreateFormaPagamentoFile(null);
+                      }}>
+                        Cancelar
+                      </Button>
+                      <Button
+                        className="bg-purple-600 hover:bg-purple-700"
+                        onClick={async () => {
+                          try {
+                            if (!createFormaPagamentoNome.trim()) {
+                              toast({ title: 'Preencha o nome da forma de pagamento', variant: 'destructive' });
+                              return;
+                            }
+                            setCreatingFormaPagamento(true);
+
+                            const insertObj: any = { nome: createFormaPagamentoNome };
+
+                            const { data: inserted, error } = await supabase
+                              .from('formas_pagamentos')
+                              .insert(insertObj)
+                              .select()
+                              .single();
+
+                            if (error) {
+                              toast({ title: 'Erro ao criar forma de pagamento', description: error.message, variant: 'destructive' });
+                              return;
+                            }
+
+                            if (createFormaPagamentoFile && inserted?.id) {
+                              const imgUrl = await uploadFormaPagamentoImage(createFormaPagamentoFile, String(inserted.id));
+                              if (imgUrl) {
+                                await supabase
+                                  .from('formas_pagamentos')
+                                  .update({ img_url: imgUrl })
+                                  .eq('id', inserted.id);
+                              }
+                            }
+
+                            toast({ title: 'Forma de pagamento criada com sucesso!' });
+                            await fetchFormasPagamento();
+                            setCreateFormaPagamentoOpen(false);
+                            setCreateFormaPagamentoNome('');
+                            setCreateFormaPagamentoFile(null);
+                          } catch (err) {
+                            console.error('Erro ao criar forma de pagamento:', err);
+                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                          } finally {
+                            setCreatingFormaPagamento(false);
+                          }
+                        }}
+                        disabled={creatingFormaPagamento}
+                      >
+                        {creatingFormaPagamento ? 'Criando...' : 'Criar'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingFormasPagamento ? (
+                <div className="text-center py-8 text-muted-foreground">Carregando...</div>
+              ) : formasPagamentoError ? (
+                <div className="text-center py-8 text-destructive">Erro: {formasPagamentoError}</div>
+              ) : formasPagamento.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">Nenhuma forma de pagamento cadastrada</div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Imagem</TableHead>
+                      <TableHead>Nome</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {formasPagamento.map((forma) => (
+                      <TableRow key={forma.id}>
+                        <TableCell>
+                          {forma.img_url ? (
+                            <img src={forma.img_url} alt={forma.nome} className="w-12 h-12 object-cover rounded" />
+                          ) : (
+                            <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                              <CreditCard className="h-6 w-6 text-muted-foreground" />
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-medium">{forma.nome}</TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setEditFormaPagamentoId(forma.id);
+                                setEditFormaPagamentoNome(forma.nome);
+                                setEditFormaPagamentoFile(null);
+                                setEditFormaPagamentoOpen(true);
+                              }}
+                            >
+                              Editar
+                            </Button>
+                            <AlertDialog
+                              open={deleteFormaPagamentoId === forma.id}
+                              onOpenChange={(open) => {
+                                if (!open) {
+                                  setDeleteFormaPagamentoId(undefined);
+                                  setDeleteFormaPagamentoNome('');
+                                }
+                              }}
+                            >
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() => {
+                                    setDeleteFormaPagamentoId(forma.id);
+                                    setDeleteFormaPagamentoNome(forma.nome);
+                                  }}
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Tem certeza que deseja excluir a forma de pagamento "{deleteFormaPagamentoNome}"? Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive hover:bg-destructive/90"
+                                    onClick={async () => {
+                                      try {
+                                        if (!deleteFormaPagamentoId) return;
+                                        setDeletingFormaPagamento(true);
+
+                                        const { error } = await supabase
+                                          .from('formas_pagamentos')
+                                          .delete()
+                                          .eq('id', deleteFormaPagamentoId);
+
+                                        if (error) {
+                                          toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
+                                        } else {
+                                          toast({ title: 'Forma de pagamento excluída com sucesso!' });
+                                          await fetchFormasPagamento();
+                                          setDeleteFormaPagamentoId(undefined);
+                                          setDeleteFormaPagamentoNome('');
+                                        }
+                                      } catch (err) {
+                                        console.error('Erro ao excluir forma de pagamento:', err);
+                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                      } finally {
+                                        setDeletingFormaPagamento(false);
+                                      }
+                                    }}
+                                    disabled={deletingFormaPagamento}
+                                  >
+                                    {deletingFormaPagamento ? 'Excluindo...' : 'Excluir'}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Edit Dialog */}
+          <Dialog open={editFormaPagamentoOpen} onOpenChange={setEditFormaPagamentoOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Editar Forma de Pagamento</DialogTitle>
+                <DialogDescription>Atualize as informações da forma de pagamento</DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-forma-nome">Nome</Label>
+                  <Input
+                    id="edit-forma-nome"
+                    value={editFormaPagamentoNome}
+                    onChange={(e) => setEditFormaPagamentoNome(e.target.value)}
+                    placeholder="Ex: Cartão de Crédito, PIX, Boleto..."
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Imagem/Logo</Label>
+                  <div className="flex flex-col gap-2">
+                    {!editFormaPagamentoFile ? (
+                      <Button
+                        variant="outline"
+                        onClick={() => editFormaPagamentoFileInputRef.current?.click()}
+                        className="w-full"
+                      >
+                        Selecionar Nova Imagem
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-4">
+                        <img
+                          src={createPreviewUrl(editFormaPagamentoFile) ?? ''}
+                          alt="preview"
+                          className="w-24 h-24 object-cover rounded border"
+                        />
+                        <div className="flex flex-col gap-2">
+                          <Button
+                            variant="outline"
+                            onClick={() => editFormaPagamentoFileInputRef.current?.click()}
+                          >
+                            Trocar
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            onClick={() => setEditFormaPagamentoFile(null)}
+                          >
+                            Remover
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    <input
+                      ref={editFormaPagamentoFileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => setEditFormaPagamentoFile(e.target.files?.[0] ?? null)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <Button variant="ghost" onClick={() => {
+                  setEditFormaPagamentoOpen(false);
+                  setEditFormaPagamentoFile(null);
+                }}>
+                  Cancelar
+                </Button>
+                <Button
+                  className="bg-purple-600 hover:bg-purple-700"
+                  onClick={async () => {
+                    try {
+                      if (!editFormaPagamentoId) {
+                        toast({ title: 'Erro', description: 'ID da forma de pagamento não encontrado', variant: 'destructive' });
+                        return;
+                      }
+                      if (!editFormaPagamentoNome.trim()) {
+                        toast({ title: 'Preencha o nome da forma de pagamento', variant: 'destructive' });
+                        return;
+                      }
+                      setEditingFormaPagamento(true);
+
+                      const updateObj: any = { nome: editFormaPagamentoNome };
+
+                      if (editFormaPagamentoFile) {
+                        const imgUrl = await uploadFormaPagamentoImage(editFormaPagamentoFile, editFormaPagamentoId);
+                        if (imgUrl) {
+                          updateObj.img_url = imgUrl;
+                        }
+                      }
+
+                      const { error } = await supabase
+                        .from('formas_pagamentos')
+                        .update(updateObj)
+                        .eq('id', editFormaPagamentoId);
+
+                      if (error) {
+                        toast({ title: 'Erro ao atualizar', description: error.message, variant: 'destructive' });
+                      } else {
+                        toast({ title: 'Forma de pagamento atualizada com sucesso!' });
+                        await fetchFormasPagamento();
+                        setEditFormaPagamentoOpen(false);
+                        setEditFormaPagamentoFile(null);
+                      }
+                    } catch (err) {
+                      console.error('Erro ao atualizar forma de pagamento:', err);
+                      toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                    } finally {
+                      setEditingFormaPagamento(false);
+                    }
+                  }}
+                  disabled={editingFormaPagamento}
+                >
+                  {editingFormaPagamento ? 'Salvando...' : 'Salvar Alterações'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         <TabsContent value="preferencias">
