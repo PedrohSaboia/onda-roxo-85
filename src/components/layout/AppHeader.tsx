@@ -31,6 +31,13 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
           const items = parsed
             .sort((a: any, b: any) => a.ordem - b.ordem)
             .map((s: any) => ({ id: s.id, label: s.nome }));
+          
+          // Ensure contabilidade is always included
+          const hasContabilidade = items.some((item: any) => item.id === 'contabilidade');
+          if (!hasContabilidade) {
+            items.push({ id: 'contabilidade', label: 'Contabilidade' });
+          }
+          
           setNavigationItems(items);
         } else {
           // Default navigation items
@@ -40,6 +47,7 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
             { id: 'producao', label: 'Produção' },
             { id: 'logistica', label: 'Logística' },
             { id: 'estoque', label: 'Estoque' },
+            { id: 'contabilidade', label: 'Contabilidade' },
             { id: 'configuracoes', label: 'Configurações' },
           ];
           setNavigationItems(defaultItems);
@@ -53,6 +61,7 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
           { id: 'producao', label: 'Produção' },
           { id: 'logistica', label: 'Logística' },
           { id: 'estoque', label: 'Estoque' },
+          { id: 'contabilidade', label: 'Contabilidade' },
           { id: 'configuracoes', label: 'Configurações' },
         ]);
       }

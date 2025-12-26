@@ -10,6 +10,7 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Pedido from "./pages/Pedido";
+import PedidoContabilidade from "./pages/PedidoContabilidade";
 import NovoPedido from "./pages/NovoPedido";
 import InformacoesEntrega from "./pages/InformacoesEntrega";
 import Leads from "./pages/Leads";
@@ -19,6 +20,7 @@ import ListaEmbalagens from "./pages/ListaEmbalagens";
 import { TermosServico } from "./pages/TermosServico";
 import { TermoPrivacidade } from "./pages/TermoPrivacidade";
 import Documentacao from "./pages/Documentacao";
+import { Contabilidade } from "./pages/Contabilidade";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -49,6 +51,11 @@ const App = () => {
                 <Pedido />
               </ProtectedRoute>
             } />
+            <Route path="/pedido-contabilidade/:id" element={
+              <ProtectedRoute>
+                <PedidoContabilidade />
+              </ProtectedRoute>
+            } />
             <Route path="/novo-pedido" element={
               <ProtectedRoute>
                 <NovoPedido />
@@ -75,6 +82,11 @@ const App = () => {
             <Route path="/estoque/embalagens" element={
               <ProtectedRoute>
                 <ListaEmbalagens />
+              </ProtectedRoute>
+            } />
+            <Route path="/contabilidade" element={
+              <ProtectedRoute>
+                <Contabilidade />
               </ProtectedRoute>
             } />
             <Route path="/termos-servico" element={<TermosServico />} />

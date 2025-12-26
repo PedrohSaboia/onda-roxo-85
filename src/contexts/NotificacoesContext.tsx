@@ -291,6 +291,8 @@ export const NotificacoesProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [user?.id, carregarNotificacoes]);
 
   useEffect(() => {
+    if (!user?.id) return;
+
     // Configurar listener em tempo real
     const channel = supabase
       .channel('notificacoes-realtime')
@@ -303,6 +305,12 @@ export const NotificacoesProvider: React.FC<{ children: React.ReactNode }> = ({ 
         },
         (payload) => {
           const rawNotificacao = payload.new as any;
+          
+          // Filtrar apenas notificações para o usuário logado
+          if (rawNotificacao.responsavel_id !== user.id) {
+            return;
+          }
+          
           // Mapear para o formato da view
           const novaNotificacao: Notificacao = {
             notificacao_id: rawNotificacao.id,
@@ -341,7 +349,7 @@ export const NotificacoesProvider: React.FC<{ children: React.ReactNode }> = ({ 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user?.id]);
 
   return (
     <NotificacoesContext.Provider

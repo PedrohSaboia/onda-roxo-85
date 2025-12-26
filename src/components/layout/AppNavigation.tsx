@@ -1,4 +1,4 @@
-import { Home, Package, Palette, Cog, Truck, BarChart3, Users, Settings } from 'lucide-react';
+import { Home, Package, Palette, Cog, Truck, BarChart3, Users, Settings, Calculator } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface NavigationItem {
@@ -19,6 +19,7 @@ const navigationItems: NavigationItem[] = [
   { id: 'producao', label: 'Produção', icon: Cog },
   { id: 'logistica', label: 'Logística', icon: Truck },
   { id: 'estoque', label: 'Estoque', icon: BarChart3 },
+  { id: 'contabilidade', label: 'Contabilidade', icon: Calculator },
   { id: 'configuracoes', label: 'Configurações', icon: Settings },
 ];
 

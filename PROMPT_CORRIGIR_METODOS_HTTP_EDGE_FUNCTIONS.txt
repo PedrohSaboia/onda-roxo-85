@@ -1,0 +1,299 @@
+# 🔧 CORREÇÃO: Métodos HTTP nas Edge Functions do Bling
+
+## ⚠️ Problema Identificado
+
+As Edge Functions `editar_cliente_bling` e `editar_pedido_bling` estão retornando erro:
+
+```
+{"error":"Método não permitido. Use PUT."}
+```
+
+## 🎯 Causa Raiz
+
+O método `supabase.functions.invoke()` **SEMPRE** usa **POST** para chamar Edge Functions, independentemente da operação que será feita internamente.
+
+Porém, as Edge Functions estão verificando se o método HTTP é PUT antes de processar a requisição, o que causa o erro.
+
+## ✅ Solução
+
+As Edge Functions devem:
+1. **Aceitar POST** do `supabase.functions.invoke()`
+2. **Internamente** fazer a chamada com o método correto (PUT, DELETE, etc.) para a API externa (Bling)
+
+---
+
+## 📝 Código Correto para as Edge Functions
+
+### **Edge Function: editar_cliente_bling**
+
+```typescript
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  // ✅ IMPORTANTE: Aceitar POST do supabase.functions.invoke()
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Método não permitido. Use POST.' }), 
+      {
+        status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
+  }
+
+  try {
+    const BLING_ACCESS_TOKEN = Deno.env.get('BLING_ACCESS_TOKEN')
+    
+    if (!BLING_ACCESS_TOKEN) {
+      throw new Error('Token do Bling não configurado')
+    }
+
+    // Parse request body
+    const body = await req.json()
+    
+    // Validar campos obrigatórios
+    if (!body.contato_id) {
+      throw new Error('Campo "contato_id" é obrigatório')
+    }
+
+    console.log('📋 Dados recebidos:', body)
+
+    // ✅ Fazer chamada PUT para API do Bling (método correto)
+    const response = await fetch(
+      `https://api.bling.com.br/Api/v3/contatos/${body.contato_id}`,
+      {
+        method: 'PUT', // ← Método correto para atualizar no Bling
+        headers: {
+          'Authorization': `Bearer ${BLING_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          nome: body.nome,
+          tipo: body.tipo,
+          numeroDocumento: body.numeroDocumento,
+          situacao: body.situacao,
+          email: body.email,
+          telefones: body.telefones,
+          endereco: body.endereco
+        })
+      }
+    )
+
+    const data = await response.json()
+    console.log('✅ Resposta da API Bling:', data)
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Erro ao atualizar cliente no Bling')
+    }
+
+    // Return formatted response
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Cliente atualizado com sucesso',
+        data: data
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    )
+
+  } catch (error) {
+    console.error('❌ Erro:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: error.message,
+        details: error 
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500
+      }
+    )
+  }
+})
+```
+
+---
+
+### **Edge Function: editar_pedido_bling**
+
+```typescript
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+serve(async (req) => {
+  // Handle CORS preflight
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders })
+  }
+
+  // ✅ IMPORTANTE: Aceitar POST do supabase.functions.invoke()
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Método não permitido. Use POST.' }), 
+      {
+        status: 405,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    )
+  }
+
+  try {
+    const BLING_ACCESS_TOKEN = Deno.env.get('BLING_ACCESS_TOKEN')
+    
+    if (!BLING_ACCESS_TOKEN) {
+      throw new Error('Token do Bling não configurado')
+    }
+
+    // Parse request body
+    const body = await req.json()
+    
+    // Validar campos obrigatórios
+    if (!body.id_pedido_venda) {
+      throw new Error('Campo "id_pedido_venda" é obrigatório')
+    }
+
+    console.log('📋 Dados recebidos:', body)
+
+    // ✅ Fazer chamada PUT para API do Bling (método correto)
+    const response = await fetch(
+      `https://api.bling.com.br/Api/v3/pedidos/vendas/${body.id_pedido_venda}`,
+      {
+        method: 'PUT', // ← Método correto para atualizar no Bling
+        headers: {
+          'Authorization': `Bearer ${BLING_ACCESS_TOKEN}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          contato: body.contato,
+          numero: body.numero,
+          data: body.data,
+          itens: body.itens,
+          transporte: body.transporte,
+          observacoes: body.observacoes
+        })
+      }
+    )
+
+    const data = await response.json()
+    console.log('✅ Resposta da API Bling:', data)
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Erro ao atualizar pedido no Bling')
+    }
+
+    // Return formatted response
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Pedido atualizado com sucesso',
+        data: data
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200
+      }
+    )
+
+  } catch (error) {
+    console.error('❌ Erro:', error)
+    return new Response(
+      JSON.stringify({ 
+        error: error.message,
+        details: error 
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500
+      }
+    )
+  }
+})
+```
+
+---
+
+## 🔑 Pontos Importantes
+
+1. **Edge Function recebe POST** do `supabase.functions.invoke()`
+2. **Edge Function valida e processa** os dados recebidos
+3. **Edge Function faz PUT/DELETE** internamente para a API do Bling
+4. **Edge Function retorna** o resultado formatado para o frontend
+
+## 📊 Fluxo Correto
+
+```
+Frontend (React)
+    ↓ POST (via supabase.functions.invoke)
+Edge Function (Supabase)
+    ↓ PUT/DELETE (para API externa)
+API Bling
+    ↓ Response
+Edge Function
+    ↓ Response
+Frontend
+```
+
+## ⚠️ O que NÃO fazer
+
+❌ **ERRADO:** Edge Function verificar se `req.method === 'PUT'`
+```typescript
+// ❌ Isso vai falhar
+if (req.method !== 'PUT') {
+  return new Response('Use PUT', { status: 405 })
+}
+```
+
+✅ **CORRETO:** Edge Function aceitar POST e fazer PUT internamente
+```typescript
+// ✅ Isso funciona
+if (req.method !== 'POST') {
+  return new Response('Use POST', { status: 405 })
+}
+
+// Internamente faz PUT para API externa
+const response = await fetch(url, { method: 'PUT', ... })
+```
+
+---
+
+## 🚀 Próximos Passos
+
+1. Atualizar código das Edge Functions:
+   - `editar_cliente_bling`
+   - `editar_pedido_bling`
+
+2. Deploy das Edge Functions atualizadas:
+   ```bash
+   supabase functions deploy editar_cliente_bling
+   supabase functions deploy editar_pedido_bling
+   ```
+
+3. Testar integração novamente no frontend
+
+---
+
+## 📝 Resumo
+
+- ✅ Edge Functions devem **sempre aceitar POST**
+- ✅ Métodos PUT/DELETE/PATCH são usados **apenas nas chamadas internas** para APIs externas
+- ✅ `supabase.functions.invoke()` não permite especificar métodos HTTP customizados
+- ✅ Edge Functions atuam como **proxy** que traduz POST para outros métodos

@@ -6,6 +6,7 @@ import { Producao } from '@/pages/Producao';
 import { Logistica } from '@/pages/Logistica';
 import { Estoque } from '@/pages/Estoque';
 import { Configuracoes } from '@/pages/Configuracoes';
+import { Contabilidade } from '@/pages/Contabilidade';
 
 import { useLocation } from 'react-router-dom';
 
@@ -39,6 +40,8 @@ export function AppLayout() {
         return <Logistica />;
       case 'estoque':
         return <Estoque />;
+      case 'contabilidade':
+        return <Contabilidade />;
       case 'configuracoes':
         return <Configuracoes />;
       default:
