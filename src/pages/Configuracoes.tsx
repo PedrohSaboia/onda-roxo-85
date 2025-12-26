@@ -26,6 +26,43 @@ export function Configuracoes() {
   const { toast } = useToast();
   const { empresaId, user: currentUser, permissoes, hasPermissao } = useAuth();
 
+  // permissões por usuário (dialog)
+  const [permDialogOpen, setPermDialogOpen] = useState(false);
+  const [permDialogUsuarioId, setPermDialogUsuarioId] = useState<string | undefined>(undefined);
+  const [permDialogUsuarioNome, setPermDialogUsuarioNome] = useState<string>('');
+  const [dialogPerms, setDialogPerms] = useState<Array<{ permissao_id: number; permissao_nome: string; categoria_permissao_id?: number; nome_categoria?: string; tem_permissao?: boolean }>>([]);
+  const [loadingDialogPerms, setLoadingDialogPerms] = useState(false);
+  const [dialogSearch, setDialogSearch] = useState('');
+  const [dialogCategoriaFilter, setDialogCategoriaFilter] = useState<number | null>(null);
+  const [dialogPage, setDialogPage] = useState<number>(1);
+  const [dialogPageSize] = useState<number>(5);
+
+  const fetchPermissoesVinculadas = async (usuarioId?: string) => {
+    if (!usuarioId) return;
+    setLoadingDialogPerms(true);
+    try {
+      let q = supabase.from('permissoes_vinculadas').select('permissao_id, permissao_nome, categoria_permissao_id, nome_categoria, tem_permissao').eq('usuario_id', usuarioId).order('permissao_nome', { ascending: true });
+      if (dialogCategoriaFilter) q = q.eq('categoria_permissao_id', dialogCategoriaFilter);
+      if (dialogSearch) q = q.ilike('permissao_nome', `%${dialogSearch}%`);
+      const { data, error } = await q;
+      if (error) throw error;
+      setDialogPerms((data ?? []) as any);
+      setDialogPage(1);
+    } catch (err) {
+      console.error('Erro ao carregar permissoes vinculadas:', err);
+      toast({ title: 'Erro', description: 'Não foi possível carregar permissões vinculadas', variant: 'destructive' });
+      setDialogPerms([]);
+    } finally {
+      setLoadingDialogPerms(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!permDialogOpen || !permDialogUsuarioId) return;
+    fetchPermissoesVinculadas(permDialogUsuarioId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permDialogOpen, permDialogUsuarioId, dialogCategoriaFilter, dialogSearch]);
+
   // Apply dark mode to document
   useEffect(() => {
     if (darkMode) {
@@ -858,6 +895,19 @@ export function Configuracoes() {
                                 </Button>
                               );
                             })()}
+                            {(() => {
+                              const canManagePerms = hasPermissao ? hasPermissao(21) : (permissoes ?? []).includes(21);
+                              if (!canManagePerms) return null;
+                              return (
+                                <Button variant="outline" size="sm" onClick={() => {
+                                  setPermDialogUsuarioId(usuario.id);
+                                  setPermDialogUsuarioNome(usuario.nome ?? '');
+                                  setPermDialogOpen(true);
+                                }}>
+                                  <Lock className="h-4 w-4" />
+                                </Button>
+                              );
+                            })()}
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => {
@@ -1084,6 +1134,85 @@ export function Configuracoes() {
                 }} disabled={editing}>{editing ? 'Salvando...' : 'Salvar alterações'}</Button>
               </div>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Permissões do usuário (dialog) */}
+        <Dialog open={permDialogOpen} onOpenChange={(v) => { if (!v) { setPermDialogOpen(false); setDialogPerms([]); } else setPermDialogOpen(true); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Permissões de {permDialogUsuarioNome}</DialogTitle>
+              <DialogDescription>Gerencie as permissões deste usuário. Só aparece se você tiver permissão necessária.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3">
+              <div className="flex gap-2 items-center">
+                <select value={String(dialogCategoriaFilter ?? '')} onChange={(e) => setDialogCategoriaFilter(e.target.value ? Number(e.target.value) : null)} className="border rounded px-2 py-1">
+                  <option value="">Todas as categorias</option>
+                  {categoriasPermissoes.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{c.categoria_nome}</option>
+                  ))}
+                </select>
+                <Input placeholder="Pesquisar permissão" value={dialogSearch} onChange={(e) => setDialogSearch(e.target.value)} />
+                <Button onClick={() => { setDialogSearch(''); setDialogCategoriaFilter(null); }}>Limpar</Button>
+              </div>
+
+              <div>
+                {loadingDialogPerms ? (
+                  <div>Carregando...</div>
+                ) : dialogPerms.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Nenhuma permissão encontrada para este usuário.</div>
+                  ) : (
+                  <div>
+                    {(() => {
+                      const total = dialogPerms.length;
+                      const totalPages = Math.max(1, Math.ceil(total / dialogPageSize));
+                      const start = (dialogPage - 1) * dialogPageSize;
+                      const visible = dialogPerms.slice(start, start + dialogPageSize);
+                      return (
+                        <div className="space-y-2">
+                          {visible.map((p) => (
+                            <div key={p.permissao_id} className="flex items-center justify-between border rounded p-2">
+                              <div>
+                                <div className="font-medium">{p.permissao_nome}</div>
+                                <div className="text-xs text-muted-foreground">{p.nome_categoria}</div>
+                              </div>
+                              <div>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(p.tem_permissao)}
+                                  onChange={async (e) => {
+                                    const newVal = e.target.checked;
+                                    try {
+                                      const { error } = await supabase.rpc('set_usuario_permissao', { p_usuario_id: permDialogUsuarioId, p_permissao_id: p.permissao_id, p_value: newVal });
+                                      if (error) throw error;
+                                      setDialogPerms((prev) => prev.map((pp) => pp.permissao_id === p.permissao_id ? { ...pp, tem_permissao: newVal } : pp));
+                                      toast({ title: 'Atualizado', description: 'Permissão atualizada.' });
+                                    } catch (err) {
+                                      console.error('Erro ao atualizar permissão:', err);
+                                      toast({ title: 'Erro', description: 'Não foi possível atualizar permissão', variant: 'destructive' });
+                                    }
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ))}
+
+                          <div className="flex items-center justify-end mt-2">
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="outline" onClick={() => setDialogPage((p) => Math.max(1, p - 1))} disabled={dialogPage === 1}>Anterior</Button>
+                              <div className="text-sm">{dialogPage} de {totalPages}</div>
+                              <Button size="sm" variant="outline" onClick={() => setDialogPage((p) => Math.min(totalPages, p + 1))} disabled={dialogPage === totalPages}>Próximo</Button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
+              </div>
+            </div>
+
           </DialogContent>
         </Dialog>
 
