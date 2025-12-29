@@ -36,7 +36,7 @@ const etiquetaColors = {
 export function Comercial() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { empresaId } = useAuth();
+  const { empresaId, permissoes, hasPermissao } = useAuth();
   const { toast } = useToast();
   
   // Read current values from URL
@@ -1241,7 +1241,14 @@ export function Comercial() {
                     : `${totalExcludingEnviados} pedidos encontrados`}
               </p>
             </div>
-            <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => navigate('/novo-pedido')}>
+            <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => {
+              const canCreate = hasPermissao ? hasPermissao(33) : (permissoes ?? []).includes(33);
+              if (!canCreate) {
+                toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                return;
+              }
+              navigate('/novo-pedido');
+            }}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Pedido
             </Button>
