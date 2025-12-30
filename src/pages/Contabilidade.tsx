@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search } from 'lucide-react';
+import { Search, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -44,8 +44,9 @@ interface PedidoContabilidade {
 
 export function Contabilidade() {
   const navigate = useNavigate();
-  const { empresaId } = useAuth();
+  const { empresaId, permissoes, hasPermissao, isLoading } = useAuth();
   const { toast } = useToast();
+  const hasAccess = hasPermissao ? hasPermissao(57) : ((permissoes || []).includes(57));
   
   const [searchTerm, setSearchTerm] = useState('');
   const [pedidos, setPedidos] = useState<PedidoContabilidade[]>([]);
@@ -56,10 +57,11 @@ export function Contabilidade() {
   const [total, setTotal] = useState<number>(0);
 
   useEffect(() => {
+    if (!hasAccess) return;
     if (empresaId) {
       carregarPedidos();
     }
-  }, [empresaId, page, pageSize, searchTerm]);
+  }, [empresaId, page, pageSize, searchTerm, hasAccess]);
 
   const carregarPedidos = async () => {
     setLoading(true);
@@ -161,6 +163,19 @@ export function Contabilidade() {
   };
 
   const totalPages = Math.ceil(total / pageSize);
+  if (!isLoading && !hasAccess) {
+    return (
+      <div className="p-6">
+        <Card className="w-[500px] justify-center mx-auto">
+          <CardContent className="p-8 text-center">
+            <AlertCircle className="mx-auto mb-4 text-red-600" />
+            <h3 className="text-lg font-semibold">Você não tem permissão para ver a contabilidade</h3>
+            <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
@@ -170,7 +185,6 @@ export function Contabilidade() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Contabilidade</h1>
             <p className="text-gray-600">Pedidos finalizados para análise contábil</p>
           </div>
-
           
           {/* Search Bar */}
           <div className="mb-6 flex gap-4">
@@ -218,7 +232,6 @@ export function Contabilidade() {
                     <TableBody>
                       {pedidos.map((pedido) => (
                         <TableRow 
-                          key={pedido.id} 
                           className="hover:bg-gray-50 cursor-pointer"
                           onClick={() => navigate(`/pedido-contabilidade/${pedido.id}`)}
                         >

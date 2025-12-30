@@ -302,7 +302,7 @@ export function Dashboard() {
   if (!isLoading && !hasAccess) {
     return (
       <div className="p-6">
-        <Card className="w-[400px] justify-center mx-auto">
+        <Card className="w-[500px] justify-center mx-auto">
           <CardContent className="p-8 text-center">
             <AlertCircle className="mx-auto mb-4 text-red-600" />
             <h3 className="text-lg font-semibold">Você não tem permissão para ver o dashboard</h3>
