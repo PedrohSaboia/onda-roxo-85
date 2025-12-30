@@ -1,6 +1,8 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Package, Box } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 const items = [
   { id: 'produtos', label: 'Lista de Produtos', icon: Package },
@@ -10,6 +12,9 @@ const items = [
 export function EstoqueSidebar() {
   const navigate = useNavigate()
   const location = useLocation()
+  const { toast } = useToast();
+  const { permissoes, hasPermissao } = useAuth();
+  const canViewEmbalagens = hasPermissao ? hasPermissao(14) : ((permissoes || []).includes(14));
   const params = new URLSearchParams(location.search)
   const view = params.get('view') || 'produtos'
   const [isExpanded, setIsExpanded] = useState(false)
@@ -17,6 +22,10 @@ export function EstoqueSidebar() {
   const handleClick = (id: string) => {
     // Special-case: open the dedicated Embalagens page
     if (id === 'embalagens') {
+      if (!canViewEmbalagens) {
+        toast({ title: 'Sem permissão', description: 'Você não tem permissão para acessar Embalagens', variant: 'destructive' });
+        return;
+      }
       navigate('/estoque/embalagens');
       return;
     }
