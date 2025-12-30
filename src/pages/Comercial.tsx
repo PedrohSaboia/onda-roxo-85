@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, Filter, Eye, Edit, Copy, Trash2, X } from 'lucide-react';
+import { Plus, Search, Filter, Copy, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,6 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -1584,28 +1583,35 @@ export function Comercial() {
                       variant="destructive"
                       size="sm"
                       onClick={async () => {
+                        const canBulkDelete = (hasPermissao ? hasPermissao(35) : false) || ((permissoes ?? []).includes(35));
+                        if (!canBulkDelete) {
+                          toast({ title: 'Sem permissão', description: 'Você não tem permissão para excluir pedidos.', variant: 'destructive' });
+                          return;
+                        }
+
                         if (!confirm(`Tem certeza que deseja excluir ${selectedPedidosIds.size} ${selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}?`)) {
                           return;
                         }
+
                         try {
                           const idsArray = Array.from(selectedPedidosIds);
                           const { error } = await supabase
                             .from('pedidos')
                             .delete()
                             .in('id', idsArray);
-                          
+
                           if (error) throw error;
-                          
+
                           toast({
                             title: 'Sucesso',
                             description: `${idsArray.length} ${idsArray.length === 1 ? 'pedido excluído' : 'pedidos excluídos'} com sucesso`,
                           });
-                          
+
                           // Remover da lista local
                           setPedidos(prev => prev.filter(p => !selectedPedidosIds.has(p.id)));
                           setSelectedPedidosIds(new Set());
                           setSelectedMelhorEnvioIds([]);
-                          
+
                           // Forçar recarga atualizando o estado de página para re-executar o useEffect
                           setPage(p => p);
                         } catch (err: any) {
@@ -2150,42 +2156,20 @@ export function Comercial() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" onClick={(e) => e.stopPropagation()}>
-                            •••
-                          </Button>
-                        </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation();
-                          const currentParams = new URLSearchParams(location.search);
-                          if (view === 'enviados') currentParams.set('readonly', '1');
-                          currentParams.set('returnTo', location.pathname + location.search);
-                          navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
-                        }}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Visualizar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => {
-                          e.stopPropagation();
-                          const currentParams = new URLSearchParams(location.search);
-                          currentParams.set('returnTo', location.pathname + location.search);
-                          navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
-                        }}>
-                          <Edit className="h-4 w-4 mr-2" />
-                          Editar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={(e) => { e.stopPropagation(); duplicatePedido(pedido.id); }}>
-                          <Copy className="h-4 w-4 mr-2" />
-                          Duplicar
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-red-600">
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Excluir
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (!hasPermissao?.(58)) {
+                          toast({ title: 'Sem permissão', description: 'Você não tem permissão para duplicar pedidos.', variant: 'destructive' });
+                          return;
+                        }
+                        duplicatePedido(pedido.id);
+                      }}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
                   </TableCell>
                 </TableRow>
               ))}

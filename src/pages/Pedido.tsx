@@ -1011,7 +1011,7 @@ export default function Pedido() {
           {!readonly && pedido && (
             <>
               <Button variant="ghost" className="text-red-600" onClick={() => {
-                const canDelete = hasPermissao ? hasPermissao(9) : (permissoes ?? []).includes(9);
+                const canDelete = (hasPermissao ? hasPermissao(35) : false) || ((permissoes ?? []).includes(9));
                 if (!canDelete) {
                   toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
                   return;
