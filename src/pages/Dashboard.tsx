@@ -32,7 +32,8 @@ interface DashboardMetrics {
 }
 
 export function Dashboard() {
-  const { acesso, isLoading } = useAuth();
+  const { acesso, isLoading, permissoes, hasPermissao } = useAuth();
+  const hasAccess = hasPermissao ? hasPermissao(56) : ((permissoes || []).includes(56));
   const [startDate, setStartDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [endDate, setEndDate] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -266,6 +267,14 @@ export function Dashboard() {
   }, [startDate, endDate]);
 
   useEffect(() => {
+    // Se não tem acesso, não carregar métricas
+    if (!hasAccess) {
+      setMetrics(null);
+      setError(null);
+      setLoading(false);
+      return;
+    }
+
     // Debounce: aguardar 300ms após última mudança de data
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -284,11 +293,25 @@ export function Dashboard() {
         abortControllerRef.current.abort();
       }
     };
-  }, [startDate, endDate, fetchMetrics]);
+  }, [startDate, endDate, fetchMetrics, hasAccess]);
 
   const formatCurrency = useCallback((value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }, []);
+
+  if (!isLoading && !hasAccess) {
+    return (
+      <div className="p-6">
+        <Card className="w-[400px] justify-center mx-auto">
+          <CardContent className="p-8 text-center">
+            <AlertCircle className="mx-auto mb-4 text-red-600" />
+            <h3 className="text-lg font-semibold">Você não tem permissão para ver o dashboard</h3>
+            <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const handleDateClick = (date: Date) => {
     if (!tempStartDate || (tempStartDate && tempEndDate)) {

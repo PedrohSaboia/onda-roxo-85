@@ -17,7 +17,10 @@ export function ListaEmbalagens() {
   const navigate = useNavigate();
   const location = useLocation();
   const { toast } = useToast();
-  const { empresaId } = useAuth();
+  const { empresaId, permissoes, hasPermissao } = useAuth();
+  const canCreateEmbalagem = hasPermissao ? hasPermissao(16) : ((permissoes || []).includes(16));
+  const canEditEmbalagem = hasPermissao ? hasPermissao(15) : ((permissoes || []).includes(15));
+  const canDeleteEmbalagem = hasPermissao ? hasPermissao(17) : ((permissoes || []).includes(17));
   const [embalagens, setEmbalagens] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -159,7 +162,16 @@ export function ListaEmbalagens() {
                   {total} embalagem(ns) cadastrada(s)
                 </p>
               </div>
-              <Button onClick={handleNew} className="bg-purple-600 hover:bg-purple-700">
+              <Button
+                onClick={() => {
+                  if (!canCreateEmbalagem) {
+                    toast({ title: 'Sem permissão', description: 'Você não tem permissão para criar embalagens', variant: 'destructive' });
+                    return;
+                  }
+                  handleNew();
+                }}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Embalagem
               </Button>
@@ -198,7 +210,7 @@ export function ListaEmbalagens() {
                           <TableHead>Largura (cm)</TableHead>
                           <TableHead>Comprimento (cm)</TableHead>
                           <TableHead>Peso (kg)</TableHead>
-                          <TableHead className="text-right">Ações</TableHead>
+                          <TableHead className="text-center w-[100px]">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -214,14 +226,26 @@ export function ListaEmbalagens() {
                                 <Button
                                   variant="outline"
                                   size="sm"
-                                  onClick={() => handleEdit(emb)}
+                                  onClick={() => {
+                                    if (!canEditEmbalagem) {
+                                      toast({ title: 'Sem permissão', description: 'Você não tem permissão para editar embalagens', variant: 'destructive' });
+                                      return;
+                                    }
+                                    handleEdit(emb);
+                                  }}
                                 >
                                   <Edit className="w-4 h-4" />
                                 </Button>
                                 <Button
                                   variant="destructive"
                                   size="sm"
-                                  onClick={() => openDeleteConfirm(emb)}
+                                  onClick={() => {
+                                    if (!canDeleteEmbalagem) {
+                                      toast({ title: 'Sem permissão', description: 'Você não tem permissão para excluir embalagens', variant: 'destructive' });
+                                      return;
+                                    }
+                                    openDeleteConfirm(emb);
+                                  }}
                                 >
                                   <Trash className="w-4 h-4" />
                                 </Button>
