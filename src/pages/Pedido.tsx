@@ -78,6 +78,7 @@ export default function Pedido() {
   const [selectedRemetente, setSelectedRemetente] = useState<Remetente | null>(null);
 
   const { toast } = useToast();
+  const canManageRemetentes = hasPermissao ? hasPermissao(46) : ((permissoes || []).includes(46));
 
   // Modal: adicionar produtos
   const [addProductsVisible, setAddProductsVisible] = useState(false);
@@ -1474,8 +1475,16 @@ export default function Pedido() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => { if (!readonly) setRemetentesVisible(true); }}
+                          onClick={() => {
+                            if (readonly) return;
+                            if (!canManageRemetentes) {
+                              toast({ title: 'Sem permissão', description: 'Você não tem permissão para isso', variant: 'destructive' });
+                              return;
+                            }
+                            setRemetentesVisible(true);
+                          }}
                           disabled={readonly}
+                          aria-label="Gerenciar remetentes"
                         >
                           Gerenciar
                         </Button>
