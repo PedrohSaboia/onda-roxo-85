@@ -49,11 +49,24 @@ export default function Leads() {
   const [addValue1, setAddValue1] = useState<string>('');
   const [addValue2, setAddValue2] = useState<string>('');
   const [addDate, setAddDate] = useState<string>('');
+  const [addFrete, setAddFrete] = useState<string>('');
   const [transportadoras, setTransportadoras] = useState<Array<{ id: string; nome: string }>>([]);
   const [loadingTransportadoras, setLoadingTransportadoras] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'pix' | 'carrinho'>('all');
   const [pixCount, setPixCount] = useState<number>(0);
   const [carrinhoCount, setCarrinhoCount] = useState<number>(0);
+
+  // formata input para moeda BR (ex: 1.234,56) enquanto o usuário digita
+  const formatCurrencyInput = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return '';
+    const padded = digits.padStart(3, '0');
+    const intPart = padded.slice(0, padded.length - 2);
+    const decPart = padded.slice(-2);
+    const intWithThousand = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const intClean = intWithThousand.replace(/^0+(?!$)/, '');
+    return `${intClean},${decPart}`;
+  };
 
   // carregar transportadoras quando o modal abrir
   useEffect(() => {
@@ -416,6 +429,7 @@ export default function Leads() {
                                   setAddValue1('');
                                   setAddValue2('');
                                   setAddDate('');
+                                  setAddFrete('');
                                   setAddOpen(true);
                                 }}
                               >
@@ -476,10 +490,16 @@ export default function Leads() {
 
                     <div className="space-y-3 py-2">
                       <div>
-                        <label className="block text-sm text-muted-foreground">Data</label>
-                        <div className="flex items-center gap-3 border rounded-lg px-3 py-2">
+                        <label className="block text-sm text-muted-foreground mb-1 ml-1">Data</label>
+                        <div className="flex items-center gap-3 border rounded-lg pl-1 pr-2 py-1">
                           <Input className="border-none outline-none" type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} />
                           <button type="button" className="bg-purple-700 text-white px-3 py-1 rounded-md" onClick={() => setAddDate(new Date().toISOString().slice(0,10))}>Hoje</button>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm text-muted-foreground mb-1 ml-1">Frete (R$)</label>
+                        <div className="flex items-center gap-3 border rounded-lg p-1">
+                          <Input className="border-none outline-none" type="text" inputMode="decimal" placeholder="0,00" value={addFrete} onChange={(e) => setAddFrete(formatCurrencyInput(e.target.value))} />
                         </div>
                       </div>
                     </div>
@@ -529,6 +549,7 @@ export default function Leads() {
                               responsavel_id: activeLead.responsavel || null,
                               plataforma_id: plataformaId,
                               status_id: '3ca23a64-cb1e-480c-8efa-0468ebc18097',
+                              frete_venda: addFrete ? parseFloat(String(addFrete).replace(/\./g, '').replace(',', '.')) : null,
                               data_prevista: addDate || null,
                               empresa_id: empresaId || null
                             };
