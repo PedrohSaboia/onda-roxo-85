@@ -691,6 +691,7 @@ export function Configuracoes() {
     const canViewStatus = hasPermissao ? hasPermissao(49) : ((permissoes || []).includes(49));
     const canAccessFormas = hasPermissao ? hasPermissao(55) : ((permissoes || []).includes(55));
     const canAccessUsers = hasPermissao ? (hasPermissao(5) || hasPermissao(21)) : (((permissoes || []).includes(5) || (permissoes || []).includes(21)));
+    const canAccessPreferencias = hasPermissao ? hasPermissao(13) : ((permissoes || []).includes(13));
 
     return (
     <div className="space-y-6 p-6">
@@ -2062,149 +2063,159 @@ export function Configuracoes() {
         </TabsContent>
 
         <TabsContent value="preferencias">
-          <div className="space-y-6">
-            {/* Modo Escuro Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Preferências de Aparência</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Alternar entre tema claro e escuro</p>
-                  </div>
-                  <Switch checked={darkMode} onCheckedChange={setDarkMode} />
-                </div>
+          {!canAccessPreferencias ? (
+            <Card className="w-[500px] justify-center mx-auto">
+              <CardContent className="p-8 text-center">
+                <AlertCircle className="mx-auto mb-4 text-red-600" />
+                <h3 className="text-lg font-semibold">Você não tem permissão para gerenciar as preferências</h3>
+                <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
               </CardContent>
             </Card>
+          ) : (
+            <div className="space-y-6">
+              {/* Modo Escuro Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Preferências de Aparência</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-muted-foreground">Alternar entre tema claro e escuro</p>
+                    </div>
+                    <Switch checked={darkMode} onCheckedChange={setDarkMode} />
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Minha Empresa Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Minha Empresa</CardTitle>
-                <p className="text-sm text-muted-foreground">Informações sobre meu negócio</p>
-              </CardHeader>
-              <CardContent>
-                {loadingEmpresas ? (
-                  <div className="text-sm text-muted-foreground">Carregando...</div>
-                ) : empresasError ? (
-                  <div className="text-sm text-destructive">Erro: {empresasError}</div>
-                ) : empresas.length === 0 ? (
-                  <div className="text-sm text-muted-foreground">Nenhuma empresa cadastrada.</div>
-                ) : (
-                  <div className="space-y-6">
-                    {empresas.map((empresa) => (
-                      <div key={empresa.id} className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                          {/* Coluna Esquerda - Informações */}
-                          <div className="space-y-4">
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium">Empresa</Label>
-                              <div className="px-3 py-2 border rounded-md bg-muted text-sm">
-                                {empresa.nome}
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium">CNPJ</Label>
-                              <div className="px-3 py-2 border rounded-md bg-muted text-sm font-mono">
-                                {empresa.cnpj || '-'}
-                              </div>
-                            </div>
-                            
-                            <div className="space-y-2">
-                              <Label className="text-sm font-medium">Cor</Label>
-                              <div className="flex items-center gap-3 px-3 py-2 border rounded-md bg-muted">
-                                <div 
-                                  className="w-8 h-8 rounded-md border"
-                                  style={{ backgroundColor: empresa.cor || '#6366f1' }}
-                                />
-                                <span className="font-mono text-sm">{empresa.cor || '#6366f1'}</span>
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Coluna Direita - Logo */}
-                          <div className="space-y-2">
-                            <Label className="text-sm font-medium">Logo Marca</Label>
-                            <div className="flex items-center justify-center border-2 rounded-lg p-8 bg-muted/30 h-full min-h-[200px]">
-                              {empresa.logo ? (
-                                <img src={empresa.logo} alt={empresa.nome} className="max-w-full max-h-48 object-contain" />
-                              ) : (
-                                <div className="text-center text-muted-foreground">
-                                  <Building className="h-16 w-16 mx-auto mb-2 opacity-20" />
-                                  <p className="text-sm">Sem logo</p>
+              {/* Minha Empresa Card */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Minha Empresa</CardTitle>
+                  <p className="text-sm text-muted-foreground">Informações sobre meu negócio</p>
+                </CardHeader>
+                <CardContent>
+                  {loadingEmpresas ? (
+                    <div className="text-sm text-muted-foreground">Carregando...</div>
+                  ) : empresasError ? (
+                    <div className="text-sm text-destructive">Erro: {empresasError}</div>
+                  ) : empresas.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Nenhuma empresa cadastrada.</div>
+                  ) : (
+                    <div className="space-y-6">
+                      {empresas.map((empresa) => (
+                        <div key={empresa.id} className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* Coluna Esquerda - Informações */}
+                            <div className="space-y-4">
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Empresa</Label>
+                                <div className="px-3 py-2 border rounded-md bg-muted text-sm">
+                                  {empresa.nome}
                                 </div>
-                              )}
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">CNPJ</Label>
+                                <div className="px-3 py-2 border rounded-md bg-muted text-sm font-mono">
+                                  {empresa.cnpj || '-'}
+                                </div>
+                              </div>
+                              
+                              <div className="space-y-2">
+                                <Label className="text-sm font-medium">Cor</Label>
+                                <div className="flex items-center gap-3 px-3 py-2 border rounded-md bg-muted">
+                                  <div 
+                                    className="w-8 h-8 rounded-md border"
+                                    style={{ backgroundColor: empresa.cor || '#6366f1' }}
+                                  />
+                                  <span className="font-mono text-sm">{empresa.cor || '#6366f1'}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Coluna Direita - Logo */}
+                            <div className="space-y-2">
+                              <Label className="text-sm font-medium">Logo Marca</Label>
+                              <div className="flex items-center justify-center border-2 rounded-lg p-8 bg-muted/30 h-full min-h-[200px]">
+                                {empresa.logo ? (
+                                  <img src={empresa.logo} alt={empresa.nome} className="max-w-full max-h-48 object-contain" />
+                                ) : (
+                                  <div className="text-center text-muted-foreground">
+                                    <Building className="h-16 w-16 mx-auto mb-2 opacity-20" />
+                                    <p className="text-sm">Sem logo</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        {/* Botões de Ação */}
-                        <div className="flex gap-3 pt-2">
-                          <Button 
-                            variant="outline" 
-                            className="flex-1"
-                            onClick={() => {
-                              setEditEmpresaId(empresa.id);
-                              setEditEmpresaNome(empresa.nome);
-                              setEditEmpresaCnpj(empresa.cnpj || '');
-                              setEditEmpresaCor(empresa.cor || '#6366f1');
-                              setEditEmpresaOpen(true);
-                            }}
-                          >
-                            Editar Empresa
-                          </Button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="destructive" className="flex-1">
-                                <Trash className="h-4 w-4 mr-2" />
-                                Deletar Empresa
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Tem certeza que deseja deletar a empresa <strong>{empresa.nome}</strong>? Esta ação não pode ser desfeita.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction
-                                  className="bg-destructive hover:bg-destructive/90"
-                                  onClick={async () => {
-                                    try {
-                                      if (!empresa.id) {
-                                        toast({ title: 'Erro', description: 'Empresa sem ID não pode ser deletada', variant: 'destructive' });
-                                        return;
+                          {/* Botões de Ação */}
+                          <div className="flex gap-3 pt-2">
+                            <Button 
+                              variant="outline" 
+                              className="flex-1"
+                              onClick={() => {
+                                setEditEmpresaId(empresa.id);
+                                setEditEmpresaNome(empresa.nome);
+                                setEditEmpresaCnpj(empresa.cnpj || '');
+                                setEditEmpresaCor(empresa.cor || '#6366f1');
+                                setEditEmpresaOpen(true);
+                              }}
+                            >
+                              Editar Empresa
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" className="flex-1">
+                                  <Trash className="h-4 w-4 mr-2" />
+                                  Deletar Empresa
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Tem certeza que deseja deletar a empresa <strong>{empresa.nome}</strong>? Esta ação não pode ser desfeita.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    className="bg-destructive hover:bg-destructive/90"
+                                    onClick={async () => {
+                                      try {
+                                        if (!empresa.id) {
+                                          toast({ title: 'Erro', description: 'Empresa sem ID não pode ser deletada', variant: 'destructive' });
+                                          return;
+                                        }
+                                        const { error } = await supabase.from('empresas').delete().eq('id', empresa.id);
+                                        if (error) {
+                                          toast({ title: 'Erro ao deletar empresa', description: error.message || String(error), variant: 'destructive' });
+                                        } else {
+                                          toast({ title: 'Empresa deletada', description: `${empresa.nome} foi removida do sistema.` });
+                                          await fetchEmpresas();
+                                        }
+                                      } catch (err) {
+                                        console.error('Erro ao deletar empresa:', err);
+                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
                                       }
-                                      const { error } = await supabase.from('empresas').delete().eq('id', empresa.id);
-                                      if (error) {
-                                        toast({ title: 'Erro ao deletar empresa', description: error.message || String(error), variant: 'destructive' });
-                                      } else {
-                                        toast({ title: 'Empresa deletada', description: `${empresa.nome} foi removida do sistema.` });
-                                        await fetchEmpresas();
-                                      }
-                                    } catch (err) {
-                                      console.error('Erro ao deletar empresa:', err);
-                                      toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                                    }
-                                  }}
-                                >
-                                  Deletar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                                    }}
+                                  >
+                                    Deletar
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
         </TabsContent>
 
         {/* Edit Empresa Dialog */}
