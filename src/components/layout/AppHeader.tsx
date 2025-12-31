@@ -26,32 +26,27 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
     const loadSetores = () => {
       try {
         const stored = localStorage.getItem('setores');
+        let items: any[] = [];
+        
         if (stored) {
           const parsed = JSON.parse(stored);
-          const items = parsed
+          items = parsed
             .sort((a: any, b: any) => a.ordem - b.ordem)
             .map((s: any) => ({ id: s.id, label: s.nome }));
-          
-          // Ensure contabilidade is always included
-          const hasContabilidade = items.some((item: any) => item.id === 'contabilidade');
-          if (!hasContabilidade) {
-            items.push({ id: 'contabilidade', label: 'Contabilidade' });
-          }
-          
-          setNavigationItems(items);
         } else {
           // Default navigation items
-          const defaultItems = [
+          items = [
             { id: 'home', label: 'Home' },
             { id: 'comercial', label: 'Comercial' },
             { id: 'producao', label: 'Produção' },
             { id: 'logistica', label: 'Logística' },
-            { id: 'estoque', label: 'Estoque' },
             { id: 'contabilidade', label: 'Contabilidade' },
+            { id: 'estoque', label: 'Estoque' },
             { id: 'configuracoes', label: 'Configurações' },
           ];
-          setNavigationItems(defaultItems);
         }
+        
+        setNavigationItems(items);
       } catch (err) {
         console.error('Erro ao carregar setores:', err);
         // Fallback to default
@@ -60,8 +55,8 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
           { id: 'comercial', label: 'Comercial' },
           { id: 'producao', label: 'Produção' },
           { id: 'logistica', label: 'Logística' },
-          { id: 'estoque', label: 'Estoque' },
           { id: 'contabilidade', label: 'Contabilidade' },
+          { id: 'estoque', label: 'Estoque' },
           { id: 'configuracoes', label: 'Configurações' },
         ]);
       }

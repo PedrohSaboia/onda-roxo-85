@@ -386,6 +386,30 @@ export function Configuracoes() {
       const stored = localStorage.getItem('setores');
       if (stored) {
         const parsed = JSON.parse(stored) as Setor[];
+        
+        // Migração: garantir que contabilidade existe
+        const hasContabilidade = parsed.some(s => s.id === 'contabilidade');
+        if (!hasContabilidade) {
+          // Adicionar contabilidade entre logística e estoque
+          const logisticaIndex = parsed.findIndex(s => s.id === 'logistica');
+          if (logisticaIndex !== -1) {
+            parsed.splice(logisticaIndex + 1, 0, {
+              id: 'contabilidade',
+              nome: 'Contabilidade',
+              rota: '/contabilidade',
+              ordem: logisticaIndex + 1
+            });
+            // Reordenar todos após a inserção
+            parsed.forEach((s, idx) => {
+              s.ordem = idx;
+            });
+            // Salvar a versão migrada
+            localStorage.setItem('setores', JSON.stringify(parsed));
+            setSetores(parsed);
+            return;
+          }
+        }
+        
         setSetores(parsed.sort((a, b) => a.ordem - b.ordem));
       } else {
         // Default setores
@@ -394,8 +418,9 @@ export function Configuracoes() {
           { id: 'comercial', nome: 'Comercial', rota: '/comercial', ordem: 1 },
           { id: 'producao', nome: 'Produ\u00e7\u00e3o', rota: '/producao', ordem: 2 },
           { id: 'logistica', nome: 'Log\u00edstica', rota: '/logistica', ordem: 3 },
-          { id: 'estoque', nome: 'Estoque', rota: '/estoque', ordem: 4 },
-          { id: 'configuracoes', nome: 'Configura\u00e7\u00f5es', rota: '/configuracoes', ordem: 5 },
+          { id: 'contabilidade', nome: 'Contabilidade', rota: '/contabilidade', ordem: 4 },
+          { id: 'estoque', nome: 'Estoque', rota: '/estoque', ordem: 5 },
+          { id: 'configuracoes', nome: 'Configura\u00e7\u00f5es', rota: '/configuracoes', ordem: 6 },
         ];
         setSetores(defaultSetores);
         localStorage.setItem('setores', JSON.stringify(defaultSetores));
@@ -581,7 +606,7 @@ export function Configuracoes() {
       const { data, error } = await supabase
         .from('formas_pagamentos')
         .select('id, nome, img_url, created_at')
-        .order('nome', { ascending: true });
+        .order('id', { ascending: true });
       if (error) throw error;
       setFormasPagamento((data ?? []) as FormaPagamento[]);
     } catch (err) {

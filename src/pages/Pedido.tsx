@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AppHeader } from '@/components/layout/AppHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy, Edit, CalendarIcon } from 'lucide-react';
+import { Trash, Copy, Edit, CalendarIcon, Pencil } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import EmbalagensManager from '@/components/shipping/EmbalagensManager';
@@ -94,6 +94,7 @@ export default function Pedido() {
   const [clientEditOpen, setClientEditOpen] = useState(false);
   const [editValorTotalOpen, setEditValorTotalOpen] = useState(false);
   const [tempValorTotal, setTempValorTotal] = useState<string>('');
+  const [tempValoresPagamentos, setTempValoresPagamentos] = useState<Record<string, string>>({});
   // Remove item modal state
   const [productToRemove, setProductToRemove] = useState<any | null>(null);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
@@ -104,11 +105,17 @@ export default function Pedido() {
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardDate, setWizardDate] = useState<string>(new Date().toISOString().slice(0,10));
-  const [wizardPayment, setWizardPayment] = useState<string>('Pix');
-  const [wizardValueStr, setWizardValueStr] = useState<string>('');
+  const [wizardPayments, setWizardPayments] = useState<any[]>([]);
+  const [formasPagamentosWizard, setFormasPagamentosWizard] = useState<any[]>([]);
+  const [loadingFormasPagamentosWizard, setLoadingFormasPagamentosWizard] = useState(false);
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [showCartaoDropdownWizard, setShowCartaoDropdownWizard] = useState(false);
+  const [wizardPaymentValues, setWizardPaymentValues] = useState<Record<string, string>>({});
   const [wizardSaving, setWizardSaving] = useState(false);
   const [tempoGanho, setTempoGanho] = useState<Date | undefined>(undefined);
   const [savingTempoGanho, setSavingTempoGanho] = useState(false);
+  // Ref para o dropdown de cartões
+  const cartaoDropdownRef = useRef<HTMLDivElement>(null);
   // Up-sell states
   const [upSellModalOpen, setUpSellModalOpen] = useState(false);
   const [upSellSourceItem, setUpSellSourceItem] = useState<any | null>(null);
@@ -132,13 +139,31 @@ export default function Pedido() {
   const [isNormalFlow, setIsNormalFlow] = useState(false);
   const [pendingUpSellAlertOpen, setPendingUpSellAlertOpen] = useState(false);
   const [pendingUpSellProducts, setPendingUpSellProducts] = useState<any[]>([]);
+  const [editPaymentOpen, setEditPaymentOpen] = useState(false);
+  const [formasPagamentos, setFormasPagamentos] = useState<any[]>([]);
+  const [savingPayment, setSavingPayment] = useState(false);
 
-  const formatCurrencyBR = (n: number) => n.toFixed(2).replace('.', ',');
+  const formatCurrencyBR = (n: number) => {
+    if (isNaN(n) || !isFinite(n)) return '0,00';
+    return n.toFixed(2).replace('.', ',');
+  };
   const parseCurrencyBR = (s: string) => {
     if (!s) return 0;
     const cleaned = String(s).replace(/R\$|\s/g, '').replace(/\./g, '').replace(/,/g, '.');
     const v = Number(cleaned);
     return isNaN(v) ? 0 : v;
+  };
+
+  const normalizeAndFormatCurrencyInput = (raw: string) => {
+    // keep only digits
+    const digits = String(raw || '').replace(/\D/g, '');
+    if (!digits) return '0,00';
+    // cents are last 2 digits
+    const cents = digits.slice(-2).padStart(2, '0');
+    const intPart = digits.slice(0, -2) || '0';
+    // format integer part with thousand separators
+    const intFormatted = Number(intPart).toLocaleString('pt-BR');
+    return `${intFormatted},${cents}`;
   };
 
   // Function to check if all up_cell products are resolved and auto-liberate the order
@@ -361,6 +386,29 @@ export default function Pedido() {
     return () => { mounted = false };
   }, []); // Load once on mount
 
+  // Load formas de pagamento
+  useEffect(() => {
+    let mounted = true;
+    const loadFormasPagamento = async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('formas_pagamentos')
+          .select('*')
+          .order('id');
+        
+        if (error) throw error;
+        if (!mounted) return;
+        
+        setFormasPagamentos(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar formas de pagamento:', err);
+      }
+    };
+    
+    loadFormasPagamento();
+    return () => { mounted = false };
+  }, []);
+
   // Tipos
   type Embalagem = {
     id: string;
@@ -428,7 +476,7 @@ export default function Pedido() {
         // try to load payment methods table if exists
         (async () => {
           try {
-            const { data: pmData, error: pmError } = await (supabase as any).from('formas_pagamento').select('id,nome');
+            const { data: pmData, error: pmError } = await (supabase as any).from('formas_pagamentos').select('id,nome');
             if (!pmError && pmData) {
               const map: Record<number, string> = {};
               pmData.forEach((r: any) => { map[r.id] = r.nome; });
@@ -474,7 +522,7 @@ export default function Pedido() {
         const [{ data: pedidoData, error: pedidoError }, { data: plataformasData, error: plataformasError }, { data: statusesData, error: statusesError }, { data: usuariosData, error: usuariosError }, { data: etiquetasData, error: etiquetasError }] = await Promise.all([
           supabase
             .from('pedidos')
-            .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, status_up_sell, produto:produtos(id,nome,sku,img_url,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,img_url,valor))`)
+            .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, status_up_sell, produto:produtos(id,nome,sku,img_url,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,img_url,valor)), lista_pagamentos(formas_pagamentos_id, valor, formas_pagamentos(id, nome, img_url))`)
             .eq('id', id)
             .single(),
           supabase.from('plataformas').select('*').order('nome'),
@@ -493,6 +541,9 @@ export default function Pedido() {
         // normalize related shapes
         const pick = (val: any) => Array.isArray(val) ? val[0] : val;
         const pedidoRow = pedidoData;
+        // Get payment info from lista_pagamentos join
+        const listaPagamento = pick(pedidoRow.lista_pagamentos);
+        const formaPagamento = (listaPagamento && listaPagamento.formas_pagamentos) ? pick(listaPagamento.formas_pagamentos) : null;
         // Prefer explicit cliente linked by pedido_id in clientes table
         let cliente: any = pick(pedidoRow.clientes);
         try {
@@ -534,6 +585,8 @@ export default function Pedido() {
           responsavel,
           status: statusRow ? { id: statusRow.id, nome: statusRow.nome, corHex: statusRow.cor_hex } : null,
           etiqueta: etiquetaRow ? { id: etiquetaRow.id, nome: etiquetaRow.nome, corHex: etiquetaRow.cor_hex } : null,
+          forma_pagamento: formaPagamento ? { id: formaPagamento.id, nome: formaPagamento.nome, img_url: formaPagamento.img_url } : null,
+          valor_pagamento: listaPagamento?.valor || null,
           itens
         });
 
@@ -562,6 +615,56 @@ export default function Pedido() {
     fetchData();
     return () => { mounted = false };
   }, [id]);
+
+  // Load formas de pagamento when wizard opens
+  useEffect(() => {
+    if (!wizardOpen) return;
+    
+    // Reset wizard states when opening
+    setWizardStep(1);
+    setSelectedPaymentIds([]);
+    setWizardPaymentValues({});
+    setShowCartaoDropdownWizard(false);
+    
+    let mounted = true;
+    const loadFormasPagamentos = async () => {
+      setLoadingFormasPagamentosWizard(true);
+      try {
+        const { data, error } = await (supabase as any).from('formas_pagamentos').select('*').order('id');
+        if (error) throw error;
+        if (!mounted) return;
+        setFormasPagamentosWizard(data || []);
+      } catch (err: any) {
+        console.error('Erro ao carregar formas de pagamento:', err);
+      } finally {
+        setLoadingFormasPagamentosWizard(false);
+      }
+    };
+    
+    loadFormasPagamentos();
+    return () => { mounted = false };
+  }, [wizardOpen]);
+
+  // Close cartão dropdown when wizard step changes
+  useEffect(() => {
+    setShowCartaoDropdownWizard(false);
+  }, [wizardStep]);
+
+  // Close cartão dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (cartaoDropdownRef.current && !cartaoDropdownRef.current.contains(event.target as Node)) {
+        setShowCartaoDropdownWizard(false);
+      }
+    };
+
+    if (showCartaoDropdownWizard) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showCartaoDropdownWizard]);
 
   const handleSave = async () => {
     if (!pedido) return;
@@ -1043,16 +1146,167 @@ export default function Pedido() {
                 <div className="mt-2 text-sm text-muted-foreground">IP da compra: {pedido?.ip || '—'}</div>
               </div>
 
-              <div className="w-48">
-                <div className="text-sm text-muted-foreground">PAGAMENTO</div>
-                  <div className="mt-2">{
-                    // prefer text field 'pagamento', then lookup by id_pagamento, then fallback
-                    pedido?.pagamento || (pedido?.id_pagamento && (paymentMethods ? paymentMethods[pedido.id_pagamento] : ( {
-                      1: 'Pix',
-                      2: 'Boleto',
-                      3: 'Cartão'
-                    }[pedido.id_pagamento] )) ) || '—'
-                  }</div>
+              <div className="flex-1">
+                <div className="text-sm text-muted-foreground flex items-center justify-between">
+                  <span>PAGAMENTO</span>
+                  {!readonly && (
+                    <button 
+                      onClick={() => setEditPaymentOpen(!editPaymentOpen)} 
+                      className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100"
+                      title="Editar formas de pagamento"
+                    >
+                      <Pencil className="h-3.5 w-3.5 text-gray-600" />
+                    </button>
+                  )}
+                </div>
+                <div className="mt-2">
+                  {editPaymentOpen && !readonly ? (
+                    <div className="space-y-2">
+                      <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-2">
+                        {formasPagamentos.map((forma) => {
+                          const isSelected = (pedido?.lista_pagamentos || []).some((lp: any) => String(lp.formas_pagamentos_id || lp.formas_pagamentos?.id) === String(forma.id));
+                          return (
+                            <label key={forma.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={async (e) => {
+                                  try {
+                                    setSavingPayment(true);
+                                    if (e.target.checked) {
+                                      // Add payment method
+                                      const { error: insertError } = await (supabase as any)
+                                        .from('lista_pagamentos')
+                                        .insert({
+                                          pedido_id: pedido.id,
+                                          formas_pagamentos_id: forma.id,
+                                          valor: 0
+                                        });
+
+                                      if (insertError) throw insertError;
+                                    } else {
+                                      // Remove all payment method records of this type (regardless of installments)
+                                      const { error: deleteError } = await (supabase as any)
+                                        .from('lista_pagamentos')
+                                        .delete()
+                                        .eq('pedido_id', pedido.id)
+                                        .eq('formas_pagamentos_id', forma.id);
+
+                                      if (deleteError) throw deleteError;
+                                    }
+
+                                    toast({
+                                      title: 'Forma de pagamento atualizada',
+                                      description: `${forma.nome} ${e.target.checked ? 'adicionado' : 'removido'}`
+                                    });
+
+                                    navigate(0); // Reload page
+                                  } catch (err: any) {
+                                    console.error('Erro ao atualizar forma de pagamento:', err);
+                                    toast({
+                                      title: 'Erro',
+                                      description: err?.message || 'Não foi possível atualizar a forma de pagamento',
+                                      variant: 'destructive'
+                                    });
+                                  } finally {
+                                    setSavingPayment(false);
+                                  }
+                                }}
+                                disabled={savingPayment}
+                                className="cursor-pointer"
+                              />
+                              {forma.img_url && (
+                                <img 
+                                  src={forma.img_url} 
+                                  alt={forma.nome} 
+                                  className="w-5 h-5 rounded object-contain"
+                                />
+                              )}
+                              <span className="text-sm">{forma.nome}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => setEditPaymentOpen(false)}
+                        className="w-full"
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      {(pedido?.lista_pagamentos || []).length > 0 ? (
+                        <div className="space-y-2">
+                          {(() => {
+                            // Group payments intelligently: remove installment info (3x, 4x, etc.) from card names
+                            const grouped: Record<string, any> = {};
+                            (pedido.lista_pagamentos || []).forEach((lp: any) => {
+                              const nome = lp.formas_pagamentos?.nome || '—';
+                              // Remove installment info like "3x", "4x", etc. for grouping
+                              const nomeNormalizado = nome.replace(/\s*\d+x\s*$/i, '').trim();
+                              const id = nomeNormalizado; // Use normalized name as grouping key
+                              
+                              if (!grouped[id]) {
+                                grouped[id] = {
+                                  id,
+                                  nome: nomeNormalizado,
+                                  img_url: lp.formas_pagamentos?.img_url || lp.img_url,
+                                  valor: 0,
+                                  count: 0
+                                };
+                              }
+                              grouped[id].valor += Number(lp.valor || 0);
+                              grouped[id].count += 1;
+                            });
+                            
+                            return Object.values(grouped).map((payment: any) => (
+                              <div key={payment.id} className="flex items-center gap-2 p-2 rounded">
+                                {payment.img_url && (
+                                  <img 
+                                    src={payment.img_url} 
+                                    alt={payment.nome} 
+                                    className="w-6 h-6 rounded object-contain"
+                                  />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <div className="font-medium text-sm">{payment.nome}</div>
+                                  {payment.valor > 0 && (
+                                    <div className="text-xs text-muted-foreground">R$ {Number(payment.valor).toFixed(2)}</div>
+                                  )}
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      ) : pedido?.forma_pagamento ? (
+                        <div className="flex items-center gap-2">
+                          {pedido.forma_pagamento.img_url && (
+                            <img 
+                              src={pedido.forma_pagamento.img_url} 
+                              alt={pedido.forma_pagamento.nome} 
+                              className="w-8 h-8 rounded object-contain"
+                            />
+                          )}
+                          <div>
+                            <div className="font-medium">{pedido.forma_pagamento.nome}</div>
+                            {pedido.valor_pagamento && (
+                              <div className="text-sm text-muted-foreground">R$ {Number(pedido.valor_pagamento).toFixed(2)}</div>
+                            )}
+                          </div>
+                        </div>
+                      ) : (
+                        pedido?.pagamento || (pedido?.id_pagamento && (paymentMethods ? paymentMethods[pedido.id_pagamento] : ( {
+                          1: 'Pix',
+                          2: 'Boleto',
+                          3: 'Cartão'
+                        }[pedido.id_pagamento] )) ) || '—'
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="w-56">
@@ -1096,7 +1350,24 @@ export default function Pedido() {
                   {!readonly && (
                     <button
                       onClick={() => {
-                        setTempValorTotal(((pedido?.valor_total ?? pedido?.total) || 0).toFixed(2));
+                        const valorAtual = Number(pedido?.valor_total ?? pedido?.total ?? 0);
+                        setTempValorTotal(formatCurrencyBR(valorAtual));
+                        // Popular os valores de cada forma de pagamento
+                        const pagamentosMap: Record<string, string> = {};
+                        (pedido?.lista_pagamentos || []).forEach((lp: any) => {
+                          const id = String(lp.formas_pagamentos_id || lp.formas_pagamentos?.id);
+                          const nome = lp.formas_pagamentos?.nome || '—';
+                          const nomeNormalizado = nome.replace(/\s*\d+x\s*$/i, '').trim();
+                          
+                          // Agrupar por nome normalizado
+                          if (!pagamentosMap[nomeNormalizado]) {
+                            pagamentosMap[nomeNormalizado] = '0,00';
+                          }
+                          const currentVal = parseCurrencyBR(pagamentosMap[nomeNormalizado]);
+                          const newVal = currentVal + Number(lp.valor || 0);
+                          pagamentosMap[nomeNormalizado] = formatCurrencyBR(newVal);
+                        });
+                        setTempValoresPagamentos(pagamentosMap);
                         setEditValorTotalOpen(true);
                       }}
                       className="text-gray-500 hover:text-purple-700 transition-colors"
@@ -2016,12 +2287,7 @@ export default function Pedido() {
                     setAddProductsVisible(false);
                     return;
                   }
-                  // default value is current modal cart total
-                  const total = modalCart.reduce((s, it) => s + (Number(it.preco || 0) * Number(it.quantidade || 1)), 0);
-                  setWizardValueStr(formatCurrencyBR(total));
                   setWizardDate(new Date().toISOString().slice(0,10));
-                  setWizardPayment('Pix');
-                  setWizardStep(1);
                   setAddProductsVisible(false);
                   setWizardOpen(true);
                 }}>Próxima etapa</Button>
@@ -2054,26 +2320,175 @@ export default function Pedido() {
             )}
 
             {wizardStep === 2 && (
-              <div className="text-center space-y-4">
-                <div className="flex items-center justify-center gap-4">
-                  {['Pix','Boleto','Cartão','Outro'].map((m) => (
-                    <button key={m} onClick={() => setWizardPayment(m)} className={`px-4 py-2 rounded ${wizardPayment === m ? 'ring-2 ring-purple-500 bg-white' : 'bg-gray-100'}`}>
-                      {m}
-                    </button>
-                  ))}
+              <div className="space-y-4">
+                <div className="text-sm text-muted-foreground mb-3">Selecione uma ou mais formas de pagamento:</div>
+                <div className="flex gap-4 flex-wrap justify-center">
+                  {loadingFormasPagamentosWizard ? (
+                    <div className="text-sm text-gray-500">Carregando formas de pagamento...</div>
+                  ) : formasPagamentosWizard.length === 0 ? (
+                    <div className="text-sm text-gray-500">Nenhuma forma de pagamento disponível</div>
+                  ) : (
+                    <>
+                      {/* Mostrar formas de pagamento que NÃO são cartão */}
+                      {formasPagamentosWizard.filter(f => !f.nome?.toLowerCase().includes('cartão') && !f.nome?.toLowerCase().includes('cartao')).map((forma) => {
+                        const isSelected = selectedPaymentIds.includes(String(forma.id));
+                        return (
+                          <div key={forma.id} className="relative group">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setSelectedPaymentIds(prev => 
+                                  isSelected 
+                                    ? prev.filter(id => id !== String(forma.id))
+                                    : [...prev, String(forma.id)]
+                                );
+                              }}
+                              className={`relative p-3 rounded-lg transition-all ${
+                                isSelected
+                                  ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                  : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
+                              }`}
+                              title={forma.nome}
+                            >
+                              {forma.img_url && (
+                                <img
+                                  src={forma.img_url}
+                                  alt={forma.nome}
+                                  className="w-8 h-8 object-contain"
+                                />
+                              )}
+                              {isSelected && (
+                                <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                                  ✓
+                                </div>
+                              )}
+                            </button>
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                              {forma.nome}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Card especial para Cartão com dropdown */}
+                      {formasPagamentosWizard.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')) && (
+                        <div className="relative group" ref={cartaoDropdownRef}>
+                          <button
+                            type="button"
+                            onClick={() => setShowCartaoDropdownWizard(!showCartaoDropdownWizard)}
+                            className={`relative p-3 rounded-lg transition-all ${
+                              selectedPaymentIds.some(id => formasPagamentosWizard.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'))))
+                                ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
+                            }`}
+                            title="Cartão"
+                          >
+                            {(() => {
+                              const cartaoGenerico = formasPagamentosWizard.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'));
+                              return cartaoGenerico?.img_url ? (
+                                <img
+                                  src={cartaoGenerico.img_url}
+                                  alt="Cartão"
+                                  className="w-8 h-8 object-contain"
+                                />
+                              ) : null;
+                            })()}
+                            {selectedPaymentIds.some(id => formasPagamentosWizard.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')))) && (
+                              <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                                ✓
+                              </div>
+                            )}
+                          </button>
+
+                          {/* Tooltip */}
+                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                            Cartão
+                          </div>
+
+                          {/* Dropdown de tipos de cartão - seleção exclusiva (apenas um cartão por vez) */}
+                          {showCartaoDropdownWizard && (
+                            <div className="absolute top-full left-0 mt-2 bg-white border-2 rounded-lg shadow-lg z-10 min-w-max">
+                              <div className="p-2 max-h-80 overflow-y-auto">
+                                {formasPagamentosWizard.filter(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')).map((forma) => {
+                                  const isSelected = selectedPaymentIds.includes(String(forma.id));
+                                  return (
+                                    <button
+                                      key={forma.id}
+                                      type="button"
+                                      onClick={() => {
+                                        if (isSelected) {
+                                          // Se já está selecionado, remove
+                                          setSelectedPaymentIds(prev => prev.filter(id => id !== String(forma.id)));
+                                        } else {
+                                          // Se não está selecionado, remove outros cartões mas mantém não-cartão (Pix, Boleto, etc.)
+                                          const nonCardPayments = selectedPaymentIds.filter(id => {
+                                            const payment = formasPagamentosWizard.find(f => String(f.id) === id);
+                                            return !payment?.nome?.toLowerCase().includes('cartão') && !payment?.nome?.toLowerCase().includes('cartao');
+                                          });
+                                          setSelectedPaymentIds([...nonCardPayments, String(forma.id)]);
+                                        }
+                                      }}
+                                      className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${
+                                        isSelected
+                                          ? 'bg-purple-100 border-2 border-purple-500'
+                                          : 'border-2 border-transparent hover:bg-gray-50'
+                                      }`}
+                                    >
+                                      {forma.img_url && (
+                                        <img
+                                          src={forma.img_url}
+                                          alt={forma.nome}
+                                          className="w-8 h-8 object-contain"
+                                        />
+                                      )}
+                                      <span className="font-medium text-sm">{forma.nome}</span>
+                                      {isSelected && (
+                                        <span className="ml-auto text-purple-600">✓</span>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-                <div className="mt-2 text-sm">Você selecionou <strong>{wizardPayment}</strong></div>
+                <div className="text-sm text-muted-foreground mt-4 text-center">
+                  {selectedPaymentIds.length === 0 ? 'Selecione ao menos uma forma de pagamento' : `${selectedPaymentIds.length} forma(s) selecionada(s)`}
+                </div>
               </div>
             )}
 
             {wizardStep === 3 && (
-              <div>
-                <label className="block text-sm text-muted-foreground">Valor da venda</label>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
-                  <Input value={wizardValueStr} onChange={(e) => setWizardValueStr(e.target.value)} />
-                </div>
-                <label className="flex items-center gap-2 mt-3"><input type="checkbox" /> Pagamento não integral</label>
+              <div className="space-y-4">
+                <div className="text-sm text-muted-foreground">Informe os valores por forma de pagamento:</div>
+                {selectedPaymentIds.map((paymentId) => {
+                  const payment = formasPagamentosWizard.find(f => String(f.id) === paymentId);
+                  if (!payment) return null;
+                  return (
+                    <div key={paymentId} className="space-y-2">
+                      <label className="block text-sm font-medium flex items-center gap-2">
+                        {payment.img_url && <img src={payment.img_url} alt={payment.nome} className="w-5 h-5 object-contain" />}
+                        {payment.nome}
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
+                        <Input 
+                          value={wizardPaymentValues[paymentId] || '0,00'} 
+                          onChange={(e) => {
+                            const normalized = normalizeAndFormatCurrencyInput(e.target.value);
+                            setWizardPaymentValues(prev => ({ ...prev, [paymentId]: normalized }));
+                          }}
+                          placeholder="0,00"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -2090,12 +2505,17 @@ export default function Pedido() {
               </div>
               <div>
                 {wizardStep < 3 ? (
-                  <Button className="bg-purple-700 text-white" onClick={() => setWizardStep(s => s + 1)}>Próxima etapa</Button>
+                  <Button className="bg-purple-700 text-white" onClick={() => {
+                    if (wizardStep === 2 && selectedPaymentIds.length === 0) {
+                      toast({ title: 'Erro', description: 'Selecione ao menos uma forma de pagamento', variant: 'destructive' });
+                      return;
+                    }
+                    setWizardStep(s => s + 1);
+                  }}>Próxima etapa</Button>
                 ) : (
                   <Button className="bg-purple-700 text-white" onClick={async () => {
                     // finalize: persist itens_pedido and add value to pedido.valor_total
                     if (!pedido) return;
-                    const providedValue = parseCurrencyBR(wizardValueStr);
                     setWizardSaving(true);
                     try {
                       // Get "Aguardando aumento" status ID
@@ -2217,13 +2637,39 @@ export default function Pedido() {
                         }
                       }
 
-                      // update pedido valor_total (add providedValue)
+                      // update pedido valor_total (add sum of payment values)
+                      let totalPagamentos = 0;
+                      selectedPaymentIds.forEach(paymentId => {
+                        const valueStr = wizardPaymentValues[paymentId] || '0,00';
+                        totalPagamentos += parseCurrencyBR(valueStr);
+                      });
+                      
                       const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
-                      const newTotal = Number((currentTotal + providedValue).toFixed(2));
+                      const newTotal = Number((currentTotal + totalPagamentos).toFixed(2));
                       const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
                       if (updErr) throw updErr;
 
-                      toast({ title: 'Itens adicionados', description: 'Produtos adicionados e valor atualizado no pedido' });
+                      // Insert payment methods into lista_pagamentos
+                      const pagamentosInserts: any[] = [];
+                      selectedPaymentIds.forEach(paymentId => {
+                        const valueStr = wizardPaymentValues[paymentId] || '0,00';
+                        const value = parseCurrencyBR(valueStr);
+                        pagamentosInserts.push({
+                          pedido_id: pedido.id,
+                          formas_pagamentos_id: Number(paymentId),
+                          valor: value
+                        });
+                      });
+
+                      if (pagamentosInserts.length) {
+                        const { error: pagErr } = await (supabase as any).from('lista_pagamentos').insert(pagamentosInserts);
+                        if (pagErr) {
+                          console.error('Erro ao inserir formas de pagamento:', pagErr);
+                          toast({ title: 'Aviso', description: 'Itens adicionados mas houve erro ao registrar as formas de pagamento.', variant: 'destructive' });
+                        }
+                      }
+
+                      toast({ title: 'Itens adicionados', description: 'Produtos adicionados, valor atualizado e formas de pagamento registradas' });
                       setWizardOpen(false);
                       // refresh page
                       navigate(0);
@@ -2309,19 +2755,56 @@ export default function Pedido() {
 
       {/* Modal para editar valor total */}
       <Dialog open={editValorTotalOpen} onOpenChange={setEditValorTotalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>Editar Valor Total</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto flex-1">
+            {/* Exibir valores de cada forma de pagamento */}
+            {Object.keys(tempValoresPagamentos).length > 0 && (
+              <div className="space-y-3 p-3 bg-gray-50 rounded-md">
+                <div className="text-sm font-medium text-gray-700">Valores por Forma de Pagamento:</div>
+                {Object.entries(tempValoresPagamentos).map(([nome, valor]) => {
+                  return (
+                    <div key={nome} className="space-y-1">
+                      <label className="text-sm font-medium">{nome}</label>
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-2 bg-white border rounded-l text-sm">R$</span>
+                        <Input
+                          type="text"
+                          value={valor}
+                          onChange={(e) => {
+                            const normalized = normalizeAndFormatCurrencyInput(e.target.value);
+                            const updated = {
+                              ...tempValoresPagamentos,
+                              [nome]: normalized
+                            };
+                            setTempValoresPagamentos(updated);
+                            
+                            // Recalcular valor total baseado no estado atualizado
+                            const novoTotal = Object.values(updated)
+                              .reduce((sum, v) => sum + parseCurrencyBR(String(v)), 0);
+                            setTempValorTotal(formatCurrencyBR(novoTotal));
+                          }}
+                          placeholder="0,00"
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            
             <div>
               <label className="text-sm font-medium">Valor Total (R$)</label>
               <Input
-                type="number"
-                step="0.01"
+                type="text"
                 value={tempValorTotal}
-                onChange={(e) => setTempValorTotal(e.target.value)}
-                placeholder="0.00"
+                onChange={(e) => {
+                  const normalized = normalizeAndFormatCurrencyInput(e.target.value);
+                  setTempValorTotal(normalized);
+                }}
+                placeholder="0,00"
               />
             </div>
           </div>
@@ -2332,7 +2815,17 @@ export default function Pedido() {
             <Button
               onClick={async () => {
                 try {
-                  const novoValor = parseFloat(tempValorTotal) || 0;
+                  // Parse valor using parseCurrencyBR and validate
+                  const novoValor = parseCurrencyBR(tempValorTotal);
+                  if (isNaN(novoValor) || !isFinite(novoValor)) {
+                    toast({ 
+                      title: 'Erro', 
+                      description: 'Valor total inválido', 
+                      variant: 'destructive' 
+                    });
+                    return;
+                  }
+                  
                   const { error } = await supabase
                     .from('pedidos')
                     .update({ 
@@ -2343,9 +2836,79 @@ export default function Pedido() {
 
                   if (error) throw error;
 
+                  // Atualizar valores de cada forma de pagamento na tabela lista_pagamentos
+                  console.log('Iniciando atualização dos valores de pagamento...');
+                  console.log('tempValoresPagamentos:', tempValoresPagamentos);
+                  
+                  for (const [nomePagamento, valor] of Object.entries(tempValoresPagamentos)) {
+                    // Parse valor from pt-BR format and validate
+                    const valNum = parseCurrencyBR(String(valor));
+                    console.log(`Processando ${nomePagamento}: ${valor} -> ${valNum}`);
+                    
+                    if (isNaN(valNum) || !isFinite(valNum)) {
+                      console.warn(`Valor inválido para ${nomePagamento}: ${valor}`);
+                      continue; // Skip invalid values
+                    }
+                    
+                    // Buscar registros direto do banco para garantir dados atualizados
+                    const { data: listaPagamentos, error: fetchErr } = await (supabase as any)
+                      .from('lista_pagamentos')
+                      .select('id, valor, formas_pagamentos(id, nome)')
+                      .eq('pedido_id', pedido?.id);
+                    
+                    if (fetchErr) {
+                      console.error('Erro ao buscar lista_pagamentos:', fetchErr);
+                      throw fetchErr;
+                    }
+                    
+                    console.log(`Registros encontrados para pedido ${pedido?.id}:`, listaPagamentos);
+                    
+                    // Encontrar todos os registros que correspondem a este nome de pagamento
+                    const registrosPagamento = (listaPagamentos || [])
+                      .filter((lp: any) => {
+                        const nome = lp.formas_pagamentos?.nome || '—';
+                        const nomeNormalizado = nome.replace(/\s*\d+x\s*$/i, '').trim();
+                        console.log(`Comparando: ${nomeNormalizado} === ${nomePagamento}`);
+                        return nomeNormalizado === nomePagamento;
+                      });
+
+                    console.log(`Registros correspondentes a ${nomePagamento}:`, registrosPagamento);
+
+                    if (registrosPagamento.length > 0) {
+                      // Dividir o valor igualmente entre os registros
+                      const valorPorRegistro = valNum / registrosPagamento.length;
+                      console.log(`Valor por registro: ${valorPorRegistro}`);
+                      
+                      // Atualizar cada registro individualmente
+                      for (const lp of registrosPagamento) {
+                        const id = Number(lp.id);
+                        if (isNaN(id)) {
+                          console.warn(`ID inválido: ${lp.id}`);
+                          continue;
+                        }
+                        
+                        console.log(`Atualizando lista_pagamentos id=${id} com valor=${valorPorRegistro}`);
+                        const { error: updateErr } = await (supabase as any)
+                          .from('lista_pagamentos')
+                          .update({ valor: valorPorRegistro })
+                          .eq('id', id)
+                          .eq('pedido_id', pedido?.id);
+                        
+                        if (updateErr) {
+                          console.error(`Erro ao atualizar id=${id}:`, updateErr);
+                          throw updateErr;
+                        }
+                        console.log(`✓ Atualizado com sucesso id=${id}`);
+                      }
+                    } else {
+                      console.warn(`Nenhum registro encontrado para ${nomePagamento}`);
+                    }
+                  }
+
+                  console.log('Todas as atualizações concluídas!');
                   toast({ 
                     title: 'Sucesso', 
-                    description: 'Valor total atualizado com sucesso' 
+                    description: 'Valor total e formas de pagamento atualizados com sucesso' 
                   });
                   setEditValorTotalOpen(false);
                   navigate(0); // Recarrega a página

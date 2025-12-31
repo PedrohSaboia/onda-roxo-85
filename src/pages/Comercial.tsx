@@ -16,6 +16,7 @@ import { Pedido } from '@/types';
 import EditSelectModal from '@/components/modals/EditSelectModal';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
@@ -102,6 +103,43 @@ export function Comercial() {
   // Estados para seleção de pedidos
   const [selectedPedidosIds, setSelectedPedidosIds] = useState<Set<string>>(new Set());
   const [selectedMelhorEnvioIds, setSelectedMelhorEnvioIds] = useState<string[]>([]);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  // Função para deletar os pedidos selecionados (usada pelo AlertDialog)
+  const deleteSelectedPedidos = async () => {
+    try {
+      const idsArray = Array.from(selectedPedidosIds);
+      const { error } = await supabase
+        .from('pedidos')
+        .delete()
+        .in('id', idsArray);
+
+      if (error) throw error;
+
+      toast({
+        title: 'Sucesso',
+        description: `${idsArray.length} ${idsArray.length === 1 ? 'pedido excluído' : 'pedidos excluídos'} com sucesso`,
+      });
+
+      // Remover da lista local
+      setPedidos(prev => prev.filter(p => !selectedPedidosIds.has(p.id)));
+      setSelectedPedidosIds(new Set());
+      setSelectedMelhorEnvioIds([]);
+
+      // Fechar diálogo
+      setConfirmDeleteOpen(false);
+
+      // Forçar recarga atualizando o estado de página para re-executar o useEffect
+      setPage(p => p);
+    } catch (err: any) {
+      console.error('Erro ao excluir pedidos:', err);
+      toast({
+        title: 'Erro',
+        description: err?.message || 'Não foi possível excluir os pedidos',
+        variant: 'destructive',
+      });
+    }
+  };
   
   // Sync state from URL when location changes
   useEffect(() => {
@@ -1576,45 +1614,27 @@ export function Comercial() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={async () => {
-                        if (!confirm(`Tem certeza que deseja excluir ${selectedPedidosIds.size} ${selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}?`)) {
-                          return;
-                        }
-                        try {
-                          const idsArray = Array.from(selectedPedidosIds);
-                          const { error } = await supabase
-                            .from('pedidos')
-                            .delete()
-                            .in('id', idsArray);
-                          
-                          if (error) throw error;
-                          
-                          toast({
-                            title: 'Sucesso',
-                            description: `${idsArray.length} ${idsArray.length === 1 ? 'pedido excluído' : 'pedidos excluídos'} com sucesso`,
-                          });
-                          
-                          // Remover da lista local
-                          setPedidos(prev => prev.filter(p => !selectedPedidosIds.has(p.id)));
-                          setSelectedPedidosIds(new Set());
-                          setSelectedMelhorEnvioIds([]);
-                          
-                          // Forçar recarga atualizando o estado de página para re-executar o useEffect
-                          setPage(p => p);
-                        } catch (err: any) {
-                          console.error('Erro ao excluir pedidos:', err);
-                          toast({
-                            title: 'Erro',
-                            description: err?.message || 'Não foi possível excluir os pedidos',
-                            variant: 'destructive',
-                          });
-                        }
-                      }}
+                      onClick={() => setConfirmDeleteOpen(true)}
                       className="flex items-center gap-2 h-8"
                     >
                       <Trash2 className="h-4 w-4" />
                       Excluir {selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}
                     </Button>
+                    {/* Dialogo de confirmação customizado (substitui window.confirm) */}
+                    <AlertDialog open={confirmDeleteOpen} onOpenChange={setConfirmDeleteOpen}>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Excluir {selectedPedidosIds.size === 1 ? 'Pedido' : 'Pedidos'}</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Tem certeza que deseja excluir {selectedPedidosIds.size} {selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}? Esta ação não pode ser desfeita.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel onClick={() => setConfirmDeleteOpen(false)}>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={deleteSelectedPedidos}>Excluir</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               </div>
