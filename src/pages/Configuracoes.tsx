@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard } from 'lucide-react';
+import { useState, useEffect, useRef, Fragment } from 'react';
+import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard, AlertCircle } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -24,7 +24,44 @@ export function Configuracoes() {
     return stored === 'true';
   });
   const { toast } = useToast();
-  const { empresaId, user: currentUser, permissoes, hasPermissao } = useAuth();
+  const { empresaId, user: currentUser, permissoes, hasPermissao, isLoading } = useAuth();
+
+  // permissões por usuário (dialog)
+  const [permDialogOpen, setPermDialogOpen] = useState(false);
+  const [permDialogUsuarioId, setPermDialogUsuarioId] = useState<string | undefined>(undefined);
+  const [permDialogUsuarioNome, setPermDialogUsuarioNome] = useState<string>('');
+  const [dialogPerms, setDialogPerms] = useState<Array<{ permissao_id: number; permissao_nome: string; categoria_permissao_id?: number; nome_categoria?: string; tem_permissao?: boolean }>>([]);
+  const [loadingDialogPerms, setLoadingDialogPerms] = useState(false);
+  const [dialogSearch, setDialogSearch] = useState('');
+  const [dialogCategoriaFilter, setDialogCategoriaFilter] = useState<number | null>(null);
+  const [dialogPage, setDialogPage] = useState<number>(1);
+  const [dialogPageSize] = useState<number>(5);
+
+  const fetchPermissoesVinculadas = async (usuarioId?: string) => {
+    if (!usuarioId) return;
+    setLoadingDialogPerms(true);
+    try {
+      let q = supabase.from('permissoes_vinculadas').select('permissao_id, permissao_nome, categoria_permissao_id, nome_categoria, tem_permissao').eq('usuario_id', usuarioId).order('permissao_nome', { ascending: true });
+      if (dialogCategoriaFilter) q = q.eq('categoria_permissao_id', dialogCategoriaFilter);
+      if (dialogSearch) q = q.ilike('permissao_nome', `%${dialogSearch}%`);
+      const { data, error } = await q;
+      if (error) throw error;
+      setDialogPerms((data ?? []) as any);
+      setDialogPage(1);
+    } catch (err) {
+      console.error('Erro ao carregar permissoes vinculadas:', err);
+      toast({ title: 'Erro', description: 'Não foi possível carregar permissões vinculadas', variant: 'destructive' });
+      setDialogPerms([]);
+    } finally {
+      setLoadingDialogPerms(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!permDialogOpen || !permDialogUsuarioId) return;
+    fetchPermissoesVinculadas(permDialogUsuarioId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [permDialogOpen, permDialogUsuarioId, dialogCategoriaFilter, dialogSearch]);
 
   // Apply dark mode to document
   useEffect(() => {
@@ -369,16 +406,7 @@ export function Configuracoes() {
   const [editOrderMode, setEditOrderMode] = useState(false);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
-  // create setor state
-  const [createSetorOpen, setCreateSetorOpen] = useState(false);
-  const [createSetorNome, setCreateSetorNome] = useState('');
-  const [createSetorRota, setCreateSetorRota] = useState('');
-
-  // edit setor state
-  const [editSetorOpen, setEditSetorOpen] = useState(false);
-  const [editSetorId, setEditSetorId] = useState<string>('');
-  const [editSetorNome, setEditSetorNome] = useState('');
-  const [editSetorRota, setEditSetorRota] = useState('');
+  // create/edit setor state removed (UI no longer supports create/edit/delete)
 
   // Load setores from localStorage
   const loadSetores = () => {
@@ -418,9 +446,9 @@ export function Configuracoes() {
           { id: 'comercial', nome: 'Comercial', rota: '/comercial', ordem: 1 },
           { id: 'producao', nome: 'Produ\u00e7\u00e3o', rota: '/producao', ordem: 2 },
           { id: 'logistica', nome: 'Log\u00edstica', rota: '/logistica', ordem: 3 },
-          { id: 'contabilidade', nome: 'Contabilidade', rota: '/contabilidade', ordem: 4 },
-          { id: 'estoque', nome: 'Estoque', rota: '/estoque', ordem: 5 },
-          { id: 'configuracoes', nome: 'Configura\u00e7\u00f5es', rota: '/configuracoes', ordem: 6 },
+          { id: 'estoque', nome: 'Estoque', rota: '/estoque', ordem: 4 },
+          { id: 'contabilidade', nome: 'Contabilidade', rota: '/contabilidade', ordem: 5 },
+          { id: 'configuracoes', nome: 'Configura\u00e7\u00f5es', rota: '/configuracoes', ordem: 5 },
         ];
         setSetores(defaultSetores);
         localStorage.setItem('setores', JSON.stringify(defaultSetores));
@@ -598,6 +626,8 @@ export function Configuracoes() {
   const [formasPagamento, setFormasPagamento] = useState<FormaPagamento[]>([]);
   const [loadingFormasPagamento, setLoadingFormasPagamento] = useState(false);
   const [formasPagamentoError, setFormasPagamentoError] = useState<string | null>(null);
+  // grupos de formas de pagamento (fechados por padrão)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   const fetchFormasPagamento = async () => {
     setLoadingFormasPagamento(true);
@@ -666,7 +696,27 @@ export function Configuracoes() {
     }
   };
 
-  return (
+    const hasAccess = hasPermissao ? hasPermissao(59) : ((permissoes || []).includes(59));
+
+    if (!isLoading && !hasAccess) {
+      return (
+        <div className="p-6">
+          <Card className="w-[500px] justify-center mx-auto">
+            <CardContent className="p-8 text-center">
+              <AlertCircle className="mx-auto mb-4 text-red-600" />
+              <h3 className="text-lg font-semibold">Você não tem permissão para acessar as configurações</h3>
+              <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    const canViewStatus = hasPermissao ? hasPermissao(49) : ((permissoes || []).includes(49));
+    const canAccessFormas = hasPermissao ? hasPermissao(55) : ((permissoes || []).includes(55));
+    const canAccessUsers = hasPermissao ? (hasPermissao(5) || hasPermissao(21)) : (((permissoes || []).includes(5) || (permissoes || []).includes(21)));
+
+    return (
     <div className="space-y-6 p-6">
       <div>
         <h1 className="text-2xl font-bold">Configurações</h1>
@@ -676,7 +726,7 @@ export function Configuracoes() {
       </div>
 
       <Tabs defaultValue="usuarios" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="usuarios">
             <Users className="h-4 w-4 mr-2" />
             Usuários
@@ -685,17 +735,10 @@ export function Configuracoes() {
             <Tag className="h-4 w-4 mr-2" />
             Status
           </TabsTrigger>
-          <TabsTrigger value="plataformas">
-            <Building className="h-4 w-4 mr-2" />
-            Plataformas
-          </TabsTrigger>
+          
           <TabsTrigger value="setores">
             <Settings className="h-4 w-4 mr-2" />
             Setores
-          </TabsTrigger>
-          <TabsTrigger value="permissoes">
-            <Lock className="h-4 w-4 mr-2" />
-            Permissões
           </TabsTrigger>
           <TabsTrigger value="formas-pagamento">
             <CreditCard className="h-4 w-4 mr-2" />
@@ -708,322 +751,345 @@ export function Configuracoes() {
         </TabsList>
 
         <TabsContent value="usuarios">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Usuários do Sistema</CardTitle>
-                <Dialog open={openNewUser} onOpenChange={setOpenNewUser}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      className="bg-purple-600 hover:bg-purple-700"
-                      onClick={(e) => {
-                        const canCreate = hasPermissao ? hasPermissao(4) : false;
-                        if (!canCreate) {
-                          e.preventDefault();
-                          toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
-                        }
-                      }}
-                    >
-                      Novo Usuário
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Novo Usuário</DialogTitle>
-                      <DialogDescription>Crie uma nova conta de usuário. Será criada a autenticação e o registro em usuários será atualizado automaticamente quando possível.</DialogDescription>
-                    </DialogHeader>
-
-                    <div className="grid gap-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="novo-nome">Nome</Label>
-                        <Input id="novo-nome" value={newNome} onChange={(e) => setNewNome(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="novo-email">Email</Label>
-                        <Input id="novo-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="novo-senha">Senha</Label>
-                        <Input id="novo-senha" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="novo-papel">Acesso</Label>
-                        <select id="novo-papel" value={newPapel} onChange={(e) => setNewPapel(e.target.value)} className="border rounded px-2 py-1">
-                          {loadingPredefPapels ? (
-                            <option>Carregando...</option>
-                          ) : predefPapels.length === 0 ? (
-                            <option value="">Sem opções</option>
-                          ) : (
-                            predefPapels.map((p) => (
-                              <option key={p.id} value={String(p.id)}>{p.nome}</option>
-                            ))
-                          )}
-                        </select>
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Foto</Label>
-                        <div
-                          onClick={() => newFileInputRef.current?.click()}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={(e) => {
+          {!canAccessUsers ? (
+            <Card className="w-[500px] justify-center mx-auto">
+              <CardContent className="p-8 text-center">
+                <AlertCircle className="mx-auto mb-4 text-red-600" />
+                <h3 className="text-lg font-semibold">Você não tem permissão para gerenciar os usuários</h3>
+                <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Usuários do Sistema</CardTitle>
+                  <Dialog open={openNewUser} onOpenChange={setOpenNewUser}>
+                    <DialogTrigger asChild>
+                      <Button 
+                        className="bg-purple-600 hover:bg-purple-700"
+                        onClick={(e) => {
+                          const canCreate = hasPermissao ? hasPermissao(4) : false;
+                          if (!canCreate) {
                             e.preventDefault();
-                            const f = e.dataTransfer?.files?.[0];
-                            if (f) setNewFile(f);
-                          }}
-                          className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
-                        >
-                          {!newFile ? (
-                            <div className="text-center text-sm text-muted-foreground">
-                              Clique ou arraste uma imagem aqui para anexar
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-4">
-                              <img src={createPreviewUrl(newFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
-                              <div className="flex flex-col gap-2">
-                                <Button variant="outline" onClick={(e) => { e.stopPropagation(); newFileInputRef.current?.click(); }}>Trocar</Button>
-                                <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setNewFile(null); }}>Remover</Button>
-                              </div>
-                            </div>
-                          )}
+                            toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
+                          }
+                        }}
+                      >
+                        Novo Usuário
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Novo Usuário</DialogTitle>
+                        <DialogDescription>Crie uma nova conta de usuário. Será criada a autenticação e o registro em usuários será atualizado automaticamente quando possível.</DialogDescription>
+                      </DialogHeader>
+
+                      <div className="grid gap-2">
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-nome">Nome</Label>
+                          <Input id="novo-nome" value={newNome} onChange={(e) => setNewNome(e.target.value)} />
                         </div>
-                        <input ref={newFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setNewFile(e.target.files?.[0] ?? null)} />
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-email">Email</Label>
+                          <Input id="novo-email" type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-senha">Senha</Label>
+                          <Input id="novo-senha" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-papel">Acesso</Label>
+                          <select id="novo-papel" value={newPapel} onChange={(e) => setNewPapel(e.target.value)} className="border rounded px-2 py-1">
+                            {loadingPredefPapels ? (
+                              <option>Carregando...</option>
+                            ) : predefPapels.length === 0 ? (
+                              <option value="">Sem opções</option>
+                            ) : (
+                              predefPapels.map((p) => (
+                                <option key={p.id} value={String(p.id)}>{p.nome}</option>
+                              ))
+                            )}
+                          </select>
+                        </div>
+                        <div className="space-y-1">
+                          <Label>Foto</Label>
+                          <div
+                            onClick={() => newFileInputRef.current?.click()}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              const f = e.dataTransfer?.files?.[0];
+                              if (f) setNewFile(f);
+                            }}
+                            className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
+                          >
+                            {!newFile ? (
+                              <div className="text-center text-sm text-muted-foreground">
+                                Clique ou arraste uma imagem aqui para anexar
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-4">
+                                <img src={createPreviewUrl(newFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
+                                <div className="flex flex-col gap-2">
+                                  <Button variant="outline" onClick={(e) => { e.stopPropagation(); newFileInputRef.current?.click(); }}>Trocar</Button>
+                                  <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setNewFile(null); }}>Remover</Button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                          <input ref={newFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setNewFile(e.target.files?.[0] ?? null)} />
+                        </div>
                       </div>
-                    </div>
 
-                    <DialogFooter>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" onClick={() => setOpenNewUser(false)}>Cancelar</Button>
-                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
-                          // create auth user then upsert into usuarios
-                          try {
-                            if (!newNome || !newEmail || !newPassword) {
-                              toast({ title: 'Preencha todos os campos', variant: 'destructive' });
-                              return;
-                            }
-                            setCreating(true);
+                      <DialogFooter>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" onClick={() => setOpenNewUser(false)}>Cancelar</Button>
+                          <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                            // create auth user then upsert into usuarios
+                            try {
+                              if (!newNome || !newEmail || !newPassword) {
+                                toast({ title: 'Preencha todos os campos', variant: 'destructive' });
+                                return;
+                              }
+                              setCreating(true);
 
-                            // Salvar sessão atual antes de criar o novo usuário
-                            const { data: { session: currentSession } } = await supabase.auth.getSession();
+                              // Salvar sessão atual antes de criar o novo usuário
+                              const { data: { session: currentSession } } = await supabase.auth.getSession();
 
-                            const { data, error } = await supabase.auth.signUp({ 
-                              email: newEmail, 
-                              password: newPassword, 
-                              options: { 
-                                data: { nome: newNome },
-                                emailRedirectTo: window.location.origin
-                              } 
-                            });
+                              const { data, error } = await supabase.auth.signUp({ 
+                                email: newEmail, 
+                                password: newPassword, 
+                                options: { 
+                                  data: { nome: newNome },
+                                  emailRedirectTo: window.location.origin
+                                } 
+                              });
 
-                            if (error) {
-                              toast({ title: 'Erro ao criar autenticação', description: error.message || String(error), variant: 'destructive' });
-                              setCreating(false);
-                              return;
-                            }
+                              if (error) {
+                                toast({ title: 'Erro ao criar autenticação', description: error.message || String(error), variant: 'destructive' });
+                                setCreating(false);
+                                return;
+                              }
 
-                            // try to read created user id from response
-                            type SignUpData = { user?: { id?: string } } | null;
-                            const userId = (data as SignUpData)?.user?.id ?? null;
+                              // try to read created user id from response
+                              type SignUpData = { user?: { id?: string } } | null;
+                              const userId = (data as SignUpData)?.user?.id ?? null;
 
-                            if (userId) {
-                              // if an image was selected, upload it first
-                              let imgUrl: string | null = null;
-                              if (newFile) {
-                                imgUrl = await uploadUserImage(newFile, userId);
-                                if (!imgUrl) {
-                                  toast({ title: 'Aviso', description: 'Imagem não pôde ser enviada. Usuário será criado sem foto.', variant: 'destructive' });
+                              if (userId) {
+                                // if an image was selected, upload it first
+                                let imgUrl: string | null = null;
+                                if (newFile) {
+                                  imgUrl = await uploadUserImage(newFile, userId);
+                                  if (!imgUrl) {
+                                    toast({ title: 'Aviso', description: 'Imagem não pôde ser enviada. Usuário será criado sem foto.', variant: 'destructive' });
+                                  }
+                                }
+
+                                // upsert into usuarios with same uuid
+                                const selectedPapel = predefPapels.find(p => String(p.id) === String(newPapel));
+                                const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso_id: selectedPapel ? Number(selectedPapel.id) : null, ativo: true };
+                                if (imgUrl) upsertObj.img_url = imgUrl;
+                                if (empresaId) upsertObj.empresa_id = empresaId;
+                                const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
+                                if (upsertErr) {
+                                  toast({ title: 'Conta criada, mas erro ao registrar no sistema', description: upsertErr.message || String(upsertErr), variant: 'destructive' });
+                                } else {
+                                  toast({ title: 'Usuário criado', description: 'Autenticação criada e usuário registrado.' });
+                                  await fetchUsuarios();
+                                }
+                              } else {
+                                // fallback: insert without linking id — admin will need to reconcile
+                                const selectedPapel2 = predefPapels.find(p => String(p.id) === String(newPapel));
+                                const insertObj: any = { nome: newNome, email: newEmail, acesso_id: selectedPapel2 ? Number(selectedPapel2.id) : null, ativo: true };
+                                if (empresaId) insertObj.empresa_id = empresaId;
+                                const { error: insErr } = await supabase.from('usuarios').insert(insertObj).select();
+                                if (insErr) {
+                                  toast({ title: 'Erro ao inserir usuário', description: insErr.message || String(insErr), variant: 'destructive' });
+                                } else {
+                                  toast({ title: 'Autenticação criada', description: 'Conta criada. O usuário será registrado no sistema automaticamente após confirmação de email.' });
+                                  await fetchUsuarios();
                                 }
                               }
 
-                              // upsert into usuarios with same uuid
-                              const selectedPapel = predefPapels.find(p => String(p.id) === String(newPapel));
-                              const upsertObj: any = { id: userId, nome: newNome, email: newEmail, acesso_id: selectedPapel ? Number(selectedPapel.id) : null, ativo: true };
-                              if (imgUrl) upsertObj.img_url = imgUrl;
-                              if (empresaId) upsertObj.empresa_id = empresaId;
-                              const { error: upsertErr } = await supabase.from('usuarios').upsert(upsertObj).select();
-                              if (upsertErr) {
-                                toast({ title: 'Conta criada, mas erro ao registrar no sistema', description: upsertErr.message || String(upsertErr), variant: 'destructive' });
-                              } else {
-                                toast({ title: 'Usuário criado', description: 'Autenticação criada e usuário registrado.' });
-                                await fetchUsuarios();
+                              // Restaurar a sessão original (fazer logout do novo usuário e login do admin)
+                              if (currentSession) {
+                                await supabase.auth.setSession({
+                                  access_token: currentSession.access_token,
+                                  refresh_token: currentSession.refresh_token
+                                });
                               }
-                            } else {
-                              // fallback: insert without linking id — admin will need to reconcile
-                              const selectedPapel2 = predefPapels.find(p => String(p.id) === String(newPapel));
-                              const insertObj: any = { nome: newNome, email: newEmail, acesso_id: selectedPapel2 ? Number(selectedPapel2.id) : null, ativo: true };
-                              if (empresaId) insertObj.empresa_id = empresaId;
-                              const { error: insErr } = await supabase.from('usuarios').insert(insertObj).select();
-                              if (insErr) {
-                                toast({ title: 'Erro ao inserir usuário', description: insErr.message || String(insErr), variant: 'destructive' });
-                              } else {
-                                toast({ title: 'Autenticação criada', description: 'Conta criada. O usuário será registrado no sistema automaticamente após confirmação de email.' });
-                                await fetchUsuarios();
-                              }
-                            }
 
-                            // Restaurar a sessão original (fazer logout do novo usuário e login do admin)
-                            if (currentSession) {
-                              await supabase.auth.setSession({
-                                access_token: currentSession.access_token,
-                                refresh_token: currentSession.refresh_token
-                              });
+                              // reset form and close
+                              setNewNome(''); setNewEmail(''); setNewPassword(''); setNewPapel(''); setNewFile(null);
+                              // refresh list (in case creation succeeded)
+                              fetchUsuarios();
+                              setOpenNewUser(false);
+                            } catch (err) {
+                              console.error('Erro criar usuário:', err);
+                              toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                            } finally {
+                              setCreating(false);
                             }
-
-                            // reset form and close
-                            setNewNome(''); setNewEmail(''); setNewPassword(''); setNewPapel(''); setNewFile(null);
-                            // refresh list (in case creation succeeded)
-                            fetchUsuarios();
-                            setOpenNewUser(false);
-                          } catch (err) {
-                            console.error('Erro criar usuário:', err);
-                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                          } finally {
-                            setCreating(false);
-                          }
-                        }} disabled={creating}>{creating ? 'Criando...' : 'Criar usuário'}</Button>
-                      </div>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Acesso</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingUsers ? (
+                          }} disabled={creating}>{creating ? 'Criando...' : 'Criar usuário'}</Button>
+                        </div>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
                     <TableRow>
-                      <TableCell colSpan={5} className="text-sm text-muted-foreground">Carregando usuários...</TableCell>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Acesso</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ) : usersError ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-sm text-destructive">Erro: {usersError}</TableCell>
-                    </TableRow>
-                  ) : users.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-sm text-muted-foreground">Nenhum usuário encontrado.</TableCell>
-                    </TableRow>
-                  ) : (
-                    users.map((usuario) => (
-                      <TableRow key={usuario.id ?? usuario.email ?? usuario.nome}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={usuario.img_url} alt={usuario.nome} />
-                              <AvatarFallback>{usuario.nome.charAt(0).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                            <span>{usuario.nome}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{usuario.email}</TableCell>
-                        <TableCell>
-                          <Badge variant={usuario.acesso_nome && String(usuario.acesso_nome).toLowerCase().includes('admin') ? 'default' : 'secondary'}>
-                            {usuario.acesso_nome ?? 'Operador'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={usuario.ativo ? 'default' : 'secondary'}>
-                            {usuario.ativo ? 'Ativo' : 'Inativo'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            {(() => {
-                              const canEdit = (currentUser?.id && usuario.id && currentUser.id === usuario.id) || (hasPermissao ? hasPermissao(5) : (permissoes ?? []).includes(5));
-                              return (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => {
-                                    if (!canEdit) {
+                  </TableHeader>
+                  <TableBody>
+                    {loadingUsers ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-sm text-muted-foreground">Carregando usuários...</TableCell>
+                      </TableRow>
+                    ) : usersError ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-sm text-destructive">Erro: {usersError}</TableCell>
+                      </TableRow>
+                    ) : users.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="text-sm text-muted-foreground">Nenhum usuário encontrado.</TableCell>
+                      </TableRow>
+                    ) : (
+                      users.map((usuario) => (
+                        <TableRow key={usuario.id ?? usuario.email ?? usuario.nome}>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-3">
+                              <Avatar className="h-8 w-8">
+                                <AvatarImage src={usuario.img_url} alt={usuario.nome} />
+                                <AvatarFallback>{usuario.nome.charAt(0).toUpperCase()}</AvatarFallback>
+                              </Avatar>
+                              <span>{usuario.nome}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell>{usuario.email}</TableCell>
+                          <TableCell>
+                            <Badge variant={usuario.acesso_nome && String(usuario.acesso_nome).toLowerCase().includes('admin') ? 'default' : 'secondary'}>
+                              {usuario.acesso_nome ?? 'Operador'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={usuario.ativo ? 'default' : 'secondary'}>
+                              {usuario.ativo ? 'Ativo' : 'Inativo'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              {(() => {
+                                const canEdit = (currentUser?.id && usuario.id && currentUser.id === usuario.id) || (hasPermissao ? hasPermissao(5) : (permissoes ?? []).includes(5));
+                                return (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => {
+                                      if (!canEdit) {
+                                        toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
+                                        return;
+                                      }
+                                      // open edit modal with user data
+                                      setEditUserId(usuario.id);
+                                      setEditNome(usuario.nome ?? '');
+                                      setEditEmail(usuario.email ?? '');
+                                      // set edit papel to acesso_id from view (or empty string)
+                                      setEditPapel(String((usuario as any).acesso_id ?? ''));
+                                      setEditAtivo(usuario.ativo ?? true);
+                                      setEditOpen(true);
+                                    }}
+                                  >
+                                    Editar
+                                  </Button>
+                                );
+                              })()}
+                              {(() => {
+                                const canManagePerms = hasPermissao ? hasPermissao(21) : (permissoes ?? []).includes(21);
+                                if (!canManagePerms) return null;
+                                return (
+                                  <Button variant="outline" size="sm" onClick={() => {
+                                    setPermDialogUsuarioId(usuario.id);
+                                    setPermDialogUsuarioNome(usuario.nome ?? '');
+                                    setPermDialogOpen(true);
+                                  }}>
+                                    <Lock className="h-4 w-4" />
+                                  </Button>
+                                );
+                              })()}
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => {
+                                    const canDelete = hasPermissao ? hasPermissao(6) : (permissoes ?? []).includes(6);
+                                    if (!canDelete) {
+                                      e.preventDefault();
+                                      e.stopPropagation();
                                       toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
                                       return;
                                     }
-                                    // open edit modal with user data
-                                    setEditUserId(usuario.id);
-                                    setEditNome(usuario.nome ?? '');
-                                    setEditEmail(usuario.email ?? '');
-                                    // set edit papel to acesso_id from view (or empty string)
-                                    setEditPapel(String((usuario as any).acesso_id ?? ''));
-                                    setEditAtivo(usuario.ativo ?? true);
-                                    setEditOpen(true);
-                                  }}
-                                >
-                                  Editar
-                                </Button>
-                              );
-                            })()}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={(e) => {
-                                  const canDelete = hasPermissao ? hasPermissao(6) : (permissoes ?? []).includes(6);
-                                  if (!canDelete) {
-                                    e.preventDefault();
-                                    e.stopPropagation();
-                                    toast({ title: 'Você não tem permissão para isso', description: '', variant: 'destructive' });
-                                    return;
-                                  }
-                                  setDeleteUserId(usuario.id);
-                                  setDeleteUserName(usuario.nome);
-                                }}>
-                                  <Trash className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Tem certeza que deseja deletar o usuário <strong>{usuario.nome}</strong>? Esta ação não pode ser desfeita.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-destructive hover:bg-destructive/90"
-                                    onClick={async () => {
-                                      try {
-                                        if (!usuario.id) {
-                                          toast({ title: 'Erro', description: 'Usuário sem ID não pode ser deletado', variant: 'destructive' });
-                                          return;
+                                    setDeleteUserId(usuario.id);
+                                    setDeleteUserName(usuario.nome);
+                                  }}>
+                                    <Trash className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Tem certeza que deseja deletar o usuário <strong>{usuario.nome}</strong>? Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-destructive hover:bg-destructive/90"
+                                      onClick={async () => {
+                                        try {
+                                          if (!usuario.id) {
+                                            toast({ title: 'Erro', description: 'Usuário sem ID não pode ser deletado', variant: 'destructive' });
+                                            return;
+                                          }
+                                          setDeleting(true);
+                                          const { error } = await supabase.from('usuarios').delete().eq('id', usuario.id);
+                                          if (error) {
+                                            toast({ title: 'Erro ao deletar usuário', description: error.message || String(error), variant: 'destructive' });
+                                          } else {
+                                            toast({ title: 'Usuário deletado', description: `${usuario.nome} foi removido do sistema.` });
+                                            await fetchUsuarios();
+                                          }
+                                        } catch (err) {
+                                          console.error('Erro ao deletar usuário:', err);
+                                          toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                        } finally {
+                                          setDeleting(false);
                                         }
-                                        setDeleting(true);
-                                        const { error } = await supabase.from('usuarios').delete().eq('id', usuario.id);
-                                        if (error) {
-                                          toast({ title: 'Erro ao deletar usuário', description: error.message || String(error), variant: 'destructive' });
-                                        } else {
-                                          toast({ title: 'Usuário deletado', description: `${usuario.nome} foi removido do sistema.` });
-                                          await fetchUsuarios();
-                                        }
-                                      } catch (err) {
-                                        console.error('Erro ao deletar usuário:', err);
-                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                                      } finally {
-                                        setDeleting(false);
-                                      }
-                                    }}
-                                    disabled={deleting}
-                                  >
-                                    {deleting ? 'Deletando...' : 'Deletar'}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                                      }}
+                                      disabled={deleting}
+                                    >
+                                      {deleting ? 'Deletando...' : 'Deletar'}
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         {/* Edit status dialog */}
@@ -1189,396 +1255,260 @@ export function Configuracoes() {
           </DialogContent>
         </Dialog>
 
-        <TabsContent value="status">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Status dos Pedidos</CardTitle>
-                <Dialog open={createStatusOpen} onOpenChange={setCreateStatusOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-purple-600 hover:bg-purple-700">Novo Status</Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Novo Status</DialogTitle>
-                      <DialogDescription>Crie um novo status para os pedidos.</DialogDescription>
-                    </DialogHeader>
-                    <div className="grid gap-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="novo-status-nome">Nome</Label>
-                        <Input id="novo-status-nome" value={createNome} onChange={(e) => setCreateNome(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="novo-status-cor">Cor</Label>
-                        <div className="flex items-center gap-2">
-                          <input id="novo-status-cor" type="color" value={createCor} onChange={(e) => setCreateCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
-                          <Input value={createCor} onChange={(e) => setCreateCor(e.target.value)} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="novo-status-ordem">Ordem</Label>
-                        <Input id="novo-status-ordem" type="number" value={String(createOrdem)} onChange={(e) => setCreateOrdem(Number(e.target.value))} />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" onClick={() => setCreateStatusOpen(false)}>Cancelar</Button>
-                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
-                          try {
-                            if (!createNome || !createCor) {
-                              toast({ title: 'Preencha os campos', variant: 'destructive' });
-                              return;
-                            }
-                            setCreatingStatus(true);
-                            const insertObj: any = { nome: createNome, cor_hex: createCor, ordem: createOrdem };
-                            if (empresaId) insertObj.empresa_id = empresaId;
-                            const { error } = await supabase.from('status').insert(insertObj).select();
-                            if (error) {
-                              toast({ title: 'Erro ao criar status', description: error.message || String(error), variant: 'destructive' });
-                            } else {
-                              toast({ title: 'Status criado' });
-                              fetchStatuses();
-                              setCreateNome(''); setCreateCor('#000000'); setCreateOrdem(1);
-                            }
-                            setCreateStatusOpen(false);
-                          } catch (err) {
-                            console.error('Erro criar status:', err);
-                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                          } finally {
-                            setCreatingStatus(false);
-                          }
-                        }} disabled={creatingStatus}>{creatingStatus ? 'Criando...' : 'Criar'}</Button>
-                      </div>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+        {/* Permissões do usuário (dialog) */}
+        <Dialog open={permDialogOpen} onOpenChange={(v) => { if (!v) { setPermDialogOpen(false); setDialogPerms([]); } else setPermDialogOpen(true); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Permissões de {permDialogUsuarioNome}</DialogTitle>
+              <DialogDescription>Gerencie as permissões deste usuário. Só aparece se você tiver permissão necessária.</DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-3">
+              <div className="flex gap-2 items-center">
+                <select value={String(dialogCategoriaFilter ?? '')} onChange={(e) => setDialogCategoriaFilter(e.target.value ? Number(e.target.value) : null)} className="border rounded px-2 py-1">
+                  <option value="">Todas as categorias</option>
+                  {categoriasPermissoes.map((c) => (
+                    <option key={c.id} value={String(c.id)}>{c.categoria_nome}</option>
+                  ))}
+                </select>
+                <Input placeholder="Pesquisar permissão" value={dialogSearch} onChange={(e) => setDialogSearch(e.target.value)} />
+                <Button onClick={() => { setDialogSearch(''); setDialogCategoriaFilter(null); }}>Limpar</Button>
               </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Ordem</TableHead>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Cor</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingStatuses ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-sm text-muted-foreground">Carregando status...</TableCell>
-                    </TableRow>
-                  ) : statusesError ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-sm text-destructive">Erro: {statusesError}</TableCell>
-                    </TableRow>
-                  ) : statuses.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-sm text-muted-foreground">Nenhum status encontrado.</TableCell>
-                    </TableRow>
+
+              <div>
+                {loadingDialogPerms ? (
+                  <div>Carregando...</div>
+                ) : dialogPerms.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Nenhuma permissão encontrada para este usuário.</div>
                   ) : (
-                    statuses.map((status) => (
-                      <TableRow key={status.id ?? status.nome}>
-                        <TableCell>{status.ordem}</TableCell>
-                        <TableCell className="font-medium">{status.nome}</TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div 
-                              className="w-4 h-4 rounded-full"
-                              style={{ backgroundColor: status.cor_hex }}
-                            />
-                            <span className="font-mono text-sm">{status.cor_hex}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => {
-                              // open edit status modal
-                              setEditStatusId(status.id);
-                              setEditStatusNome(status.nome);
-                              setEditStatusCor(status.cor_hex);
-                              setEditStatusOrdem(status.ordem);
-                              setEditStatusOpen(true);
-                            }}>Editar</Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
-                                  <Trash className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Tem certeza que deseja deletar o status <strong>{status.nome}</strong>? Esta ação não pode ser desfeita.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-destructive hover:bg-destructive/90"
-                                    onClick={async () => {
-                                      try {
-                                        if (!status.id) {
-                                          toast({ title: 'Erro', description: 'Status sem ID não pode ser deletado', variant: 'destructive' });
-                                          return;
-                                        }
-                                        const { error } = await supabase.from('status').delete().eq('id', status.id);
-                                        if (error) {
-                                          toast({ title: 'Erro ao deletar status', description: error.message || String(error), variant: 'destructive' });
-                                        } else {
-                                          toast({ title: 'Status deletado', description: `${status.nome} foi removido do sistema.` });
-                                          await fetchStatuses();
-                                        }
-                                      } catch (err) {
-                                        console.error('Erro ao deletar status:', err);
-                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                                      }
-                                    }}
-                                  >
-                                    Deletar
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="plataformas">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Plataformas de Venda</CardTitle>
-                <Dialog open={createPlataformaOpen} onOpenChange={setCreatePlataformaOpen}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-purple-600 hover:bg-purple-700">
-                      Nova Plataforma
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Nova Plataforma</DialogTitle>
-                      <DialogDescription>Crie uma nova plataforma de venda.</DialogDescription>
-                    </DialogHeader>
-
-                    <div className="grid gap-2">
-                      <div className="space-y-1">
-                        <Label htmlFor="nova-plataforma-nome">Nome</Label>
-                        <Input id="nova-plataforma-nome" value={createPlataformaNome} onChange={(e) => setCreatePlataformaNome(e.target.value)} />
-                      </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="nova-plataforma-cor">Cor</Label>
-                        <div className="flex items-center gap-2">
-                          <input id="nova-plataforma-cor" type="color" value={createPlataformaCor} onChange={(e) => setCreatePlataformaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
-                          <Input value={createPlataformaCor} onChange={(e) => setCreatePlataformaCor(e.target.value)} />
-                        </div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label>Logo (opcional)</Label>
-                        <div
-                          onClick={() => createPlataformaFileInputRef.current?.click()}
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={(e) => {
-                            e.preventDefault();
-                            const f = e.dataTransfer?.files?.[0];
-                            if (f) setCreatePlataformaFile(f);
-                          }}
-                          className="w-full border-dashed border-2 rounded p-4 flex items-center justify-center cursor-pointer hover:border-primary transition-colors"
-                        >
-                          {!createPlataformaFile ? (
-                            <div className="text-center text-sm text-muted-foreground">
-                              Clique ou arraste uma imagem aqui
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-4">
-                              <img src={createPreviewUrl(createPlataformaFile) ?? ''} alt="preview" className="w-24 h-24 object-cover rounded" />
-                              <div className="flex flex-col gap-2">
-                                <Button variant="outline" onClick={(e) => { e.stopPropagation(); createPlataformaFileInputRef.current?.click(); }}>Trocar</Button>
-                                <Button variant="ghost" onClick={(e) => { e.stopPropagation(); setCreatePlataformaFile(null); }}>Remover</Button>
+                  <div>
+                    {(() => {
+                      const total = dialogPerms.length;
+                      const totalPages = Math.max(1, Math.ceil(total / dialogPageSize));
+                      const start = (dialogPage - 1) * dialogPageSize;
+                      const visible = dialogPerms.slice(start, start + dialogPageSize);
+                      return (
+                        <div className="space-y-2">
+                          {visible.map((p) => (
+                            <div key={p.permissao_id} className="flex items-center justify-between border rounded p-2">
+                              <div>
+                                <div className="font-medium">{p.permissao_nome}</div>
+                                <div className="text-xs text-muted-foreground">{p.nome_categoria}</div>
+                              </div>
+                              <div>
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(p.tem_permissao)}
+                                  onChange={async (e) => {
+                                    const newVal = e.target.checked;
+                                    try {
+                                      const { error } = await supabase.rpc('set_usuario_permissao', { p_usuario_id: permDialogUsuarioId, p_permissao_id: p.permissao_id, p_value: newVal });
+                                      if (error) throw error;
+                                      setDialogPerms((prev) => prev.map((pp) => pp.permissao_id === p.permissao_id ? { ...pp, tem_permissao: newVal } : pp));
+                                      toast({ title: 'Atualizado', description: 'Permissão atualizada.' });
+                                    } catch (err) {
+                                      console.error('Erro ao atualizar permissão:', err);
+                                      toast({ title: 'Erro', description: 'Não foi possível atualizar permissão', variant: 'destructive' });
+                                    }
+                                  }}
+                                />
                               </div>
                             </div>
-                          )}
+                          ))}
+
+                          <div className="flex items-center justify-end mt-2">
+                            <div className="flex items-center gap-2">
+                              <Button size="sm" variant="outline" onClick={() => setDialogPage((p) => Math.max(1, p - 1))} disabled={dialogPage === 1}>Anterior</Button>
+                              <div className="text-sm">{dialogPage} de {totalPages}</div>
+                              <Button size="sm" variant="outline" onClick={() => setDialogPage((p) => Math.min(totalPages, p + 1))} disabled={dialogPage === totalPages}>Próximo</Button>
+                            </div>
+                          </div>
                         </div>
-                        <input ref={createPlataformaFileInputRef} type="file" accept="image/*" className="hidden" onChange={(e) => setCreatePlataformaFile(e.target.files?.[0] ?? null)} />
-                      </div>
-                    </div>
-
-                    <DialogFooter>
-                      <div className="flex gap-2">
-                        <Button variant="ghost" onClick={() => setCreatePlataformaOpen(false)}>Cancelar</Button>
-                        <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
-                          try {
-                            if (!createPlataformaNome || !createPlataformaCor) {
-                              toast({ title: 'Preencha os campos', variant: 'destructive' });
-                              return;
-                            }
-                            setCreatingPlataforma(true);
-
-                            // Insert plataforma first to get ID
-                            const insertObj: any = { nome: createPlataformaNome, cor: createPlataformaCor };
-                            if (empresaId) insertObj.empresa_id = empresaId;
-                            const { data: insertData, error: insertError } = await supabase
-                              .from('plataformas')
-                              .insert(insertObj)
-                              .select()
-                              .single();
-
-                            if (insertError) {
-                              toast({ title: 'Erro ao criar plataforma', description: insertError.message || String(insertError), variant: 'destructive' });
-                              return;
-                            }
-
-                            const plataformaId = insertData?.id;
-
-                            // Upload image if provided
-                            if (createPlataformaFile && plataformaId) {
-                              const imgUrl = await uploadPlataformaImage(createPlataformaFile, plataformaId);
-                              if (imgUrl) {
-                                await supabase.from('plataformas').update({ img_url: imgUrl }).eq('id', plataformaId);
-                              }
-                            }
-
-                            toast({ title: 'Plataforma criada' });
-                            await fetchPlataformas();
-                            setCreatePlataformaNome('');
-                            setCreatePlataformaCor('#000000');
-                            setCreatePlataformaFile(null);
-                            setCreatePlataformaOpen(false);
-                          } catch (err) {
-                            console.error('Erro criar plataforma:', err);
-                            toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                          } finally {
-                            setCreatingPlataforma(false);
-                          }
-                        }} disabled={creatingPlataforma}>{creatingPlataforma ? 'Criando...' : 'Criar'}</Button>
-                      </div>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>Cor</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {loadingPlataformas ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-sm text-muted-foreground">Carregando plataformas...</TableCell>
-                    </TableRow>
-                  ) : plataformasError ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-sm text-destructive">Erro: {plataformasError}</TableCell>
-                    </TableRow>
-                  ) : plataformas.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-sm text-muted-foreground">Nenhuma plataforma encontrada.</TableCell>
-                    </TableRow>
-                  ) : (
-                    plataformas.map((plataforma) => (
-                      <TableRow key={plataforma.id}>
-                        <TableCell className="font-medium">
-                          <div className="flex items-center gap-3">
-                            {plataforma.img_url && (
-                              <Avatar className="h-8 w-8">
-                                <AvatarImage src={plataforma.img_url} alt={plataforma.nome} />
-                                <AvatarFallback>{plataforma.nome.charAt(0).toUpperCase()}</AvatarFallback>
-                              </Avatar>
-                            )}
-                            <span>{plataforma.nome}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
+            </div>
+
+          </DialogContent>
+        </Dialog>
+
+        <TabsContent value="status">
+          {!canViewStatus ? (
+            <Card className="w-[500px] justify-center mx-auto">
+              <CardContent className="p-8 text-center">
+                <AlertCircle className="mx-auto mb-4 text-red-600" />
+                <h3 className="text-lg font-semibold">Você não tem permissão para gerenciar os status</h3>
+                <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Status dos Pedidos</CardTitle>
+                  <Dialog open={createStatusOpen} onOpenChange={setCreateStatusOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="bg-purple-600 hover:bg-purple-700">Novo Status</Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Novo Status</DialogTitle>
+                        <DialogDescription>Crie um novo status para os pedidos.</DialogDescription>
+                      </DialogHeader>
+                      <div className="grid gap-2">
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-status-nome">Nome</Label>
+                          <Input id="novo-status-nome" value={createNome} onChange={(e) => setCreateNome(e.target.value)} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-status-cor">Cor</Label>
                           <div className="flex items-center gap-2">
-                            <div 
-                              className="w-4 h-4 rounded-full"
-                              style={{ backgroundColor: plataforma.cor }}
-                            />
-                            <span className="font-mono text-sm">{plataforma.cor}</span>
+                            <input id="novo-status-cor" type="color" value={createCor} onChange={(e) => setCreateCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
+                            <Input value={createCor} onChange={(e) => setCreateCor(e.target.value)} />
                           </div>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button variant="outline" size="sm" onClick={() => {
-                              setEditPlataformaId(plataforma.id);
-                              setEditPlataformaNome(plataforma.nome);
-                              setEditPlataformaCor(plataforma.cor);
-                              setEditPlataformaOpen(true);
-                            }}>
-                              Editar
-                            </Button>
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => {
-                                  setDeletePlataformaId(plataforma.id);
-                                  setDeletePlataformaNome(plataforma.nome);
-                                }}>
-                                  <Trash className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Tem certeza que deseja deletar a plataforma <strong>{plataforma.nome}</strong>? Esta ação não pode ser desfeita.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-destructive hover:bg-destructive/90"
-                                    onClick={async () => {
-                                      try {
-                                        if (!plataforma.id) {
-                                          toast({ title: 'Erro', description: 'Plataforma sem ID não pode ser deletada', variant: 'destructive' });
-                                          return;
-                                        }
-                                        setDeletingPlataforma(true);
-                                        const { error } = await supabase.from('plataformas').delete().eq('id', plataforma.id);
-                                        if (error) {
-                                          toast({ title: 'Erro ao deletar plataforma', description: error.message || String(error), variant: 'destructive' });
-                                        } else {
-                                          toast({ title: 'Plataforma deletada', description: `${plataforma.nome} foi removida do sistema.` });
-                                          await fetchPlataformas();
-                                        }
-                                      } catch (err) {
-                                        console.error('Erro ao deletar plataforma:', err);
-                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                                      } finally {
-                                        setDeletingPlataforma(false);
-                                      }
-                                    }}
-                                    disabled={deletingPlataforma}
-                                  >
-                                    {deletingPlataforma ? 'Deletando...' : 'Deletar'}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
+                        </div>
+                        <div className="space-y-1">
+                          <Label htmlFor="novo-status-ordem">Ordem</Label>
+                          <Input id="novo-status-ordem" type="number" value={String(createOrdem)} onChange={(e) => setCreateOrdem(Number(e.target.value))} />
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" onClick={() => setCreateStatusOpen(false)}>Cancelar</Button>
+                          <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                            try {
+                              if (!createNome || !createCor) {
+                                toast({ title: 'Preencha os campos', variant: 'destructive' });
+                                return;
+                              }
+                              setCreatingStatus(true);
+                              const insertObj: any = { nome: createNome, cor_hex: createCor, ordem: createOrdem };
+                              if (empresaId) insertObj.empresa_id = empresaId;
+                              const { error } = await supabase.from('status').insert(insertObj).select();
+                              if (error) {
+                                toast({ title: 'Erro ao criar status', description: error.message || String(error), variant: 'destructive' });
+                              } else {
+                                toast({ title: 'Status criado' });
+                                fetchStatuses();
+                                setCreateNome(''); setCreateCor('#000000'); setCreateOrdem(1);
+                              }
+                              setCreateStatusOpen(false);
+                            } catch (err) {
+                              console.error('Erro criar status:', err);
+                              toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                            } finally {
+                              setCreatingStatus(false);
+                            }
+                          }} disabled={creatingStatus}>{creatingStatus ? 'Criando...' : 'Criar'}</Button>
+                        </div>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ordem</TableHead>
+                      <TableHead>Nome</TableHead>
+                      <TableHead>Cor</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loadingStatuses ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-muted-foreground">Carregando status...</TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                    ) : statusesError ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-destructive">Erro: {statusesError}</TableCell>
+                      </TableRow>
+                    ) : statuses.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-sm text-muted-foreground">Nenhum status encontrado.</TableCell>
+                      </TableRow>
+                    ) : (
+                      statuses.map((status) => (
+                        <TableRow key={status.id ?? status.nome}>
+                          <TableCell>{status.ordem}</TableCell>
+                          <TableCell className="font-medium">{status.nome}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-4 h-4 rounded-full"
+                                style={{ backgroundColor: status.cor_hex }}
+                              />
+                              <span className="font-mono text-sm">{status.cor_hex}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button variant="outline" size="sm" onClick={() => {
+                                // open edit status modal
+                                setEditStatusId(status.id);
+                                setEditStatusNome(status.nome);
+                                setEditStatusCor(status.cor_hex);
+                                setEditStatusOrdem(status.ordem);
+                                setEditStatusOpen(true);
+                              }}>Editar</Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
+                                    <Trash className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Tem certeza que deseja deletar o status <strong>{status.nome}</strong>? Esta ação não pode ser desfeita.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      className="bg-destructive hover:bg-destructive/90"
+                                      onClick={async () => {
+                                        try {
+                                          if (!status.id) {
+                                            toast({ title: 'Erro', description: 'Status sem ID não pode ser deletado', variant: 'destructive' });
+                                            return;
+                                          }
+                                          const { error } = await supabase.from('status').delete().eq('id', status.id);
+                                          if (error) {
+                                            toast({ title: 'Erro ao deletar status', description: error.message || String(error), variant: 'destructive' });
+                                          } else {
+                                            toast({ title: 'Status deletado', description: `${status.nome} foi removido do sistema.` });
+                                            await fetchStatuses();
+                                          }
+                                        } catch (err) {
+                                          console.error('Erro ao deletar status:', err);
+                                          toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                        }
+                                      }}
+                                    >
+                                      Deletar
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
+
+        
 
         {/* Edit Plataforma Dialog */}
         <Dialog open={editPlataformaOpen} onOpenChange={setEditPlataformaOpen}>
@@ -1691,65 +1621,7 @@ export function Configuracoes() {
                     <GripVertical className="h-4 w-4 mr-2" />
                     {editOrderMode ? 'Finalizar Ordenação' : 'Editar Ordem'}
                   </Button>
-                  <Dialog open={createSetorOpen} onOpenChange={setCreateSetorOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="bg-purple-600 hover:bg-purple-700">
-                        <Plus className="h-4 w-4 mr-2" />
-                        Novo Setor
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Novo Setor</DialogTitle>
-                        <DialogDescription>Adicione um novo setor ao sistema.</DialogDescription>
-                      </DialogHeader>
-                      <div className="grid gap-3">
-                        <div className="space-y-1">
-                          <Label htmlFor="novo-setor-nome">Nome do Setor</Label>
-                          <Input
-                            id="novo-setor-nome"
-                            placeholder="Ex: Design"
-                            value={createSetorNome}
-                            onChange={(e) => setCreateSetorNome(e.target.value)}
-                          />
-                        </div>
-                        <div className="space-y-1">
-                          <Label htmlFor="novo-setor-rota">Rota (URL)</Label>
-                          <Input
-                            id="novo-setor-rota"
-                            placeholder="Ex: /design"
-                            value={createSetorRota}
-                            onChange={(e) => setCreateSetorRota(e.target.value)}
-                          />
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button variant="ghost" onClick={() => setCreateSetorOpen(false)}>Cancelar</Button>
-                        <Button
-                          className="bg-purple-600 hover:bg-purple-700"
-                          onClick={() => {
-                            if (!createSetorNome || !createSetorRota) {
-                              toast({ title: 'Preencha todos os campos', variant: 'destructive' });
-                              return;
-                            }
-                            const newSetor: Setor = {
-                              id: createSetorRota.replace('/', '').toLowerCase(),
-                              nome: createSetorNome,
-                              rota: createSetorRota,
-                              ordem: setores.length,
-                            };
-                            const newSetores = [...setores, newSetor];
-                            saveSetores(newSetores);
-                            setCreateSetorNome('');
-                            setCreateSetorRota('');
-                            setCreateSetorOpen(false);
-                          }}
-                        >
-                          Criar Setor
-                        </Button>
-                      </DialogFooter>
-                    </DialogContent>
-                  </Dialog>
+                  {/* Novo Setor removido */}
                 </div>
               </div>
             </CardHeader>
@@ -1778,67 +1650,16 @@ export function Configuracoes() {
                     {editOrderMode && (
                       <GripVertical className="h-5 w-5 text-muted-foreground flex-shrink-0" />
                     )}
-                    <div className="flex-1 grid grid-cols-3 gap-4 items-center">
+                    <div className="flex-1 flex items-center gap-6">
                       <div>
                         <div className="text-sm text-muted-foreground">Ordem</div>
                         <div className="font-medium">{index + 1}</div>
                       </div>
                       <div>
-                        <div className="text-sm text-muted-foreground">Nome</div>
                         <div className="font-medium">{setor.nome}</div>
                       </div>
-                      <div>
-                        <div className="text-sm text-muted-foreground">Rota</div>
-                        <div className="font-mono text-sm">{setor.rota}</div>
-                      </div>
                     </div>
-                    {!editOrderMode && (
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditSetorId(setor.id);
-                            setEditSetorNome(setor.nome);
-                            setEditSetorRota(setor.rota);
-                            setEditSetorOpen(true);
-                          }}
-                        >
-                          Editar
-                        </Button>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm" className="text-destructive hover:text-destructive">
-                              <Trash className="h-4 w-4" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Tem certeza que deseja deletar o setor <strong>{setor.nome}</strong>? Esta ação não pode ser desfeita.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                              <AlertDialogAction
-                                className="bg-destructive hover:bg-destructive/90"
-                                onClick={() => {
-                                  const newSetores = setores.filter((s) => s.id !== setor.id);
-                                  newSetores.forEach((s, idx) => {
-                                    s.ordem = idx;
-                                  });
-                                  saveSetores(newSetores);
-                                  toast({ title: 'Setor deletado', description: `${setor.nome} foi removido.` });
-                                }}
-                              >
-                                Deletar
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      </div>
-                    )}
+                    {/* Ações de Editar/Deletar setor removidas */}
                   </div>
                 ))}
               </div>
@@ -1846,220 +1667,22 @@ export function Configuracoes() {
           </Card>
         </TabsContent>
 
-        {/* Edit Setor Dialog */}
-        <Dialog open={editSetorOpen} onOpenChange={setEditSetorOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Editar Setor</DialogTitle>
-              <DialogDescription>Atualize as informações do setor.</DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="edit-setor-nome">Nome do Setor</Label>
-                <Input
-                  id="edit-setor-nome"
-                  value={editSetorNome}
-                  onChange={(e) => setEditSetorNome(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="edit-setor-rota">Rota (URL)</Label>
-                <Input
-                  id="edit-setor-rota"
-                  value={editSetorRota}
-                  onChange={(e) => setEditSetorRota(e.target.value)}
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="ghost" onClick={() => setEditSetorOpen(false)}>Cancelar</Button>
-              <Button
-                className="bg-purple-600 hover:bg-purple-700"
-                onClick={() => {
-                  if (!editSetorNome || !editSetorRota) {
-                    toast({ title: 'Preencha todos os campos', variant: 'destructive' });
-                    return;
-                  }
-                  const newSetores = setores.map((s) =>
-                    s.id === editSetorId
-                      ? { ...s, nome: editSetorNome, rota: editSetorRota }
-                      : s
-                  );
-                  saveSetores(newSetores);
-                  setEditSetorOpen(false);
-                }}
-              >
-                Salvar Alterações
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        {/* Edit Setor dialog removed */}
 
-        <TabsContent value="permissoes">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between w-full">
-                <div className="flex items-center gap-4">
-                  <CardTitle>Permissões</CardTitle>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="inline-flex items-center gap-2 px-3 py-1 border rounded-full bg-white text-sm">
-                        <span>{
-                          selectedCategoriaPermissao
-                            ? (categoriasPermissoes.find(c => c.id === selectedCategoriaPermissao)?.categoria_nome ?? 'filtro')
-                            : 'filtro'
-                        }</span>
-                        <ChevronDown className="w-4 h-4 text-gray-600" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent sideOffset={8} align="start" className="min-w-[12rem]">
-                      {loadingCategoriasPermissoes ? (
-                        <DropdownMenuItem>Carregando...</DropdownMenuItem>
-                      ) : (
-                        categoriasPermissoes.map((c) => {
-                          const active = selectedCategoriaPermissao === c.id;
-                          return (
-                            <DropdownMenuItem
-                              key={c.id}
-                              onSelect={() => setSelectedCategoriaPermissao(c.id)}
-                              className={active ? 'bg-accent text-accent-foreground' : ''}
-                            >
-                              {c.categoria_nome}
-                            </DropdownMenuItem>
-                          );
-                        })
-                      )}
-                      {selectedCategoriaPermissao != null && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem onSelect={() => setSelectedCategoriaPermissao(null)}>Limpar filtro</DropdownMenuItem>
-                        </>
-                      )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-
-                <div>
-                  <Button className="bg-[#7a5a32] hover:bg-[#6b4927] text-white" onClick={() => setPredefOpen(true)}>
-                    Visualizar predefinições
-                  </Button>
-
-                  <Dialog open={predefOpen} onOpenChange={setPredefOpen}>
-                    <DialogContent className="sm:max-w-4xl max-w-[95vw] p-4">
-                      <DialogHeader>
-                        <DialogTitle>Gerenciar predefinições</DialogTitle>
-                        <DialogDescription>Clique em uma pré-definição para expandir e ver suas permissões.</DialogDescription>
-                      </DialogHeader>
-
-                      <div className="mt-3">
-                        <div className="h-[520px] sm:h-[420px] overflow-auto rounded-md border bg-white">
-                          {loadingPredefinicoes ? (
-                            <div className="py-8 text-center text-sm text-muted-foreground">Carregando...</div>
-                          ) : predefinicoes.length === 0 ? (
-                            <div className="py-8 text-center text-sm text-muted-foreground">Nenhuma predefinição encontrada</div>
-                          ) : (
-                            <div className="divide-y">
-                              {predefinicoes.map((p) => (
-                                <div key={p.id} className="">
-                                  <div className="flex items-center justify-between px-4 py-3 hover:bg-gray-50">
-                                    <button
-                                      type="button"
-                                      className="text-left font-medium text-sm truncate"
-                                      onClick={() => {
-                                        if (selectedPredef === p.id) {
-                                          setSelectedPredef(null);
-                                          setPredefPermissoes([]);
-                                        } else {
-                                          setSelectedPredef(p.id);
-                                          fetchPredefPermissoes(p.id);
-                                        }
-                                      }}
-                                      aria-expanded={selectedPredef === p.id}
-                                    >
-                                      {p.nome}
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      aria-label={selectedPredef === p.id ? 'Recolher' : 'Expandir'}
-                                      onClick={() => {
-                                        if (selectedPredef === p.id) {
-                                          setSelectedPredef(null);
-                                          setPredefPermissoes([]);
-                                        } else {
-                                          setSelectedPredef(p.id);
-                                          fetchPredefPermissoes(p.id);
-                                        }
-                                      }}
-                                      className={`p-1 rounded-md transform transition-transform ${selectedPredef === p.id ? 'rotate-180' : ''}`}
-                                    >
-                                      <ChevronDown size={18} />
-                                    </button>
-                                  </div>
-
-                                  {selectedPredef === p.id && (
-                                    <div className="px-6 pb-4 bg-gray-50">
-                                      {loadingPredefPermissoes ? (
-                                        <div className="py-4 text-sm text-muted-foreground">Carregando permissões...</div>
-                                      ) : predefPermissoes.length === 0 ? (
-                                        <div className="py-4 text-sm text-muted-foreground">Nenhuma permissão encontrada para esta pré-definição</div>
-                                      ) : (
-                                        <ul className="mt-2 space-y-1">
-                                          {predefPermissoes.map((perm) => (
-                                            <li key={perm.id} className="px-2 py-1 text-sm text-muted-foreground">{perm.permissao_nome}</li>
-                                          ))}
-                                        </ul>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="h-[420px] border rounded-md p-4 bg-white overflow-auto">
-                {loadingPermissoes ? (
-                  <div className="py-8 text-center text-sm text-muted-foreground">Carregando permissões...</div>
-                ) : permissoesList.length === 0 ? (
-                  <div className="py-8 text-center text-sm text-muted-foreground">Nenhuma permissão cadastrada</div>
-                ) : (
-                  (() => {
-                    const filtered = selectedCategoriaPermissao != null
-                      ? permissoesList.filter(p => Number(p.categoria_permissao_id) === Number(selectedCategoriaPermissao))
-                      : permissoesList;
-                    if (filtered.length === 0) {
-                      return (
-                        <div className="py-8 text-center text-sm text-muted-foreground">Nenhuma permissão encontrada para o filtro selecionado</div>
-                      );
-                    }
-                    return (
-                      <div className="space-y-2">
-                        {filtered.map((perm) => (
-                          <div key={perm.id} className="flex items-center justify-between px-3 py-2 hover:bg-gray-50 rounded">
-                            <div className="text-sm">{perm.permissao_nome}</div>
-                            <div className="text-xs text-muted-foreground">#{perm.id}</div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  })()
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+        
 
         <TabsContent value="formas-pagamento">
-          <Card>
+          {!canAccessFormas ? (
+            <Card className="w-[500px] justify-center mx-auto">
+              <CardContent className="p-8 text-center">
+                <AlertCircle className="mx-auto mb-4 text-red-600" />
+                <h3 className="text-lg font-semibold">Você não tem permissão para gerenciar as formas de pagamento</h3>
+                <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+            <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Formas de Pagamentos</CardTitle>
@@ -2211,100 +1834,126 @@ export function Configuracoes() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {formasPagamento.map((forma) => (
-                      <TableRow key={forma.id}>
-                        <TableCell>
-                          {forma.img_url ? (
-                            <img src={forma.img_url} alt={forma.nome} className="w-12 h-12 object-cover rounded" />
-                          ) : (
-                            <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
-                              <CreditCard className="h-6 w-6 text-muted-foreground" />
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="font-medium">{forma.nome}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                setEditFormaPagamentoId(forma.id);
-                                setEditFormaPagamentoNome(forma.nome);
-                                setEditFormaPagamentoFile(null);
-                                setEditFormaPagamentoOpen(true);
-                              }}
-                            >
-                              Editar
-                            </Button>
-                            <AlertDialog
-                              open={deleteFormaPagamentoId === forma.id}
-                              onOpenChange={(open) => {
-                                if (!open) {
-                                  setDeleteFormaPagamentoId(undefined);
-                                  setDeleteFormaPagamentoNome('');
-                                }
-                              }}
-                            >
-                              <AlertDialogTrigger asChild>
-                                <Button
-                                  variant="destructive"
-                                  size="sm"
-                                  onClick={() => {
-                                    setDeleteFormaPagamentoId(forma.id);
-                                    setDeleteFormaPagamentoNome(forma.nome);
-                                  }}
-                                >
-                                  <Trash className="h-4 w-4" />
-                                </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Tem certeza que deseja excluir a forma de pagamento "{deleteFormaPagamentoNome}"? Esta ação não pode ser desfeita.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    className="bg-destructive hover:bg-destructive/90"
-                                    onClick={async () => {
-                                      try {
-                                        if (!deleteFormaPagamentoId) return;
-                                        setDeletingFormaPagamento(true);
-
-                                        const { error } = await supabase
-                                          .from('formas_pagamentos')
-                                          .delete()
-                                          .eq('id', deleteFormaPagamentoId);
-
-                                        if (error) {
-                                          toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
-                                        } else {
-                                          toast({ title: 'Forma de pagamento excluída com sucesso!' });
-                                          await fetchFormasPagamento();
+                    {(() => {
+                      const groups: Record<string, typeof formasPagamento> = {};
+                      formasPagamento.forEach((f) => {
+                        const key = (f.nome || '').trim().split(/\s+/)[0] || 'Outros';
+                        if (!groups[key]) groups[key] = [];
+                        groups[key].push(f);
+                      });
+                      return Object.entries(groups).map(([group, items]) => {
+                        const opened = Boolean(openGroups[group]);
+                        return (
+                          <Fragment key={group}>
+                            <TableRow className="cursor-pointer" onClick={() => setOpenGroups((prev) => ({ ...prev, [group]: !prev[group] }))}>
+                              <TableCell colSpan={2} className="bg-gray-50 font-semibold">
+                                <div className="flex items-center justify-between">
+                                  <span>{group}</span>
+                                  <span className="text-sm text-muted-foreground">{items.length}</span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="bg-gray-50 text-right">
+                                <ChevronDown className={`inline-block transition-transform ${opened ? 'rotate-180' : ''}`} />
+                              </TableCell>
+                            </TableRow>
+                            {opened && items.map((forma) => (
+                              <TableRow key={forma.id}>
+                                <TableCell>
+                                  {forma.img_url ? (
+                                    <img src={forma.img_url} alt={forma.nome} className="w-12 h-12 object-cover rounded" />
+                                  ) : (
+                                    <div className="w-12 h-12 bg-muted rounded flex items-center justify-center">
+                                      <CreditCard className="h-6 w-6 text-muted-foreground" />
+                                    </div>
+                                  )}
+                                </TableCell>
+                                <TableCell className="font-medium">{forma.nome}</TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex justify-end gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => {
+                                        setEditFormaPagamentoId(forma.id);
+                                        setEditFormaPagamentoNome(forma.nome);
+                                        setEditFormaPagamentoFile(null);
+                                        setEditFormaPagamentoOpen(true);
+                                      }}
+                                    >
+                                      Editar
+                                    </Button>
+                                    <AlertDialog
+                                      open={deleteFormaPagamentoId === forma.id}
+                                      onOpenChange={(open) => {
+                                        if (!open) {
                                           setDeleteFormaPagamentoId(undefined);
                                           setDeleteFormaPagamentoNome('');
                                         }
-                                      } catch (err) {
-                                        console.error('Erro ao excluir forma de pagamento:', err);
-                                        toast({ title: 'Erro', description: String(err), variant: 'destructive' });
-                                      } finally {
-                                        setDeletingFormaPagamento(false);
-                                      }
-                                    }}
-                                    disabled={deletingFormaPagamento}
-                                  >
-                                    {deletingFormaPagamento ? 'Excluindo...' : 'Excluir'}
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                                      }}
+                                    >
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          variant="destructive"
+                                          size="sm"
+                                          onClick={() => {
+                                            setDeleteFormaPagamentoId(forma.id);
+                                            setDeleteFormaPagamentoNome(forma.nome);
+                                          }}
+                                        >
+                                          <Trash className="h-4 w-4" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                      <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                          <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+                                          <AlertDialogDescription>
+                                            Tem certeza que deseja excluir a forma de pagamento "{deleteFormaPagamentoNome}"? Esta ação não pode ser desfeita.
+                                          </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                          <AlertDialogAction
+                                            className="bg-destructive hover:bg-destructive/90"
+                                            onClick={async () => {
+                                              try {
+                                                if (!deleteFormaPagamentoId) return;
+                                                setDeletingFormaPagamento(true);
+
+                                                const { error } = await supabase
+                                                  .from('formas_pagamentos')
+                                                  .delete()
+                                                  .eq('id', deleteFormaPagamentoId);
+
+                                                if (error) {
+                                                  toast({ title: 'Erro ao excluir', description: error.message, variant: 'destructive' });
+                                                } else {
+                                                  toast({ title: 'Forma de pagamento excluída com sucesso!' });
+                                                  await fetchFormasPagamento();
+                                                  setDeleteFormaPagamentoId(undefined);
+                                                  setDeleteFormaPagamentoNome('');
+                                                }
+                                              } catch (err) {
+                                                console.error('Erro ao excluir forma de pagamento:', err);
+                                                toast({ title: 'Erro', description: String(err), variant: 'destructive' });
+                                              } finally {
+                                                setDeletingFormaPagamento(false);
+                                              }
+                                            }}
+                                            disabled={deletingFormaPagamento}
+                                          >
+                                            {deletingFormaPagamento ? 'Excluindo...' : 'Excluir'}
+                                          </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                      </AlertDialogContent>
+                                    </AlertDialog>
+                                  </div>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </Fragment>
+                        );
+                      });
+                    })()}
                   </TableBody>
                 </Table>
               )}
@@ -2432,6 +2081,8 @@ export function Configuracoes() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </>
+          )}
         </TabsContent>
 
         <TabsContent value="preferencias">

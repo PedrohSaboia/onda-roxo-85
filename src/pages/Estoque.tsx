@@ -10,6 +10,8 @@ import { Produto } from '@/types';
 import ProductForm from '@/components/products/ProductForm';
 import { supabase } from '@/integrations/supabase/client';
 import EstoqueSidebar from '@/components/layout/EstoqueSidebar';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export function Estoque() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,6 +21,11 @@ export function Estoque() {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
+
+  const { toast } = useToast();
+  const { permissoes, hasPermissao } = useAuth();
+  const canCreateProduct = hasPermissao ? hasPermissao(36) : ((permissoes || []).includes(36));
+  const canEditProduct = hasPermissao ? hasPermissao(37) : ((permissoes || []).includes(37));
 
   useEffect(() => {
     let mounted = true;
@@ -152,7 +159,17 @@ export function Estoque() {
               {total} produtos cadastrados
             </p>
           </div>
-          <Button className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto" onClick={()=>{ setEditingProduct(null); setShowNewProduct(true); }}>
+          <Button
+            className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto"
+            onClick={() => {
+              if (!canCreateProduct) {
+                toast({ title: 'Sem permissão', description: 'Você não tem permissão para criar produtos', variant: 'destructive' });
+                return;
+              }
+              setEditingProduct(null);
+              setShowNewProduct(true);
+            }}
+          >
             <Plus className="h-4 w-4 mr-2" />
             Novo Produto
           </Button>
@@ -305,10 +322,21 @@ export function Estoque() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex gap-2 justify-end">
-                      <Button variant="outline" size="sm" onClick={() => { setEditingProduct(produto); setShowNewProduct(true); }}>
-                        Editar
-                      </Button>
-                    </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (!canEditProduct) {
+                              toast({ title: 'Sem permissão', description: 'Você não tem permissão para editar produtos', variant: 'destructive' });
+                              return;
+                            }
+                            setEditingProduct(produto);
+                            setShowNewProduct(true);
+                          }}
+                        >
+                          Editar
+                        </Button>
+                      </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -421,7 +449,14 @@ export function Estoque() {
                     variant="outline" 
                     size="sm" 
                     className="w-full mt-3"
-                    onClick={() => { setEditingProduct(produto); setShowNewProduct(true); }}
+                    onClick={() => {
+                      if (!canEditProduct) {
+                        toast({ title: 'Sem permissão', description: 'Você não tem permissão para editar produtos', variant: 'destructive' });
+                        return;
+                      }
+                      setEditingProduct(produto);
+                      setShowNewProduct(true);
+                    }}
                   >
                     Editar Produto
                   </Button>

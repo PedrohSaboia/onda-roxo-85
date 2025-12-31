@@ -43,7 +43,7 @@ export default function Pedido() {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const readonly = params.get('readonly') === '1' || params.get('readonly') === 'true';
-  const { user, empresaId } = useAuth();
+  const { user, empresaId, permissoes, hasPermissao } = useAuth();
   const [pedido, setPedido] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
   const [statuses, setStatuses] = useState<any[]>([]);
@@ -78,6 +78,7 @@ export default function Pedido() {
   const [selectedRemetente, setSelectedRemetente] = useState<Remetente | null>(null);
 
   const { toast } = useToast();
+  const canManageRemetentes = hasPermissao ? hasPermissao(46) : ((permissoes || []).includes(46));
 
   // Modal: adicionar produtos
   const [addProductsVisible, setAddProductsVisible] = useState(false);
@@ -1112,7 +1113,14 @@ export default function Pedido() {
           )}
           {!readonly && pedido && (
             <>
-              <Button variant="ghost" className="text-red-600" onClick={() => setDeleteConfirmOpen(true)}>
+              <Button variant="ghost" className="text-red-600" onClick={() => {
+                const canDelete = (hasPermissao ? hasPermissao(35) : false) || ((permissoes ?? []).includes(9));
+                if (!canDelete) {
+                  toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                  return;
+                }
+                setDeleteConfirmOpen(true);
+              }}>
                 <Trash className="h-5 w-5" />
               </Button>
             </>
@@ -1131,7 +1139,14 @@ export default function Pedido() {
                       <>
                         <a className="text-blue-600 hover:underline">{pedido.cliente.nome}</a>
                         {!readonly && (
-                          <button onClick={() => setClientEditOpen(true)} className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100">
+                          <button onClick={() => {
+                            const canEditClient = hasPermissao ? hasPermissao(12) : (permissoes ?? []).includes(12);
+                            if (!canEditClient) {
+                              toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                              return;
+                            }
+                            setClientEditOpen(true);
+                          }} className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100">
                             <Edit className="h-4 w-4 text-gray-600" />
                           </button>
                         )}
@@ -1350,6 +1365,11 @@ export default function Pedido() {
                   {!readonly && (
                     <button
                       onClick={() => {
+                        const canEdit = hasPermissao ? hasPermissao(34) : (permissoes ?? []).includes(34);
+                        if (!canEdit) {
+                          toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                          return;
+                        }
                         const valorAtual = Number(pedido?.valor_total ?? pedido?.total ?? 0);
                         setTempValorTotal(formatCurrencyBR(valorAtual));
                         // Popular os valores de cada forma de pagamento
@@ -1413,7 +1433,15 @@ export default function Pedido() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Produtos</CardTitle>
-                <Button className="bg-purple-700 text-white" onClick={() => { if (!readonly) setAddProductsVisible(true); }} disabled={readonly}>Adicionar Produto</Button>
+                <Button className="bg-purple-700 text-white" onClick={() => {
+                  if (readonly) return;
+                  const canAdd = hasPermissao ? hasPermissao(24) : (permissoes ?? []).includes(24);
+                  if (!canAdd) {
+                    toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                    return;
+                  }
+                  setAddProductsVisible(true);
+                }} disabled={readonly}>Adicionar Produto</Button>
               </div>
             </CardHeader>
             <CardContent>
@@ -1425,7 +1453,7 @@ export default function Pedido() {
                     <TableHead>Qtd</TableHead>
                     <TableHead>Valor unit.</TableHead>
                     <TableHead>Subtotal</TableHead>
-                    <TableHead className="text-center">Up-Sell</TableHead>
+                    <TableHead className="text-center"></TableHead>
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1488,6 +1516,11 @@ export default function Pedido() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (readonly) return;
+                                    const canDo = hasPermissao ? hasPermissao(25) : (permissoes ?? []).includes(25);
+                                    if (!canDo) {
+                                      toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                                      return;
+                                    }
                                     setIsNormalFlow(true);
                                     setIsAumentoGratis(false);
                                     setUpSellSourceItem(item);
@@ -1502,6 +1535,11 @@ export default function Pedido() {
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     if (readonly) return;
+                                    const canDo = hasPermissao ? hasPermissao(25) : (permissoes ?? []).includes(25);
+                                    if (!canDo) {
+                                      toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                                      return;
+                                    }
                                     setItemToKeep(item);
                                     setConfirmManterOpen(true);
                                   }}
@@ -1521,7 +1559,7 @@ export default function Pedido() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; /* target first source id for removal modal */ const toRemove = { ...item, id: (item._sourceIds && item._sourceIds[0]) || item.id }; setProductToRemove(toRemove); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
+                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; const canDelete = hasPermissao ? hasPermissao(26) : (permissoes ?? []).includes(26); if (!canDelete) { toast({ title: 'Você não tem permissão para isso', variant: 'destructive' }); return; } /* target first source id for removal modal */ const toRemove = { ...item, id: (item._sourceIds && item._sourceIds[0]) || item.id }; setProductToRemove(toRemove); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
                             <Trash className="h-4 w-4" />
                           </Button>
                         </div>
@@ -1541,7 +1579,7 @@ export default function Pedido() {
 
         <TabsContent value="status">
           <Card>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 px-6 py-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="text-sm text-muted-foreground">Status</div>
@@ -1665,7 +1703,7 @@ export default function Pedido() {
 
         <TabsContent value="entrega">
           <Card>
-            <CardContent>
+            <CardContent className="pt-6">
               {/* Dados do envio atual */}
               <div className="grid grid-cols-3 gap-6 mb-6">
                 <div>
@@ -1689,7 +1727,7 @@ export default function Pedido() {
               {/* Seleção de remetente e embalagem */}
               <Card className="mb-6">
                 <CardContent className="pt-6">
-                  <div className="grid grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6">
                     <div>
                       <div className="text-sm text-muted-foreground mb-2">Remetente</div>
                       <div className="flex items-center gap-2">
@@ -1708,36 +1746,16 @@ export default function Pedido() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => { if (!readonly) setRemetentesVisible(true); }}
+                          onClick={() => {
+                            if (readonly) return;
+                            if (!canManageRemetentes) {
+                              toast({ title: 'Sem permissão', description: 'Você não tem permissão para isso', variant: 'destructive' });
+                              return;
+                            }
+                            setRemetentesVisible(true);
+                          }}
                           disabled={readonly}
-                        >
-                          Gerenciar
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-2">Embalagem</div>
-                      <div className="flex items-center gap-2">
-                        <select
-                          className="flex-1 border rounded px-3 py-2"
-                          value={selectedEmbalagem?.id || ''}
-                          onChange={(e) => setSelectedEmbalagem(
-                            embalagens.find(em => em.id === e.target.value) || null
-                          )}
-                          disabled={readonly}
-                        >
-                          {embalagens.map(em => (
-                            <option key={em.id} value={em.id}>
-                              {em.nome} ({em.altura}×{em.largura}×{em.comprimento}cm - {em.peso}kg)
-                            </option>
-                          ))}
-                        </select>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => { if (!readonly) setEmbalagensVisible(true); }}
-                          disabled={readonly}
+                          aria-label="Gerenciar remetentes"
                         >
                           Gerenciar
                         </Button>
@@ -2499,6 +2517,11 @@ export default function Pedido() {
                 <Button variant="outline" onClick={() => {
                   // Cancel wizard and reopen addProducts modal for editing
                   setWizardOpen(false);
+                  const canAdd = hasPermissao ? hasPermissao(24) : (permissoes ?? []).includes(24);
+                  if (!canAdd) {
+                    toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                    return;
+                  }
                   setAddProductsVisible(true);
                 }}>Cancelar</Button>
                 {wizardStep > 1 && <Button variant="ghost" onClick={() => setWizardStep(w => Math.max(1, w-1))}>Voltar</Button>}

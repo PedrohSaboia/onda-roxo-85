@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/hooks/use-toast';
 import type { SyntheticEvent } from 'react';
 import SearchPanel from '@/components/layout/SearchPanel';
 import { useState, useEffect } from 'react';
@@ -16,7 +17,9 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHeaderProps) {
-  const { user, signOut, imgUrl } = useAuth();
+  const { user, signOut, imgUrl, permissoes, hasPermissao } = useAuth();
+  const { toast } = useToast();
+  const canNavigateHome = hasPermissao ? hasPermissao(56) : ((permissoes || []).includes(56));
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [navigationItems, setNavigationItems] = useState<Array<{ id: string; label: string }>>([]);
@@ -138,7 +141,13 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
             return (
               <button
                 key={item.id}
-                onClick={() => onModuleChange?.(item.id)}
+                onClick={() => {
+                  if (item.id === 'home' && !canNavigateHome) {
+                    toast({ title: 'Sem permissão', description: 'Você não tem permissão para acessar a Home', variant: 'destructive' });
+                    return;
+                  }
+                  onModuleChange?.(item.id);
+                }}
                 className={`text-sm font-medium py-2 px-3 rounded-md transition-colors ${isActive ? 'text-white bg-white/10' : 'text-white/80 hover:bg-white/5'}`}
               >
                 {item.label}

@@ -99,10 +99,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const perms = (data?.permissoes ?? []) as Array<any>;
       const parsed = perms.map((p) => Number(p));
       setPermissoesUsuario(parsed);
+      // Log permissions for debugging/runtime inspection
+      try {
+        console.debug('[useAuth] permissoes carregadas para usuário', userId, parsed);
+      } catch (e) {
+        // ignore console failures in restricted environments
+      }
       return parsed;
     } catch (err) {
       console.error('Erro ao buscar permissoes do usuário:', err);
       setPermissoesUsuario([]);
+      try {
+        console.warn('[useAuth] falha ao carregar permissoes para usuário', userId, err);
+      } catch (e) {}
       return [];
     }
   };

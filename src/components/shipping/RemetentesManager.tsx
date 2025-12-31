@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -6,15 +6,18 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import RemetenteModal from './RemetenteModal';
+import { Edit, Trash } from 'lucide-react';
 
 type Remetente = {
-  id: string;
+  id?: string;
   nome: string;
   cep: string;
   endereco: string;
   cidade: string;
   estado: string;
 };
+
+type RemetenteInput = Partial<Omit<Remetente, 'id'>> & { empresa_id?: string | null };
 
 export default function RemetentesManager() {
   const { toast } = useToast();
@@ -24,77 +27,65 @@ export default function RemetentesManager() {
   const [modalOpen, setModalOpen] = useState(false);
   const [selected, setSelected] = useState<Remetente | null>(null);
 
-  useEffect(() => {
-    loadRemetentes();
-  }, []);
-
-  const loadRemetentes = async () => {
+  const loadRemetentesCb = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from('remetentes')
         .select('*')
         .order('nome');
-      
+
       if (error) throw error;
       setRemetentes(data || []);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Erro ao carregar remetentes:', err);
-      toast({ 
-        title: 'Erro', 
+      toast({
+        title: 'Erro',
         description: 'Não foi possível carregar os remetentes',
-        variant: 'destructive'
+        variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
-  const handleSave = async (data: any) => {
-    try {
-      if (selected) {
-        // Update
-        const { error } = await supabase
-          .from('remetentes')
-          .update(data)
-          .eq('id', selected.id);
-        
-        if (error) throw error;
-        toast({ title: 'Sucesso', description: 'Remetente atualizado' });
-      } else {
-        // Insert
-        const insertData = { ...data, empresa_id: empresaId || null };
-        const { error } = await supabase
-          .from('remetentes')
-          .insert(insertData);
-        
-        if (error) throw error;
-        toast({ title: 'Sucesso', description: 'Remetente criado' });
-      }
-      
-      await loadRemetentes();
-    } catch (err: any) {
-      throw err;
+  useEffect(() => {
+    loadRemetentesCb();
+  }, [loadRemetentesCb]);
+
+  // kept for backwards compatibility if needed elsewhere
+  const loadRemetentes = loadRemetentesCb;
+
+  const handleSave = async (data: RemetenteInput) => {
+    if (selected) {
+      // Update
+      const { error } = await supabase.from('remetentes').update(data as Partial<Remetente>).eq('id', selected.id);
+      if (error) throw error;
+      toast({ title: 'Sucesso', description: 'Remetente atualizado' });
+    } else {
+      // Insert
+      const insertData = { ...data, empresa_id: empresaId || null };
+      const { error } = await supabase.from('remetentes').insert(insertData as Remetente);
+      if (error) throw error;
+      toast({ title: 'Sucesso', description: 'Remetente criado' });
     }
+
+    await loadRemetentesCb();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este remetente?')) return;
-    
+
     try {
-      const { error } = await supabase
-        .from('remetentes')
-        .delete()
-        .eq('id', id);
-      
+      const { error } = await supabase.from('remetentes').delete().eq('id', id);
       if (error) throw error;
       toast({ title: 'Sucesso', description: 'Remetente excluído' });
-      await loadRemetentes();
-    } catch (err: any) {
+      await loadRemetentesCb();
+    } catch (err: unknown) {
       console.error('Erro ao excluir:', err);
-      toast({ 
-        title: 'Erro', 
+      toast({
+        title: 'Erro',
         description: 'Não foi possível excluir o remetente',
-        variant: 'destructive'
+        variant: 'destructive',
       });
     }
   };
@@ -117,12 +108,12 @@ export default function RemetentesManager() {
   if (loading) return <div>Carregando...</div>;
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+    <Card className="border-0 shadow-none">
+      <CardHeader className="flex px-0 pt-0 pb-4 flex-row items-center justify-between">
         <CardTitle>Remetentes</CardTitle>
-        <Button onClick={handleNew}>Novo Remetente</Button>
+        <Button className="mr-3" onClick={handleNew}>Novo Remetente</Button>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-0 pb-0">
         <Table>
           <TableHeader>
             <TableRow>
@@ -130,7 +121,7 @@ export default function RemetentesManager() {
               <TableHead>CEP</TableHead>
               <TableHead>Endereço</TableHead>
               <TableHead>Cidade/UF</TableHead>
-              <TableHead className="text-right">Ações</TableHead>
+              <TableHead className="text-center w-[100px] pr-0">Ações</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -149,21 +140,25 @@ export default function RemetentesManager() {
                   </TableCell>
                   <TableCell>{remetente.endereco}</TableCell>
                   <TableCell>{remetente.cidade}/{remetente.estado}</TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-right pr-0">
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleEdit(remetente)}
+                      title="Editar remetente"
+                      aria-label="Editar remetente"
                     >
-                      Editar
+                      <Edit className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="text-red-500 hover:text-red-700"
                       onClick={() => handleDelete(remetente.id)}
+                      title="Excluir remetente"
+                      aria-label="Excluir remetente"
                     >
-                      Excluir
+                      <Trash className="h-4 w-4" />
                     </Button>
                   </TableCell>
                 </TableRow>
