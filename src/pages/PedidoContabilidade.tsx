@@ -432,7 +432,7 @@ export default function PedidoContabilidade() {
         // try to load payment methods table if exists
         (async () => {
           try {
-            const { data: pmData, error: pmError } = await (supabase as any).from('formas_pagamento').select('id,nome');
+            const { data: pmData, error: pmError } = await (supabase as any).from('formas_pagamentos').select('id,nome');
             if (!pmError && pmData) {
               const map: Record<number, string> = {};
               pmData.forEach((r: any) => { map[r.id] = r.nome; });

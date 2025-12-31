@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { AppHeader } from '@/components/layout/AppHeader';
@@ -40,6 +40,12 @@ export default function NovoPedido() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   const [formaPagamento, setFormaPagamento] = useState<string>('Pix');
+  const [formasPagamentos, setFormasPagamentos] = useState<any[]>([]);
+  const [loadingFormasPagamentos, setLoadingFormasPagamentos] = useState(false);
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [paymentValues, setPaymentValues] = useState<Record<string, string>>({});
+  const [showCartaoDropdown, setShowCartaoDropdown] = useState(false);
+  const cartaoDropdownRef = useRef<HTMLDivElement>(null);
 
   const parsePtBR = (v: string) => {
     if (!v) return 0;
@@ -91,6 +97,30 @@ export default function NovoPedido() {
     return formatPhonePtBR(digits);
   };
   
+  // Close cartao dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (cartaoDropdownRef.current && !cartaoDropdownRef.current.contains(event.target as Node)) {
+        setShowCartaoDropdown(false);
+      }
+    };
+
+    if (showCartaoDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCartaoDropdown]);
+
+  // Atualizar total investido quando valores de pagamento mudarem
+  useEffect(() => {
+    const total = Object.values(paymentValues).reduce((sum, val) => {
+      return sum + parsePtBR(val);
+    }, 0);
+    setValorInvestidoStr(formatPtBR(total));
+  }, [paymentValues]);
 
   const filteredProdutos = produtosList.filter((p) => p.nome.toLowerCase().includes(search.toLowerCase()));
   const totalPages = Math.ceil(filteredProdutos.length / itemsPerPage);
@@ -155,6 +185,20 @@ export default function NovoPedido() {
         setLoadingStatuses(false);
       }
     })();
+    // load formas de pagamento
+    (async () => {
+      setLoadingFormasPagamentos(true);
+      try {
+        const { data, error } = await (supabase as any).from('formas_pagamentos').select('*').order('id');
+        if (error) throw error;
+        if (!mounted) return;
+        setFormasPagamentos(data || []);
+      } catch (err: any) {
+        console.error('Erro ao carregar formas de pagamento:', err);
+      } finally {
+        setLoadingFormasPagamentos(false);
+      }
+    })();
     return () => { mounted = false };
   }, []);
 
@@ -204,6 +248,25 @@ export default function NovoPedido() {
       if (pedidoError) throw pedidoError;
 
       const pedidoId = (pedidoData as any).id;
+
+      // Insert payment methods into lista_pagamentos for each selected forma de pagamento
+      if (selectedPaymentIds.length > 0) {
+        try {
+          const pagementRecords = selectedPaymentIds.map(id => ({
+            pedido_id: pedidoId,
+            formas_pagamentos_id: id,
+            valor: parsePtBR(paymentValues[id] || '0,00')
+          }));
+          const { error: pagamentoError } = await (supabase as any).from('lista_pagamentos').insert(pagementRecords);
+          if (pagamentoError) {
+            console.error('Erro ao inserir formas de pagamento:', pagamentoError);
+            toast({ title: 'Aviso', description: 'Pedido criado, mas falha ao registrar as formas de pagamento.', variant: 'destructive' });
+          }
+        } catch (err) {
+          console.error('Exceção ao inserir formas de pagamento:', err);
+          toast({ title: 'Aviso', description: 'Pedido criado, mas ocorreu um erro ao registrar as formas de pagamento.', variant: 'destructive' });
+        }
+      }
 
       // create a cliente record linked to this pedido
       try {
@@ -305,7 +368,7 @@ export default function NovoPedido() {
       });
 
       for (const [productId, count] of Object.entries(productCounts)) {
-        await supabase.rpc('increment', {
+        await (supabase as any).rpc('increment', {
           row_id: productId,
           x: count
         }).eq('id', productId);
@@ -439,57 +502,231 @@ export default function NovoPedido() {
                 />
               </div>
 
-              {/* Currency inputs similar to Editar Pedido (pt-BR) - placed as three columns to match other inputs */}
-              <div>
-                <label className="text-sm">Total investido</label>
-                <Input
-                  className="w-full"
-                  value={valorInvestidoStr}
-                  onChange={(e) => setValorInvestidoStr(normalizeAndFormatCurrencyInput(e.target.value))}
-                  onBlur={() => setValorInvestidoStr(formatPtBR(parsePtBR(valorInvestidoStr)))}
-                />
-              </div>
+              {/* Currency inputs e formas de pagamento na mesma linha */}
+              <div className="col-span-3 flex gap-4 items-start">
+                {/* Coluna 1: Forma de Pagamento - tamanho dinâmico */}
+                <div className={`${selectedPaymentIds.length === 0 ? 'flex-[2]' : 'flex-1'} min-w-[200px] transition-all duration-300`}>
+                  <label className="text-sm">Forma de Pagamento</label>
+                  <div className="flex gap-2 mt-2 flex-wrap">
+                    {loadingFormasPagamentos ? (
+                      <div className="text-xs text-gray-500">Carregando...</div>
+                    ) : formasPagamentos.length === 0 ? (
+                      <div className="text-xs text-gray-500">Nenhuma disponível</div>
+                    ) : (
+                      <>
+                        {/* Mostrar formas de pagamento que NÃO são cartão */}
+                        {formasPagamentos.filter(f => !f.nome?.toLowerCase().includes('cartão') && !f.nome?.toLowerCase().includes('cartao')).map((forma) => {
+                          const isSelected = selectedPaymentIds.includes(String(forma.id));
+                          return (
+                            <div key={forma.id} className="relative group">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const isCurrentlySelected = selectedPaymentIds.includes(String(forma.id));
+                                  setSelectedPaymentIds(prev =>
+                                    isCurrentlySelected
+                                      ? prev.filter(id => id !== String(forma.id))
+                                      : [...prev, String(forma.id)]
+                                  );
+                                  // Remover valor se desmarcar
+                                  if (isCurrentlySelected) {
+                                    setPaymentValues(prev => {
+                                      const updated = { ...prev };
+                                      delete updated[String(forma.id)];
+                                      return updated;
+                                    });
+                                  }
+                                }}
+                                className={`relative p-2 rounded-lg transition-all ${
+                                  isSelected
+                                    ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                    : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
+                                }`}
+                                title={forma.nome}
+                              >
+                                {forma.img_url && (
+                                  <img
+                                    src={forma.img_url}
+                                    alt={forma.nome}
+                                    className="w-6 h-6 object-contain"
+                                  />
+                                )}
+                                {isSelected && (
+                                  <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                                    ✓
+                                  </div>
+                                )}
+                              </button>
+                              {/* Tooltip */}
+                              <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                {forma.nome}
+                              </div>
+                            </div>
+                          );
+                        })}
 
-              <div>
-                <label className="text-sm">Frete: Venda</label>
-                <Input
-                  className="w-full"
-                  value={freteVendaStr}
-                  onChange={(e) => setFreteVendaStr(normalizeAndFormatCurrencyInput(e.target.value))}
-                  onBlur={() => setFreteVendaStr(formatPtBR(parsePtBR(freteVendaStr)))}
-                />
-              </div>
+                        {/* Card especial para Cartão com dropdown */}
+                        {formasPagamentos.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')) && (
+                          <div ref={cartaoDropdownRef} className="relative group">
+                            <button
+                              type="button"
+                              onClick={() => setShowCartaoDropdown(!showCartaoDropdown)}
+                              className={`relative p-2 rounded-lg transition-all ${
+                                selectedPaymentIds.some(id => formasPagamentos.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'))))
+                                  ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                  : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
+                              }`}
+                              title="Cartão"
+                            >
+                              {(() => {
+                                const cartaoGenerico = formasPagamentos.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'));
+                                return cartaoGenerico?.img_url ? (
+                                  <img
+                                    src={cartaoGenerico.img_url}
+                                    alt="Cartão"
+                                    className="w-6 h-6 object-contain"
+                                  />
+                                ) : null;
+                              })()}
+                              {selectedPaymentIds.some(id => formasPagamentos.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')))) && (
+                                <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                                  ✓
+                                </div>
+                              )}
+                            </button>
 
-              <div>
-                <label className="text-sm">Valor sem frete</label>
-                <Input
-                  className="w-full"
-                  value={formatPtBR(Math.max(0, parsePtBR(valorInvestidoStr) - parsePtBR(freteVendaStr)))}
-                  readOnly
-                />
-              </div>
+                            {/* Tooltip */}
+                            <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                              Cartão
+                            </div>
 
-              <div>
-                <label className="text-sm">Forma de Pagamento</label>
-                <div className="flex gap-2 mt-1">
-                  {['Pix', 'Boleto', 'Cartão', 'Outro'].map((forma) => (
-                    <button
-                      key={forma}
-                      type="button"
-                      onClick={() => setFormaPagamento(forma)}
-                      className={`flex-1 px-3 py-2 rounded border transition-colors ${
-                        formaPagamento === forma
-                          ? 'bg-purple-700 text-white border-purple-700'
-                          : 'bg-white text-gray-700 border-gray-300 hover:border-purple-700'
-                      }`}
-                    >
-                      {forma}
-                    </button>
-                  ))}
+                            {/* Dropdown de tipos de cartão */}
+                            {showCartaoDropdown && (
+                              <div className="absolute top-full left-0 mt-2 bg-white border-2 rounded-lg shadow-lg z-10 min-w-max">
+                                <div className="p-2 max-h-80 overflow-y-auto">
+                                  {formasPagamentos.filter(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')).map((forma) => {
+                                    const isSelected = selectedPaymentIds.includes(String(forma.id));
+                                    return (
+                                      <button
+                                        key={forma.id}
+                                        type="button"
+                                        onClick={() => {
+                                          if (isSelected) {
+                                            setSelectedPaymentIds(prev => prev.filter(id => id !== String(forma.id)));
+                                            // Remover valor se desmarcar
+                                            setPaymentValues(prev => {
+                                              const updated = { ...prev };
+                                              delete updated[String(forma.id)];
+                                              return updated;
+                                            });
+                                          } else {
+                                            // Remove outros cartões mas mantém não-cartão
+                                            const nonCardPayments = selectedPaymentIds.filter(id => {
+                                              const payment = formasPagamentos.find(f => String(f.id) === id);
+                                              return !payment?.nome?.toLowerCase().includes('cartão') && !payment?.nome?.toLowerCase().includes('cartao');
+                                            });
+                                            // Remover valores dos cartões removidos
+                                            setPaymentValues(prev => {
+                                              const updated = { ...prev };
+                                              selectedPaymentIds.forEach(id => {
+                                                const payment = formasPagamentos.find(f => String(f.id) === id);
+                                                if (payment?.nome?.toLowerCase().includes('cartão') || payment?.nome?.toLowerCase().includes('cartao')) {
+                                                  delete updated[id];
+                                                }
+                                              });
+                                              return updated;
+                                            });
+                                            setSelectedPaymentIds([...nonCardPayments, String(forma.id)]);
+                                          }
+                                        }}
+                                        className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${
+                                          isSelected
+                                            ? 'bg-purple-100 border-2 border-purple-500'
+                                            : 'border-2 border-transparent hover:bg-gray-50'
+                                        }`}
+                                      >
+                                        {forma.img_url && (
+                                          <img
+                                            src={forma.img_url}
+                                            alt={forma.nome}
+                                            className="w-8 h-8 object-contain"
+                                          />
+                                        )}
+                                        <span className="font-medium text-sm">{forma.nome}</span>
+                                        {isSelected && (
+                                          <span className="ml-auto text-purple-600">✓</span>
+                                        )}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
                 </div>
-                {formaPagamento && (
-                  <p className="text-xs text-gray-600 mt-1">Você selecionou {formaPagamento}</p>
+
+                {/* Inputs para valores de cada forma de pagamento selecionada */}
+                {selectedPaymentIds.length > 0 && (
+                  <div className={`flex gap-4 ${selectedPaymentIds.length === 1 ? 'flex-[3]' : 'flex-[4]'} transition-all duration-300`}>
+                    {selectedPaymentIds.map(paymentId => {
+                      const payment = formasPagamentos.find(f => String(f.id) === paymentId);
+                      if (!payment) return null;
+                      return (
+                        <div key={paymentId} className="flex-1">
+                          <label className="text-sm font-medium">{payment.nome}</label>
+                          <Input
+                            className="w-full text-base h-11"
+                            value={paymentValues[paymentId] || '0,00'}
+                            onChange={(e) => {
+                              const normalized = normalizeAndFormatCurrencyInput(e.target.value);
+                              setPaymentValues(prev => ({
+                                ...prev,
+                                [paymentId]: normalized
+                              }));
+                            }}
+                            placeholder="0,00"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
+
+                {/* Coluna 2: Total investido - dinâmico */}
+                <div className={`${selectedPaymentIds.length === 0 ? 'flex-[2]' : 'flex-[1.2]'} transition-all duration-300`}>
+                  <label className="text-sm font-medium">Total investido</label>
+                  <Input
+                    className="w-full bg-gray-50 text-base font-semibold h-11"
+                    value={valorInvestidoStr}
+                    readOnly
+                    disabled
+                  />
+                </div>
+
+                {/* Coluna 3: Frete Venda - dinâmico */}
+                <div className={`${selectedPaymentIds.length === 0 ? 'flex-[2]' : 'flex-1'} transition-all duration-300`}>
+                  <label className="text-sm font-medium">Frete: Venda</label>
+                  <Input
+                    className="w-full text-base h-11"
+                    value={freteVendaStr}
+                    onChange={(e) => setFreteVendaStr(normalizeAndFormatCurrencyInput(e.target.value))}
+                    onBlur={() => setFreteVendaStr(formatPtBR(parsePtBR(freteVendaStr)))}
+                  />
+                </div>
+
+                {/* Coluna 4: Valor sem frete - dinâmico */}
+                <div className={`${selectedPaymentIds.length === 0 ? 'flex-[2]' : 'flex-1'} transition-all duration-300`}>
+                  <label className="text-sm font-medium">Valor sem frete</label>
+                  <Input
+                    className="w-full bg-gray-50 text-base h-11"
+                    value={formatPtBR(Math.max(0, parsePtBR(valorInvestidoStr) - parsePtBR(freteVendaStr)))}
+                    readOnly
+                  />
+                </div>
               </div>
 
               <div>
