@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -52,6 +52,12 @@ export default function Leads() {
   const [addFrete, setAddFrete] = useState<string>('');
   const [transportadoras, setTransportadoras] = useState<Array<{ id: string; nome: string }>>([]);
   const [loadingTransportadoras, setLoadingTransportadoras] = useState(false);
+  const [formasPagamentos, setFormasPagamentos] = useState<Array<{ id: string; nome: string }>>([]);
+  const [loadingFormasPagamentos, setLoadingFormasPagamentos] = useState(false);
+  const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
+  const [paymentValues, setPaymentValues] = useState<Record<string, string>>({});
+  const [showCartaoDropdown, setShowCartaoDropdown] = useState(false);
+  const cartaoDropdownRef = useRef<HTMLDivElement>(null);
   const [activeFilter, setActiveFilter] = useState<'all' | 'pix' | 'carrinho'>('all');
   const [pixCount, setPixCount] = useState<number>(0);
   const [carrinhoCount, setCarrinhoCount] = useState<number>(0);
@@ -88,9 +94,37 @@ export default function Leads() {
         if (mounted) setLoadingTransportadoras(false);
       }
     };
+    
+    const loadFormas = async () => {
+      if (!addOpen) return;
+      setLoadingFormasPagamentos(true);
+      try {
+        const { data, error } = await (supabase as any).from('formas_pagamentos').select('id,nome').order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        setFormasPagamentos((data || []) as any[]);
+      } catch (err) {
+        console.error('Erro ao carregar formas de pagamento:', err);
+        setFormasPagamentos([]);
+      } finally {
+        if (mounted) setLoadingFormasPagamentos(false);
+      }
+    };
     load();
+    loadFormas();
     return () => { mounted = false };
   }, [addOpen, addOption]);
+
+  // fechar dropdown de cartão quando clicar fora
+  useEffect(() => {
+    const handleClickOutside = (ev: MouseEvent) => {
+      if (cartaoDropdownRef.current && !cartaoDropdownRef.current.contains(ev.target as Node)) {
+        setShowCartaoDropdown(false);
+      }
+    };
+    if (showCartaoDropdown) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showCartaoDropdown]);
   const pageSizeOptions = [10, 20, 30, 50];
   const { toast } = useToast();
 
@@ -430,6 +464,8 @@ export default function Leads() {
                                   setAddValue2('');
                                   setAddDate('');
                                   setAddFrete('');
+                                  setSelectedPaymentIds([]);
+                                  setPaymentValues({});
                                   setAddOpen(true);
                                 }}
                               >
@@ -502,6 +538,150 @@ export default function Leads() {
                           <Input className="border-none outline-none" type="text" inputMode="decimal" placeholder="0,00" value={addFrete} onChange={(e) => setAddFrete(formatCurrencyInput(e.target.value))} />
                         </div>
                       </div>
+                      <div>
+                        <label className="block text-sm text-muted-foreground mb-1 ml-1">Formas de Pagamento</label>
+                        <div className="mt-2">
+                          {loadingFormasPagamentos ? (
+                            <div className="text-sm text-muted-foreground">Carregando...</div>
+                          ) : formasPagamentos.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">Nenhuma forma de pagamento cadastrada</div>
+                          ) : (
+                            <>
+                              <div className="flex gap-2 mt-1 flex-wrap">
+                                {formasPagamentos.filter(f => !f.nome?.toLowerCase().includes('cartão') && !f.nome?.toLowerCase().includes('cartao')).map((forma) => {
+                                  const isSelected = selectedPaymentIds.includes(forma.id);
+                                  return (
+                                    <div key={forma.id} className="relative group">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const currently = selectedPaymentIds.includes(forma.id);
+                                          setSelectedPaymentIds(prev => currently ? prev.filter(id => id !== forma.id) : [...prev, forma.id]);
+                                          if (currently) {
+                                            setPaymentValues(prev => { const updated = { ...prev }; delete updated[forma.id]; return updated; });
+                                          } else {
+                                            setPaymentValues(prev => ({ ...prev, [forma.id]: '0,00' }));
+                                          }
+                                        }}
+                                        className={`relative p-2 rounded-lg transition-all ${isSelected ? 'border-2 border-purple-700 bg-purple-50 shadow-md' : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'}`}
+                                        title={forma.nome}
+                                      >
+                                        {forma.img_url && (
+                                          <img src={forma.img_url} alt={forma.nome} className="w-6 h-6 object-contain" />
+                                        )}
+                                        {!forma.img_url && (
+                                          <span className="text-sm px-2">{forma.nome}</span>
+                                        )}
+                                        {isSelected && (
+                                          <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">✓</div>
+                                        )}
+                                      </button>
+                                      <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">{forma.nome}</div>
+                                    </div>
+                                  );
+                                })}
+
+                                {/* Cartão agrupado em dropdown */}
+                                {formasPagamentos.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')) && (
+                                  <div ref={cartaoDropdownRef} className="relative group">
+                                    <button
+                                      type="button"
+                                      onClick={() => setShowCartaoDropdown(!showCartaoDropdown)}
+                                      className={`relative p-2 rounded-lg transition-all ${selectedPaymentIds.some(id => {
+                                        const p = formasPagamentos.find(f => f.id === id);
+                                        return p && (p.nome?.toLowerCase().includes('cartão') || p.nome?.toLowerCase().includes('cartao'));
+                                      }) ? 'border-2 border-purple-700 bg-purple-50 shadow-md' : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'}`}
+                                      title="Cartão"
+                                    >
+                                      {(() => {
+                                        const cartaoGenerico = formasPagamentos.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'));
+                                        return cartaoGenerico?.img_url ? (
+                                          <img src={cartaoGenerico.img_url} alt="Cartão" className="w-6 h-6 object-contain" />
+                                        ) : (
+                                          <span className="text-sm">Cartão</span>
+                                        );
+                                      })()}
+                                      {selectedPaymentIds.some(id => {
+                                        const p = formasPagamentos.find(f => f.id === id);
+                                        return p && (p.nome?.toLowerCase().includes('cartão') || p.nome?.toLowerCase().includes('cartao'));
+                                      }) && (
+                                        <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">✓</div>
+                                      )}
+                                    </button>
+
+                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">Cartão</div>
+
+                                    {showCartaoDropdown && (
+                                      <div className="absolute top-full left-0 mt-2 bg-white border-2 rounded-lg shadow-lg z-10 min-w-max">
+                                        <div className="p-2 max-h-80 overflow-y-auto">
+                                          {formasPagamentos.filter(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')).map((forma) => {
+                                            const isSelected = selectedPaymentIds.includes(forma.id);
+                                            return (
+                                              <button
+                                                key={forma.id}
+                                                type="button"
+                                                onClick={() => {
+                                                  if (isSelected) {
+                                                    setSelectedPaymentIds(prev => prev.filter(id => id !== forma.id));
+                                                    setPaymentValues(prev => { const up = { ...prev }; delete up[forma.id]; return up; });
+                                                  } else {
+                                                    // keep non-card payments
+                                                    const nonCard = selectedPaymentIds.filter(id => {
+                                                      const p = formasPagamentos.find(f => f.id === id);
+                                                      return !(p?.nome?.toLowerCase().includes('cartão') || p?.nome?.toLowerCase().includes('cartao'));
+                                                    });
+                                                    // remove previous card values
+                                                    setPaymentValues(prev => {
+                                                      const updated = { ...prev };
+                                                      selectedPaymentIds.forEach(id => {
+                                                        const p = formasPagamentos.find(f => f.id === id);
+                                                        if (p?.nome?.toLowerCase().includes('cartão') || p?.nome?.toLowerCase().includes('cartao')) delete updated[id];
+                                                      });
+                                                      return updated;
+                                                    });
+                                                    setSelectedPaymentIds([...nonCard, forma.id]);
+                                                    setPaymentValues(prev => ({ ...prev, [forma.id]: '0,00' }));
+                                                  }
+                                                }}
+                                                className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${isSelected ? 'bg-purple-100 border-2 border-purple-500' : 'border-2 border-transparent hover:bg-gray-50'}`}
+                                              >
+                                                {forma.img_url && <img src={forma.img_url} alt={forma.nome} className="w-8 h-8 object-contain" />}
+                                                <span className="font-medium text-sm">{forma.nome}</span>
+                                                {isSelected && <span className="ml-auto text-purple-600">✓</span>}
+                                              </button>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Inputs para valores de cada forma de pagamento selecionada */}
+                              {selectedPaymentIds.length > 0 && (
+                                <div className={`flex gap-4 mt-3 ${selectedPaymentIds.length === 1 ? 'flex-[3]' : 'flex-[4]'} transition-all duration-300`}>
+                                  {selectedPaymentIds.map(paymentId => {
+                                    const payment = formasPagamentos.find(f => f.id === paymentId);
+                                    if (!payment) return null;
+                                    return (
+                                      <div key={paymentId} className="flex-1">
+                                        <label className="text-sm font-medium">{payment.nome}</label>
+                                        <Input
+                                          className="w-full text-base h-11"
+                                          value={paymentValues[paymentId] ?? '0,00'}
+                                          onChange={(e) => setPaymentValues((p) => ({ ...p, [paymentId]: formatCurrencyInput(e.target.value) }))}
+                                          placeholder="0,00"
+                                        />
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     <DialogFooter>
@@ -563,6 +743,25 @@ export default function Leads() {
                             if (pedidoError) throw pedidoError;
 
                             const pedidoId = (pedidoData as any)?.id;
+
+                            // registrar formas de pagamento em lista_pagamentos (se houver)
+                            if (pedidoId && selectedPaymentIds.length > 0) {
+                              try {
+                                const pagamentoRecords = selectedPaymentIds.map((id) => ({
+                                  pedido_id: pedidoId,
+                                  formas_pagamentos_id: id,
+                                  valor: parseFloat(String(paymentValues[id] || '0,00').replace(/\./g, '').replace(',', '.'))
+                                }));
+                                const { error: pagamentoError } = await (supabase as any).from('lista_pagamentos').insert(pagamentoRecords);
+                                if (pagamentoError) {
+                                  console.error('Erro ao inserir formas de pagamento:', pagamentoError);
+                                  toast({ title: 'Aviso', description: 'Pedido criado, mas falha ao registrar as formas de pagamento.', variant: 'destructive' });
+                                }
+                              } catch (errPag) {
+                                console.error('Exceção ao inserir formas de pagamento:', errPag);
+                                toast({ title: 'Aviso', description: 'Pedido criado, mas ocorreu um erro ao registrar as formas de pagamento.', variant: 'destructive' });
+                              }
+                            }
 
                             // tentar criar cliente vinculado ao pedido recém-criado
                             if (pedidoId) {
