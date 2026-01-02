@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, Filter, Copy, Trash2 } from 'lucide-react';
+import { Plus, Search, Filter, Copy, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -1295,7 +1295,7 @@ export function Comercial() {
       <Card>
         <CardHeader>
           <div className="space-y-4">
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
               <div className="relative" ref={filterDropdownRef}>
                 <Button type="button" variant="outline" size="sm" onClick={() => {
                   // Sincronizar estados temporários com os filtros atuais ao abrir
@@ -1305,15 +1305,14 @@ export function Comercial() {
                   setTempFilterPlataformaId(filterPlataformaId);
                   setShowFilters(s => !s);
                 }}>
-                  <Filter className="h-4 w-4 mr-2" />
-                  Filtrar
+                  <Filter className="h-5 w-5" />
                 </Button>
 
                 {showFilters && (
                   <div className="absolute left-0 top-full mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-sm font-medium">Filtros</div>
-                      <button type="button" className="text-sm text-muted-foreground" onClick={() => setShowFilters(false)}>Fechar</button>
+                      <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setShowFilters(false)}><X className="h-4 w-4" /></button>
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <input id="filter-not-liberado" type="checkbox" checked={tempFilterNotLiberado} onChange={(e) => setTempFilterNotLiberado(e.target.checked)} />
@@ -1865,7 +1864,6 @@ export function Comercial() {
                 <TableHead className="text-center">Data</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead className="text-center">Plataforma</TableHead>
-                <TableHead className="text-center">Transportadora</TableHead>
                 <TableHead className="text-center">Responsável</TableHead>
                 <TableHead className="text-center">Status</TableHead>
                 <TableHead className="text-center">Etiqueta</TableHead>
@@ -2028,6 +2026,7 @@ export function Comercial() {
                   <TableCell className="text-center">
                       <div 
                         className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-80"
+                        title={pedido.plataforma?.nome}
                         onClick={(e) => {
                           e.stopPropagation();
                           setPlataformaEditPedidoId(pedido.id);
@@ -2052,45 +2051,22 @@ export function Comercial() {
                         }}
                       >
                         {pedido.plataforma?.imagemUrl ? (
-                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-6 h-6 rounded" />
+                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-10 h-10 rounded" />
                         ) : (
                           <div 
-                            className="w-3 h-3 rounded-full"
+                            className="w-6 h-6 rounded-full"
                             style={{ backgroundColor: pedido.plataforma?.cor }}
                           />
                         )}
-                        {pedido.plataforma?.nome}
                       </div>
                   </TableCell>
 
-                  <TableCell 
-                    className="text-center cursor-pointer"
-                    onClick={() => {
-                      const currentParams = new URLSearchParams(location.search);
-                      if (view === 'enviados') currentParams.set('readonly', '1');
-                      currentParams.set('returnTo', location.pathname + location.search);
-                      navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
-                    }}
-                  >
-                    <div className="flex items-center justify-center">
-                      {pedido.transportadora?.imagemUrl ? (
-                        <div className="w-10 h-8 overflow-hidden flex items-center justify-center">
-                          <img
-                            src={pedido.transportadora.imagemUrl}
-                            alt={pedido.transportadora.nome || 'Transportadora'}
-                            loading="lazy"
-                            className="max-w-full max-h-full object-contain"
-                          />
-                        </div>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">—</div>
-                      )}
-                    </div>
-                  </TableCell>
+                  {/* Transportadora column removed per request */}
 
-                  <TableCell>
+                  <TableCell className="p-3">
                     <div 
-                      className="flex items-center gap-2 justify-center cursor-pointer hover:opacity-80"
+                      className="flex items-center justify-center cursor-pointer hover:opacity-80"
+                      title={pedido.responsavel?.nome}
                       onClick={(e) => {
                         e.stopPropagation();
                         setResponsavelEditPedidoId(pedido.id);
@@ -2114,13 +2090,12 @@ export function Comercial() {
                         }
                       }}
                     >
-                      <Avatar className="h-6 w-6">
+                      <Avatar className="h-14 w-14 border-4 border-custom-600 rounded-full">
                         <AvatarImage src={pedido.responsavel?.avatar} />
-                        <AvatarFallback className="text-xs">
+                        <AvatarFallback className="text-sm">
                           {pedido.responsavel?.nome?.slice(0, 2).toUpperCase()}
                         </AvatarFallback>
                       </Avatar>
-                      <span className="text-sm">{pedido.responsavel?.nome}</span>
                     </div>
                   </TableCell>
                   <TableCell>
