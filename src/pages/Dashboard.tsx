@@ -343,8 +343,6 @@ export function Dashboard() {
 
   const handlePreset = (presetFn: () => void) => {
     presetFn();
-    setTempStartDate(null);
-    setTempEndDate(null);
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -388,10 +386,12 @@ export function Dashboard() {
     // Dias do mês
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(displayYear, displayMonth, day);
-      const isSelected = tempStartDate && isSameDay(date, tempStartDate) || 
-                        tempEndDate && isSameDay(date, tempEndDate);
+      const isFirstDay = tempStartDate && isSameDay(date, tempStartDate);
+      const isLastDay = tempEndDate && isSameDay(date, tempEndDate);
+      const isSelected = isFirstDay || isLastDay;
       const isInRange = tempStartDate && tempEndDate && 
-                       isWithinInterval(date, { start: tempStartDate, end: tempEndDate });
+                       isWithinInterval(date, { start: tempStartDate, end: tempEndDate }) &&
+                       !isFirstDay && !isLastDay;
       const isHovered = hoverDate && tempStartDate && !tempEndDate &&
                        isWithinInterval(date, { 
                          start: tempStartDate < hoverDate ? tempStartDate : hoverDate,
@@ -406,11 +406,13 @@ export function Dashboard() {
           onMouseEnter={() => setHoverDate(date)}
           onMouseLeave={() => setHoverDate(null)}
           className={`
-            h-9 w-9 rounded text-sm transition-colors flex items-center justify-center
-            ${isSelected ? 'bg-custom-600 text-white font-semibold' : ''}
-            ${isInRange || isHovered ? 'bg-custom-200' : ''}
-            ${!isSelected && !isInRange && !isHovered ? 'hover:bg-gray-100' : ''}
-            ${isToday && !isSelected ? 'border-2 border-custom-600' : ''}
+            h-9 w-9 text-sm transition-colors flex items-center justify-center
+            ${isFirstDay && !isLastDay ? 'rounded-l-full bg-custom-600 text-white font-semibold' : ''}
+            ${isLastDay && !isFirstDay ? 'rounded-r-full bg-custom-600 text-white font-semibold' : ''}
+            ${isFirstDay && isLastDay ? 'rounded-full bg-custom-600 text-white font-semibold' : ''}
+            ${isInRange || isHovered ? 'bg-custom-600 text-white' : ''}
+            ${!isSelected && !isInRange && !isHovered ? 'rounded hover:bg-gray-100' : ''}
+            ${isToday && !isSelected ? 'border-2 rounded-full border-custom-600' : ''}
           `}
         >
           {day}
@@ -489,15 +491,15 @@ export function Dashboard() {
                 <div className="w-48 border-r">
                   <div className="py-2">
                     {[
-                      { label: 'Hoje', fn: () => { const d = format(new Date(), 'yyyy-MM-dd'); setStartDate(d); setEndDate(d); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = format(d, 'yyyy-MM-dd'); setStartDate(s); setEndDate(s); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Ano', fn: () => { const e = new Date(); const s = new Date(e.getFullYear(), 0, 1); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
-                      { label: 'Máximo', fn: () => { const e = new Date(); const s = new Date(2020, 0, 1); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Hoje', fn: () => { const d = new Date(); setStartDate(format(d, 'yyyy-MM-dd')); setEndDate(format(d, 'yyyy-MM-dd')); setTempStartDate(d); setTempEndDate(d); } },
+                      { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); setStartDate(format(d, 'yyyy-MM-dd')); setEndDate(format(d, 'yyyy-MM-dd')); setTempStartDate(d); setTempEndDate(d); } },
+                      { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                      { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                      { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                      { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                      { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                      { label: 'Ano', fn: () => { const e = new Date(); const s = new Date(e.getFullYear(), 0, 1); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                      { label: 'Máximo', fn: () => { const e = new Date(); const s = new Date(2020, 0, 1); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
                     ].map((preset, idx) => (
                       <button
                         key={idx}
