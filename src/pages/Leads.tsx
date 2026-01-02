@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { AppHeader } from '@/components/layout/AppHeader';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
-import { Check, X, Pencil, SquarePlus } from 'lucide-react';
+import { Check, X, Pencil, SquarePlus, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 type LeadRow = {
@@ -32,7 +32,9 @@ type LeadRow = {
 export default function Leads() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { empresaId } = useAuth();
+  const { empresaId, permissoes, hasPermissao, isLoading } = useAuth();
+
+  const canAccessLeads = hasPermissao ? hasPermissao(27) : ((permissoes || []).includes(27));
 
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -331,6 +333,34 @@ export default function Leads() {
     // fallback icon
     return <span className="text-2xl">🔖</span>;
   };
+
+  if (!isLoading && !canAccessLeads) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AppHeader activeModule="comercial" onModuleChange={(m) => {
+          const next = new URLSearchParams(location.search);
+          next.set('module', m);
+          navigate({ pathname: '/', search: next.toString() });
+        }} />
+
+        <main className="min-h-[calc(100vh-8rem)]">
+          <div className="flex items-start gap-6">
+            <ComercialSidebar />
+
+            <div className="flex-1 p-6">
+              <Card className="w-[500px] justify-center mx-auto">
+                <CardContent className="p-8 text-center">
+                  <AlertCircle className="mx-auto mb-4 text-red-600" />
+                  <h3 className="text-lg font-semibold">Você não tem permissão para ver os leads</h3>
+                  <p className="text-sm text-muted-foreground mt-2">Se você acha que deveria ter acesso, contate o administrador.</p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
