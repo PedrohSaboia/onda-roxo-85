@@ -428,7 +428,7 @@ export default function Leads() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Tipo</TableHead>
+                      <TableHead className=" w-[56px]">Tipo</TableHead>
                       <TableHead>Data</TableHead>
                       <TableHead>Nome do Cliente</TableHead>
                       <TableHead>Contato</TableHead>

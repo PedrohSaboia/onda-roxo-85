@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Truck, Package, CheckCircle, Clock, XCircle } from 'lucide-react';
+import { Truck, CheckCircle, Clock, XCircle, RefreshCw } from 'lucide-react';
+import { FaBoxesStacked } from 'react-icons/fa6';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -343,7 +344,7 @@ export function Logistica() {
               {loadingSaldo ? (
                 <span className="text-base">Carregando...</span>
               ) : saldoMelhorEnvio !== null ? (
-                `R$ ${saldoMelhorEnvio.toFixed(2)}`
+                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldoMelhorEnvio)
               ) : (
                 <span className="text-base text-muted-foreground">--</span>
               )}
@@ -353,32 +354,43 @@ export function Logistica() {
 
         <div className="mt-6">
           <div className="flex items-center gap-4">
-            <input
-              ref={barcodeRef}
-              value={barcode}
-              onChange={(e) => setBarcode(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onBlur={() => setTimeout(() => {
-                // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
-                const items = foundPedido?.itens_pedido || [];
-                const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
-                if (!hasMissing) barcodeRef.current?.focus();
-              }, 0)}
-              className="flex-1 text-2xl p-2 border rounded bg-white"
-              placeholder="Escaneie o código do produto aqui"
-              aria-label="Leitor de código"
-            />
-            <Button variant="ghost" onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); }}>Limpar</Button>
+            <div className="relative flex-1">
+              <input
+                ref={barcodeRef}
+                value={barcode}
+                onChange={(e) => setBarcode(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onBlur={() => setTimeout(() => {
+                  // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
+                  const items = foundPedido?.itens_pedido || [];
+                  const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
+                  if (!hasMissing) barcodeRef.current?.focus();
+                }, 0)}
+                className="w-full text-2xl py-2 pl-3 pr-24 border rounded-[16px] bg-white"
+                placeholder="Escaneie o código do produto aqui"
+                aria-label="Leitor de código"
+              />
+              <Button
+                variant="ghost"
+                onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); }}
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-3 text-sm"
+              >
+                Limpar
+              </Button>
+            </div>
           </div>
         </div>
 
         {/* Cards: itens a enviar (view vw_itens_logistica) - only show when no pedido is active */}
         {!foundPedido && (
           <div className="mt-4">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-medium">Itens a enviar</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>ITENS A ENVIAR</h3>
               <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={() => fetchLogItems()}>Atualizar</Button>
+                <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
+                  <RefreshCw className="h-4 w-4" />
+                  Atualizar
+                </Button>
               </div>
             </div>
 
@@ -395,17 +407,21 @@ export function Logistica() {
                   <CardContent className="flex items-center p-4 gap-3 h-full">
                     <div className="flex items-center h-full">
                       {it.variacao?.img_url || it.produto?.img_url ? (
-                        <img src={it.variacao?.img_url || it.produto?.img_url} className="w-16 h-16 rounded object-cover" />
+                        <img src={it.variacao?.img_url || it.produto?.img_url} className="w-12 h-12 rounded-full object-cover border-2 border-gray-200" />
                       ) : (
-                        <div className="w-16 h-16 bg-gray-100 rounded" />
+                        <div className="w-12 h-12 rounded-full border-2 border-gray-200 flex items-center justify-center text-custom-700">
+                          <FaBoxesStacked className="w-6 h-6" aria-hidden />
+                        </div>
                       )}
                     </div>
                     <div className="flex-1 flex flex-col justify-center h-full">
-                      <div className="font-medium">{it.variacao?.nome || it.produto?.nome || '—'}</div>
-                      <div className="text-sm text-muted-foreground">SKU: {it.variacao?.sku || it.produto?.sku || '-'}</div>
+                      <div className="font-medium">{it.produto?.nome || it.variacao?.nome || '—'}</div>
+                      {it.variacao?.nome ? (
+                        <div className="text-sm text-muted-foreground">{it.variacao.nome}</div>
+                      ) : null}
                     </div>
                     <div className="text-right flex flex-col justify-center h-full">
-                      <div className="text-sm text-muted-foreground">Qtd a enviar</div>
+                      <div className="text-sm text-muted-foreground">A enviar</div>
                       <div className="text-xl font-semibold">{it.quantidade_total}</div>
                     </div>
                   </CardContent>
@@ -448,13 +464,17 @@ export function Logistica() {
                       <div key={it.id} className={`border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
                         <div className="flex items-center gap-3">
                           {it.produto?.img_url || it.variacao?.img_url ? (
-                            <img src={it.variacao?.img_url || it.produto?.img_url} className="w-12 h-12 rounded" />
+                            <img src={it.variacao?.img_url || it.produto?.img_url} className="w-12 h-12 rounded-full border-2 border-gray-200" />
                           ) : (
-                            <div className="w-12 h-12 bg-gray-100 rounded" />
+                            <div className="w-12 h-12 bg-gray-100 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-400">
+                              <FaBoxesStacked className="w-6 h-6" aria-hidden />
+                            </div>
                           )}
                           <div>
-                            <div className="font-medium">{it.variacao?.nome || it.produto?.nome}</div>
-                            <div className="text-sm text-muted-foreground">SKU: {it.variacao?.sku || it.produto?.sku || '-'}</div>
+                            <div className="font-medium">{it.produto?.nome || it.variacao?.nome}</div>
+                            {it.variacao?.nome ? (
+                              <div className="text-sm text-muted-foreground">{it.variacao.nome}</div>
+                            ) : null}
                           </div>
                         </div>
 
