@@ -1390,7 +1390,7 @@ export default function Pedido() {
                         setTempValoresPagamentos(pagamentosMap);
                         setEditValorTotalOpen(true);
                       }}
-                      className="text-gray-500 hover:text-purple-700 transition-colors"
+                      className="text-gray-500 hover:text-custom-700 transition-colors"
                       title="Editar valor total"
                     >
                       <Edit className="h-4 w-4" />
@@ -1433,7 +1433,7 @@ export default function Pedido() {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle>Produtos</CardTitle>
-                <Button className="bg-purple-700 text-white" onClick={() => {
+                <Button className="bg-custom-700 text-white" onClick={() => {
                   if (readonly) return;
                   const canAdd = hasPermissao ? hasPermissao(24) : (permissoes ?? []).includes(24);
                   if (!canAdd) {
@@ -1893,7 +1893,7 @@ export default function Pedido() {
                         <Button
                           onClick={() => { if (!readonly) handleEnviarMaisBarato(); }}
                           disabled={calculandoFrete || readonly}
-                          className="bg-purple-700 hover:bg-purple-800"
+                          className="bg-custom-700 hover:bg-custom-800"
                         >
                           {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
                         </Button>
@@ -2036,7 +2036,7 @@ export default function Pedido() {
                       }
                     }}
                     disabled={!tempoGanho || savingTempoGanho}
-                    className="w-full bg-purple-700 hover:bg-purple-800 text-white"
+                    className="w-full bg-custom-700 hover:bg-custom-800 text-white"
                   >
                     {savingTempoGanho ? "Salvando..." : "Salvar Tempo Ganho"}
                   </Button>
@@ -2193,7 +2193,7 @@ export default function Pedido() {
                   <div key={p.id} className="flex items-center gap-4 py-2 min-h-[80px]">
                     <img src={p.imagemUrl} alt={p.nome} className="w-12 h-12 rounded flex-shrink-0" />
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-purple-700 truncate" title={p.nome}>{p.nome}</div>
+                      <div className="font-medium text-custom-700 truncate" title={p.nome}>{p.nome}</div>
                       <div className="text-sm text-muted-foreground">R$ {Number(p.preco || 0).toFixed(2)}</div>
                     </div>
 
@@ -2217,7 +2217,7 @@ export default function Pedido() {
                     </div>
 
                     <div>
-                      <Button className="bg-purple-700 text-white" onClick={() => {
+                      <Button className="bg-custom-700 text-white" onClick={() => {
                         // add to modal cart (include codigo_barras)
                         const variacaoId = variationSelectionsModal[p.id] || (p.variacoes && p.variacoes[0]?.id) || null;
                         const quantidade = 1;
@@ -2295,7 +2295,7 @@ export default function Pedido() {
 
               <div className="mt-6 flex justify-end gap-3 flex-shrink-0">
                 <Button variant="outline" onClick={() => setAddProductsVisible(false)}>Cancelar</Button>
-                <Button className="bg-purple-700 text-white" onClick={() => {
+                <Button className="bg-custom-700 text-white" onClick={() => {
                   // Open the wizard (date/payment/value) before persisting
                   if (!pedido) {
                     toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
@@ -2325,9 +2325,9 @@ export default function Pedido() {
           <div className="py-4">
             {/* simple step indicator */}
             <div className="flex items-center justify-between mb-4">
-              <div className={`flex-1 text-center ${wizardStep >= 1 ? 'font-semibold text-purple-700' : 'text-gray-400'}`}>Data</div>
-              <div className={`flex-1 text-center ${wizardStep >= 2 ? 'font-semibold text-purple-700' : 'text-gray-400'}`}>Forma. Pag</div>
-              <div className={`flex-1 text-center ${wizardStep >= 3 ? 'font-semibold text-purple-700' : 'text-gray-400'}`}>Valor</div>
+              <div className={`flex-1 text-center ${wizardStep >= 1 ? 'font-semibold text-custom-700' : 'text-gray-400'}`}>Data</div>
+              <div className={`flex-1 text-center ${wizardStep >= 2 ? 'font-semibold text-custom-700' : 'text-gray-400'}`}>Forma. Pag</div>
+              <div className={`flex-1 text-center ${wizardStep >= 3 ? 'font-semibold text-custom-700' : 'text-gray-400'}`}>Valor</div>
             </div>
 
             {wizardStep === 1 && (
@@ -2363,7 +2363,7 @@ export default function Pedido() {
                               }}
                               className={`relative p-3 rounded-lg transition-all ${
                                 isSelected
-                                  ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                  ? 'border-2 border-custom-700 bg-custom-50 shadow-md'
                                   : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
                               }`}
                               title={forma.nome}
@@ -2376,7 +2376,7 @@ export default function Pedido() {
                                 />
                               )}
                               {isSelected && (
-                                <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                                <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                                   ✓
                                 </div>
                               )}
@@ -2397,7 +2397,7 @@ export default function Pedido() {
                             onClick={() => setShowCartaoDropdownWizard(!showCartaoDropdownWizard)}
                             className={`relative p-3 rounded-lg transition-all ${
                               selectedPaymentIds.some(id => formasPagamentosWizard.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'))))
-                                ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                ? 'border-2 border-custom-700 bg-custom-50 shadow-md'
                                 : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
                             }`}
                             title="Cartão"
@@ -2413,7 +2413,7 @@ export default function Pedido() {
                               ) : null;
                             })()}
                             {selectedPaymentIds.some(id => formasPagamentosWizard.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')))) && (
-                              <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                              <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                                 ✓
                               </div>
                             )}
@@ -2449,7 +2449,7 @@ export default function Pedido() {
                                       }}
                                       className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${
                                         isSelected
-                                          ? 'bg-purple-100 border-2 border-purple-500'
+                                          ? 'bg-custom-100 border-2 border-custom-500'
                                           : 'border-2 border-transparent hover:bg-gray-50'
                                       }`}
                                     >
@@ -2462,7 +2462,7 @@ export default function Pedido() {
                                       )}
                                       <span className="font-medium text-sm">{forma.nome}</span>
                                       {isSelected && (
-                                        <span className="ml-auto text-purple-600">✓</span>
+                                        <span className="ml-auto text-custom-600">✓</span>
                                       )}
                                     </button>
                                   );
@@ -2528,7 +2528,7 @@ export default function Pedido() {
               </div>
               <div>
                 {wizardStep < 3 ? (
-                  <Button className="bg-purple-700 text-white" onClick={() => {
+                  <Button className="bg-custom-700 text-white" onClick={() => {
                     if (wizardStep === 2 && selectedPaymentIds.length === 0) {
                       toast({ title: 'Erro', description: 'Selecione ao menos uma forma de pagamento', variant: 'destructive' });
                       return;
@@ -2536,7 +2536,7 @@ export default function Pedido() {
                     setWizardStep(s => s + 1);
                   }}>Próxima etapa</Button>
                 ) : (
-                  <Button className="bg-purple-700 text-white" onClick={async () => {
+                  <Button className="bg-custom-700 text-white" onClick={async () => {
                     // finalize: persist itens_pedido and add value to pedido.valor_total
                     if (!pedido) return;
                     setWizardSaving(true);

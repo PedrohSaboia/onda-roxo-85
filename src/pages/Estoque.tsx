@@ -160,7 +160,7 @@ export function Estoque() {
             </p>
           </div>
           <Button
-            className="bg-purple-600 hover:bg-purple-700 w-full sm:w-auto"
+            className="bg-custom-600 hover:bg-custom-700 w-full sm:w-auto"
             onClick={() => {
               if (!canCreateProduct) {
                 toast({ title: 'Sem permissão', description: 'Você não tem permissão para criar produtos', variant: 'destructive' });
@@ -180,7 +180,7 @@ export function Estoque() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Total de Produtos</CardTitle>
-            <Package className="h-4 w-4 text-purple-600" />
+            <Package className="h-4 w-4 text-custom-600" />
           </CardHeader>
             <CardContent>
               {loading ? (
@@ -286,12 +286,12 @@ export function Estoque() {
                 <TableRow key={produto.id} className="hover:bg-muted/50">
                   <TableCell>
                     <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center overflow-hidden">
+                          <div className="w-10 h-10 bg-custom-100 rounded-lg flex items-center justify-center overflow-hidden">
                             {produto.imagemUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
                               <img src={produto.imagemUrl} alt={produto.nome} className="w-full h-full object-cover" />
                             ) : (
-                              <Package className="h-5 w-5 text-purple-600" />
+                              <Package className="h-5 w-5 text-custom-600" />
                             )}
                           </div>
                       <div>
@@ -410,12 +410,12 @@ export function Estoque() {
           <Card key={produto.id} className="overflow-hidden">
             <CardContent className="p-4">
               <div className="flex gap-3">
-                <div className="w-16 h-16 bg-purple-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                <div className="w-16 h-16 bg-custom-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
                   {produto.imagemUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={produto.imagemUrl} alt={produto.nome} className="w-full h-full object-cover" />
                   ) : (
-                    <Package className="h-6 w-6 text-purple-600" />
+                    <Package className="h-6 w-6 text-custom-600" />
                   )}
                 </div>
                 <div className="flex-1 min-w-0">

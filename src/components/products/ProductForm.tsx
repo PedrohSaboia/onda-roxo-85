@@ -665,7 +665,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         if (!open) setUpSellSearchTerm('');
       }}>
         <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
-          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-purple-50 to-amber-50">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b bg-gradient-to-r from-custom-50 to-amber-50">
             <DialogTitle className="text-2xl font-bold text-gray-900">Produtos para Up-Sell</DialogTitle>
             <p className="text-sm text-gray-600 mt-1">Selecione os produtos que serão oferecidos como up-sell aos clientes</p>
           </DialogHeader>
@@ -681,11 +681,11 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                   placeholder="Buscar por nome ou SKU..."
                   value={upSellSearchTerm}
                   onChange={(e) => setUpSellSearchTerm(e.target.value)}
-                  className="pl-10 h-10 border-gray-300 focus:border-purple-500 focus:ring-purple-500"
+                  className="pl-10 h-10 border-gray-300 focus:border-custom-500 focus:ring-custom-500"
                 />
               </div>
               {selectedUpSellIds.length > 0 && (
-                <div className="flex items-center gap-2 px-4 py-2 bg-purple-100 text-purple-700 rounded-lg font-medium">
+                <div className="flex items-center gap-2 px-4 py-2 bg-custom-100 text-custom-700 rounded-lg font-medium">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -728,8 +728,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         key={prod.id}
                         className={`group relative flex flex-col p-4 border-2 rounded-xl cursor-pointer transition-all duration-200 ${
                           isSelected 
-                            ? 'border-purple-500 bg-purple-50 shadow-md scale-[1.02]' 
-                            : 'border-gray-200 hover:border-purple-300 hover:shadow-sm hover:bg-purple-50/30'
+                            ? 'border-custom-500 bg-custom-50 shadow-md scale-[1.02]' 
+                            : 'border-gray-200 hover:border-custom-300 hover:shadow-sm hover:bg-custom-50/30'
                         }`}
                         onClick={() => {
                           setSelectedUpSellIds(prev => 
@@ -743,8 +743,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         <div className="absolute -top-2 -right-2 z-10">
                           <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shadow-sm ${
                             isSelected 
-                              ? 'bg-purple-600 border-purple-600 scale-110' 
-                              : 'bg-white border-gray-300 group-hover:border-purple-400'
+                              ? 'bg-custom-600 border-custom-600 scale-110' 
+                              : 'bg-white border-gray-300 group-hover:border-custom-400'
                           }`}>
                             {isSelected && (
                               <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -757,7 +757,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         {/* Imagem do produto */}
                         <div className="flex items-center justify-center mb-3">
                           {prod.img_url ? (
-                            <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-gray-200 group-hover:border-purple-300 transition-colors">
+                            <div className="w-20 h-20 rounded-lg overflow-hidden border-2 border-gray-200 group-hover:border-custom-300 transition-colors">
                               <img 
                                 src={prod.img_url} 
                                 alt={prod.nome} 
@@ -765,7 +765,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                               />
                             </div>
                           ) : (
-                            <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 border-2 border-gray-200 flex items-center justify-center group-hover:from-purple-50 group-hover:to-purple-100 group-hover:border-purple-300 transition-colors">
+                            <div className="w-20 h-20 rounded-lg bg-gradient-to-br from-gray-100 to-gray-200 border-2 border-gray-200 flex items-center justify-center group-hover:from-custom-50 group-hover:to-custom-100 group-hover:border-custom-300 transition-colors">
                               <svg className="w-8 h-8 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                               </svg>
@@ -778,7 +778,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                           <h3 className="font-semibold text-sm text-gray-900 line-clamp-2 mb-1 leading-snug min-h-[2.5rem]">
                             {prod.nome}
                           </h3>
-                          <div className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 group-hover:bg-purple-100 rounded-md transition-colors">
+                          <div className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 group-hover:bg-custom-100 rounded-md transition-colors">
                             <svg className="w-3 h-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
                             </svg>
@@ -823,7 +823,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                     setUpSellModalOpen(false);
                     setUpSellSearchTerm('');
                   }}
-                  className="min-w-[100px] bg-gradient-to-r from-purple-600 to-amber-600 hover:from-purple-700 hover:to-amber-700"
+                  className="min-w-[100px] bg-gradient-to-r from-custom-600 to-amber-600 hover:from-custom-700 hover:to-amber-700"
                 >
                   Confirmar
                 </Button>

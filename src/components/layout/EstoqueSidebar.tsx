@@ -76,16 +76,16 @@ export function EstoqueSidebar() {
                 <li key={it.id}>
                   <button
                     onClick={() => handleClick(it.id)}
-                    className={`w-full flex items-center gap-3 text-sm rounded-md px-3 py-2.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-purple-400 ${
+                    className={`w-full flex items-center gap-3 text-sm rounded-md px-3 py-2.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-custom-400 ${
                       isActive
-                        ? 'bg-purple-600 text-white font-medium'
-                        : 'text-slate-700 hover:bg-purple-50 hover:text-purple-700'
+                        ? 'bg-custom-600 text-white font-medium'
+                        : 'text-slate-700 hover:bg-custom-50 hover:text-custom-700'
                     }`}
                     aria-current={isActive ? 'page' : undefined}
                     title={!isExpanded ? it.label : undefined}
                   >
                     <span className={`flex-shrink-0 p-1 rounded-md ${isActive ? 'bg-white/20' : 'bg-transparent'}`}>
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-purple-600'}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-custom-600'}`} />
                     </span>
                     <span 
                       className={`flex-1 text-left whitespace-nowrap transition-all duration-300 ${

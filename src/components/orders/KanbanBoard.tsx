@@ -72,7 +72,7 @@ export function KanbanBoard({ pedidos, status, onOrderMove, onOrderClick }: Kanb
           >
             <Card className={cn(
               "h-full transition-all duration-200",
-              isDragOver && "ring-2 ring-purple-500 shadow-lg"
+              isDragOver && "ring-2 ring-custom-500 shadow-lg"
             )}>
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center justify-between text-sm">

@@ -1278,7 +1278,7 @@ export function Comercial() {
                     : `${totalExcludingEnviados} pedidos encontrados`}
               </p>
             </div>
-            <Button className="bg-purple-600 hover:bg-purple-700" onClick={() => {
+            <Button className="bg-custom-600 hover:bg-custom-700" onClick={() => {
               const canCreate = hasPermissao ? hasPermissao(33) : (permissoes ?? []).includes(33);
               if (!canCreate) {
                 toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
@@ -1375,7 +1375,7 @@ export function Comercial() {
                               >
                                 <div className="font-medium">{produto.nome}</div>
                                 {produto.sku && <div className="text-xs text-gray-500">{produto.sku}</div>}
-                                {produto.temVariacoes && <div className="text-xs text-purple-600">Com variações</div>}
+                                {produto.temVariacoes && <div className="text-xs text-custom-600">Com variações</div>}
                               </div>
                             ))}
                           </div>
@@ -1529,7 +1529,7 @@ export function Comercial() {
               <div className="mt-4 p-3 rounded-lg">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-purple-900">
+                    <span className="text-sm font-medium text-custom-900">
                       {selectedPedidosIds.size} {selectedPedidosIds.size === 1 ? 'pedido selecionado' : 'pedidos selecionados'}
                     </span>
                     <Button
@@ -1539,7 +1539,7 @@ export function Comercial() {
                         setSelectedPedidosIds(new Set());
                         setSelectedMelhorEnvioIds([]);
                       }}
-                      className="text-purple-600 hover:text-purple-800 hover:bg-purple-100 h-7"
+                      className="text-custom-600 hover:text-custom-800 hover:bg-custom-100 h-7"
                     >
                       Limpar seleção
                     </Button>
@@ -1609,7 +1609,7 @@ export function Comercial() {
                           });
                         }
                       }}
-                      className="flex items-center gap-2 h-8 bg-purple-600 text-white hover:bg-purple-700 hover:text-white"
+                      className="flex items-center gap-2 h-8 bg-custom-600 text-white hover:bg-custom-700 hover:text-white"
                       disabled={selectedMelhorEnvioIds.length === 0}
                     >
                       <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1826,14 +1826,14 @@ export function Comercial() {
                 )}
 
                 {selectedProdutos.map((produto) => (
-                  <div key={`${produto.tipo}-${produto.id}`} className="flex items-center gap-2 bg-purple-100 text-purple-800 px-3 py-1 rounded">
+                  <div key={`${produto.tipo}-${produto.id}`} className="flex items-center gap-2 bg-custom-100 text-custom-800 px-3 py-1 rounded">
                     <span className="text-sm">
                       {produto.tipo === 'variacao' 
                         ? `${produto.nome} - ${produto.variacaoNome}` 
                         : produto.nome}
                     </span>
                     <button
-                      className="text-purple-600 hover:text-purple-800"
+                      className="text-custom-600 hover:text-custom-800"
                       onClick={() => removerProdutoFiltro(produto.id, produto.tipo)}
                       aria-label="Remover filtro de produto"
                     >
@@ -1858,7 +1858,7 @@ export function Comercial() {
                     checked={isAllSelected}
                     onCheckedChange={toggleSelectAll}
                     aria-label="Selecionar todos"
-                    className={isSomeSelected ? "data-[state=checked]:bg-purple-600" : ""}
+                    className={isSomeSelected ? "data-[state=checked]:bg-custom-600" : ""}
                   />
                 </TableHead>
                 <TableHead>ID do Pedido</TableHead>
@@ -2170,7 +2170,7 @@ export function Comercial() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="mb-1 bg-purple-600 text-white hover:bg-purple-700 px-2 py-0 h-6 rounded text-xs"
+                          className="mb-1 bg-custom-600 text-white hover:bg-custom-700 px-2 py-0 h-6 rounded text-xs"
                           onClick={(e) => { e.stopPropagation(); handleEnvioRapido(pedido.id); }}
                         >
                           {processingRapid[pedido.id] ? 'Processando...' : 'Envio Rápido'}
@@ -2463,7 +2463,7 @@ export function Comercial() {
               {variacoesList.map(variacao => (
                 <div
                   key={variacao.id}
-                  className="p-3 border rounded hover:bg-purple-50 cursor-pointer transition-colors"
+                  className="p-3 border rounded hover:bg-custom-50 cursor-pointer transition-colors"
                   onClick={() => selecionarVariacao(variacao)}
                 >
                   <div className="font-medium">{variacao.nome}</div>

@@ -473,10 +473,10 @@ export default function NovoPedido() {
                 value={selectedDate || ''}
                 onChange={(e) => setSelectedDate(e.target.value || null)}
               />
-              <button type="button" className="bg-purple-700 text-white px-3 py-1 rounded-md" onClick={() => setSelectedDate(new Date().toISOString().slice(0,10))}>Hoje</button>
+              <button type="button" className="bg-custom-700 text-white px-3 py-1 rounded-md" onClick={() => setSelectedDate(new Date().toISOString().slice(0,10))}>Hoje</button>
             </div>
             <Button variant="outline" onClick={() => navigate('/?module=comercial')}>Cancelar</Button>
-            <Button className="bg-purple-700 text-white" onClick={async () => await handleCreatePedido()} disabled={saving}>{saving ? 'Criando...' : '+ Criar Pedido'}</Button>
+            <Button className="bg-custom-700 text-white" onClick={async () => await handleCreatePedido()} disabled={saving}>{saving ? 'Criando...' : '+ Criar Pedido'}</Button>
           </div>
         </div>
 
@@ -539,7 +539,7 @@ export default function NovoPedido() {
                                 }}
                                 className={`relative p-2 rounded-lg transition-all ${
                                   isSelected
-                                    ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                    ? 'border-2 border-custom-700 bg-custom-50 shadow-md'
                                     : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
                                 }`}
                                 title={forma.nome}
@@ -552,7 +552,7 @@ export default function NovoPedido() {
                                   />
                                 )}
                                 {isSelected && (
-                                  <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                                  <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
                                     ✓
                                   </div>
                                 )}
@@ -573,7 +573,7 @@ export default function NovoPedido() {
                               onClick={() => setShowCartaoDropdown(!showCartaoDropdown)}
                               className={`relative p-2 rounded-lg transition-all ${
                                 selectedPaymentIds.some(id => formasPagamentos.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'))))
-                                  ? 'border-2 border-purple-700 bg-purple-50 shadow-md'
+                                  ? 'border-2 border-custom-700 bg-custom-50 shadow-md'
                                   : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
                               }`}
                               title="Cartão"
@@ -589,7 +589,7 @@ export default function NovoPedido() {
                                 ) : null;
                               })()}
                               {selectedPaymentIds.some(id => formasPagamentos.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')))) && (
-                                <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
+                                <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">
                                   ✓
                                 </div>
                               )}
@@ -641,7 +641,7 @@ export default function NovoPedido() {
                                         }}
                                         className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${
                                           isSelected
-                                            ? 'bg-purple-100 border-2 border-purple-500'
+                                            ? 'bg-custom-100 border-2 border-custom-500'
                                             : 'border-2 border-transparent hover:bg-gray-50'
                                         }`}
                                       >
@@ -654,7 +654,7 @@ export default function NovoPedido() {
                                         )}
                                         <span className="font-medium text-sm">{forma.nome}</span>
                                         {isSelected && (
-                                          <span className="ml-auto text-purple-600">✓</span>
+                                          <span className="ml-auto text-custom-600">✓</span>
                                         )}
                                       </button>
                                     );
@@ -782,7 +782,7 @@ export default function NovoPedido() {
                 <div key={p.id} className="flex items-center gap-4">
                   <img src={p.imagemUrl} alt={p.nome} className="w-12 h-12 rounded" />
                   <div className="flex-1">
-                    <div className="font-medium text-purple-700">{p.nome}</div>
+                    <div className="font-medium text-custom-700">{p.nome}</div>
                     <div className="text-sm text-muted-foreground">R$ {p.preco.toFixed(2)}</div>
                   </div>
 
@@ -806,7 +806,7 @@ export default function NovoPedido() {
                   </div>
 
                   <div>
-                    <Button onClick={() => addToCart(p, variationSelections[p.id], brindeSelections[p.id])} className="bg-purple-600 text-white">+</Button>
+                    <Button onClick={() => addToCart(p, variationSelections[p.id], brindeSelections[p.id])} className="bg-custom-600 text-white">+</Button>
                   </div>
                 </div>
               ))}

@@ -52,15 +52,15 @@ export default {
 					DEFAULT: 'hsl(var(--card))',
 					foreground: 'hsl(var(--card-foreground))'
 				},
-				purple: {
-					50: 'hsl(var(--purple-50))',
-					100: 'hsl(var(--purple-100))',
-					200: 'hsl(var(--purple-200))',
-					500: 'hsl(var(--purple-500))',
-					600: 'hsl(var(--purple-600))',
-					700: 'hsl(var(--purple-700))',
-					800: 'hsl(var(--purple-800))',
-					900: 'hsl(var(--purple-900))'
+				custom: {
+					50: 'hsl(var(--custom-50))',
+					100: 'hsl(var(--custom-100))',
+					200: 'hsl(var(--custom-200))',
+					500: 'hsl(var(--custom-500))',
+					600: 'hsl(var(--custom-600))',
+					700: 'hsl(var(--custom-700))',
+					800: 'hsl(var(--custom-800))',
+					900: 'hsl(var(--custom-900))'
 				},
 				success: {
 					DEFAULT: 'hsl(var(--success))',

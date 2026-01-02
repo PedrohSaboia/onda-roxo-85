@@ -41,7 +41,7 @@ export default function EditSelectModal({ open, onOpenChange, title = 'Editar', 
         <DialogFooter>
           <div className="flex justify-end gap-3 w-full">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button className="bg-purple-700 text-white" onClick={async () => { await onSave(selected); }}>Salvar</Button>
+            <Button className="bg-custom-700 text-white" onClick={async () => { await onSave(selected); }}>Salvar</Button>
           </div>
         </DialogFooter>
       </DialogContent>

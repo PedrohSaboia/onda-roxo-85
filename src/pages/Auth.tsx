@@ -78,17 +78,17 @@ export default function Auth() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-background">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-custom-50 to-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-50 to-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-custom-50 to-background p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-800 bg-clip-text text-transparent">
+          <h1 className="text-3xl font-bold bg-gradient-to-r from-custom-600 to-custom-800 bg-clip-text text-transparent">
             Zeelux ERP
           </h1>
           <p className="text-muted-foreground mt-2">
@@ -160,7 +160,7 @@ export default function Auth() {
 
                   <Button
                     type="submit"
-                    className="w-full bg-gradient-to-r from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800"
+                    className="w-full bg-gradient-to-r from-custom-600 to-custom-700 hover:from-custom-700 hover:to-custom-800"
                     disabled={loginForm.formState.isSubmitting}
                   >
                     {loginForm.formState.isSubmitting ? 'Entrando...' : 'Entrar'}
@@ -185,7 +185,7 @@ export default function Auth() {
                 <DialogFooter>
                   <div className="flex gap-2">
                     <Button variant="ghost" onClick={() => setResetOpen(false)}>Cancelar</Button>
-                    <Button className="bg-purple-600 hover:bg-purple-700" onClick={onReset} disabled={resetting}>{resetting ? 'Enviando...' : 'Enviar email'}</Button>
+                    <Button className="bg-custom-600 hover:bg-custom-700" onClick={onReset} disabled={resetting}>{resetting ? 'Enviando...' : 'Enviar email'}</Button>
                   </div>
                 </DialogFooter>
               </DialogContent>

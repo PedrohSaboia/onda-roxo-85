@@ -290,8 +290,8 @@ export default function InformacoesEntrega() {
           {/* Stepper visual (2 steps) */}
           {!submitted && (
             <div className="flex items-center justify-center gap-4 mb-6">
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>1</div>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${(step >= 2 || submitted) ? 'bg-purple-700 text-white' : 'bg-gray-300 text-gray-600'}`}>2</div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${step >= 1 ? 'bg-custom-700 text-white' : 'bg-gray-300 text-gray-600'}`}>1</div>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${(step >= 2 || submitted) ? 'bg-custom-700 text-white' : 'bg-gray-300 text-gray-600'}`}>2</div>
             </div>
           )}
 
@@ -344,7 +344,7 @@ export default function InformacoesEntrega() {
                   setSubmitted(false);
                   setStep(2);
                 }}
-                className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto"
+                className="bg-custom-700 text-white px-6 py-3 rounded-md w-full sm:w-auto"
               >
                 → Continuar
               </button>
@@ -395,7 +395,7 @@ export default function InformacoesEntrega() {
 
                 <div className="flex flex-col sm:flex-row justify-between gap-3">
                   <button type="button" onClick={() => { setSubmitted(false); setCepBuscado(false); setStep(1); }} className="px-4 py-2 border rounded-md w-full sm:w-auto">Voltar</button>
-                  <button type="button" onClick={handleSalvar} disabled={salvando} className="bg-purple-700 text-white px-6 py-3 rounded-md w-full sm:w-auto">
+                  <button type="button" onClick={handleSalvar} disabled={salvando} className="bg-custom-700 text-white px-6 py-3 rounded-md w-full sm:w-auto">
                     {salvando ? 'Salvando...' : 'Enviar Formulário'}
                   </button>
                 </div>

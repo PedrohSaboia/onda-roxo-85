@@ -189,7 +189,7 @@ export function Dashboard() {
 
           {/* Métricas principais */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <MetricCard title="Total de Pedidos" value={totalPedidos} description={`${startDate} → ${endDate}`} trend="up" icon={Package} color="purple" />
+            <MetricCard title="Total de Pedidos" value={totalPedidos} description={`${startDate} → ${endDate}`} trend="up" icon={Package} color="custom" />
             <MetricCard title="Vendas (R$)" value={vendasValor.toFixed(2)} description="soma de valor_total" icon={TrendingUp} color="blue" />
             <MetricCard title="Pedidos Enviados" value={pedidosEnviados} description="carrinho / melhor envio" trend="up" icon={Users} color="green" />
             <MetricCard title="Pedidos Hoje" value={pedidosHoje} description="no período" icon={Truck} color="orange" />

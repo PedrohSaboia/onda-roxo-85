@@ -9,11 +9,11 @@ interface MetricCardProps {
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
   icon?: React.ElementType;
-  color?: 'purple' | 'blue' | 'green' | 'orange' | 'red';
+  color?: 'custom' | 'blue' | 'green' | 'orange' | 'red';
 }
 
 const colorStyles = {
-  purple: 'from-purple-500 to-purple-600',
+  custom: 'from-custom-500 to-custom-600',
   blue: 'from-blue-500 to-blue-600',
   green: 'from-green-500 to-green-600',
   orange: 'from-orange-500 to-orange-600',
@@ -27,7 +27,7 @@ export function MetricCard({
   trend, 
   trendValue, 
   icon: Icon,
-  color = 'purple' 
+  color = 'custom' 
 }: MetricCardProps) {
   return (
     <Card className="relative overflow-hidden">

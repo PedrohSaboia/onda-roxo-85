@@ -67,8 +67,8 @@ export default function Documentacao() {
             {/* Dashboard e Métricas */}
             <Card className="p-6 hover:shadow-lg transition-shadow">
               <div className="flex items-start gap-4">
-                <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
-                  <BarChart3 className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                <div className="p-3 bg-custom-100 dark:bg-custom-900/30 rounded-lg">
+                  <BarChart3 className="h-6 w-6 text-custom-600 dark:text-custom-400" />
                 </div>
                 <div>
                   <h3 className="text-xl font-semibold text-gray-900 dark:text-white mb-2">
@@ -79,19 +79,19 @@ export default function Documentacao() {
                   </p>
                   <ul className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
                     <li className="flex items-center gap-2">
-                      <ArrowRight className="h-4 w-4 text-purple-600" />
+                      <ArrowRight className="h-4 w-4 text-custom-600" />
                       Receita total e por período
                     </li>
                     <li className="flex items-center gap-2">
-                      <ArrowRight className="h-4 w-4 text-purple-600" />
+                      <ArrowRight className="h-4 w-4 text-custom-600" />
                       Número de pedidos e ticket médio
                     </li>
                     <li className="flex items-center gap-2">
-                      <ArrowRight className="h-4 w-4 text-purple-600" />
+                      <ArrowRight className="h-4 w-4 text-custom-600" />
                       Taxa de conversão de leads
                     </li>
                     <li className="flex items-center gap-2">
-                      <ArrowRight className="h-4 w-4 text-purple-600" />
+                      <ArrowRight className="h-4 w-4 text-custom-600" />
                       Produtos mais vendidos
                     </li>
                   </ul>
@@ -383,8 +383,8 @@ export default function Documentacao() {
                     <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 rounded-lg">
                       <p className="text-sm font-semibold text-blue-800 dark:text-blue-300">Em Produção</p>
                     </div>
-                    <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800 p-3 rounded-lg">
-                      <p className="text-sm font-semibold text-purple-800 dark:text-purple-300">Pronto</p>
+                    <div className="bg-custom-50 dark:bg-custom-900/20 border border-custom-200 dark:border-custom-800 p-3 rounded-lg">
+                      <p className="text-sm font-semibold text-custom-800 dark:text-custom-300">Pronto</p>
                     </div>
                     <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 p-3 rounded-lg">
                       <p className="text-sm font-semibold text-green-800 dark:text-green-300">Enviado</p>
@@ -654,7 +654,7 @@ export default function Documentacao() {
 
         {/* Suporte */}
         <section>
-          <Card className="p-8 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border-blue-200 dark:border-blue-800">
+          <Card className="p-8 bg-gradient-to-r from-blue-50 to-custom-50 dark:from-blue-900/20 dark:to-custom-900/20 border-blue-200 dark:border-blue-800">
             <div className="text-center">
               <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-3">
                 Precisa de Ajuda?

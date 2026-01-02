@@ -170,7 +170,7 @@ export function ListaEmbalagens() {
                   }
                   handleNew();
                 }}
-                className="bg-purple-600 hover:bg-purple-700"
+                className="bg-custom-600 hover:bg-custom-700"
               >
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Embalagem

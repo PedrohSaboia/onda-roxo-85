@@ -768,7 +768,7 @@ export function Configuracoes() {
                   <Dialog open={openNewUser} onOpenChange={setOpenNewUser}>
                     <DialogTrigger asChild>
                       <Button 
-                        className="bg-purple-600 hover:bg-purple-700"
+                        className="bg-custom-600 hover:bg-custom-700"
                         onClick={(e) => {
                           const canCreate = hasPermissao ? hasPermissao(4) : false;
                           if (!canCreate) {
@@ -846,7 +846,7 @@ export function Configuracoes() {
                       <DialogFooter>
                         <div className="flex gap-2">
                           <Button variant="ghost" onClick={() => setOpenNewUser(false)}>Cancelar</Button>
-                          <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                          <Button className="bg-custom-600 hover:bg-custom-700" onClick={async () => {
                             // create auth user then upsert into usuarios
                             try {
                               if (!newNome || !newEmail || !newPassword) {
@@ -1122,7 +1122,7 @@ export function Configuracoes() {
             <DialogFooter>
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => setEditStatusOpen(false)}>Cancelar</Button>
-                <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                <Button className="bg-custom-600 hover:bg-custom-700" onClick={async () => {
                   try {
                     if (!editStatusId) {
                       toast({ title: 'Erro', description: 'Status sem id não pode ser editado', variant: 'destructive' });
@@ -1217,7 +1217,7 @@ export function Configuracoes() {
             <DialogFooter>
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancelar</Button>
-                <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                <Button className="bg-custom-600 hover:bg-custom-700" onClick={async () => {
                   try {
                     if (!editUserId) {
                       toast({ title: 'Erro', description: 'Usuário sem id não pode ser editado', variant: 'destructive' });
@@ -1351,7 +1351,7 @@ export function Configuracoes() {
                   <CardTitle>Status dos Pedidos</CardTitle>
                   <Dialog open={createStatusOpen} onOpenChange={setCreateStatusOpen}>
                     <DialogTrigger asChild>
-                      <Button className="bg-purple-600 hover:bg-purple-700">Novo Status</Button>
+                      <Button className="bg-custom-600 hover:bg-custom-700">Novo Status</Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
@@ -1378,7 +1378,7 @@ export function Configuracoes() {
                       <DialogFooter>
                         <div className="flex gap-2">
                           <Button variant="ghost" onClick={() => setCreateStatusOpen(false)}>Cancelar</Button>
-                          <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                          <Button className="bg-custom-600 hover:bg-custom-700" onClick={async () => {
                             try {
                               if (!createNome || !createCor) {
                                 toast({ title: 'Preencha os campos', variant: 'destructive' });
@@ -1564,7 +1564,7 @@ export function Configuracoes() {
             <DialogFooter>
               <div className="flex gap-2">
                 <Button variant="ghost" onClick={() => setEditPlataformaOpen(false)}>Cancelar</Button>
-                <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+                <Button className="bg-custom-600 hover:bg-custom-700" onClick={async () => {
                   try {
                     if (!editPlataformaId) {
                       toast({ title: 'Erro', description: 'Plataforma sem id não pode ser editada', variant: 'destructive' });
@@ -1617,7 +1617,7 @@ export function Configuracoes() {
                   <Button
                     variant={editOrderMode ? 'default' : 'outline'}
                     onClick={() => setEditOrderMode(!editOrderMode)}
-                    className={editOrderMode ? 'bg-purple-600 hover:bg-purple-700' : ''}
+                    className={editOrderMode ? 'bg-custom-600 hover:bg-custom-700' : ''}
                   >
                     <GripVertical className="h-4 w-4 mr-2" />
                     {editOrderMode ? 'Finalizar Ordenação' : 'Editar Ordem'}
@@ -1644,7 +1644,7 @@ export function Configuracoes() {
                     onDragEnd={handleDragEnd}
                     className={`flex items-center gap-3 p-4 border rounded-lg transition-all ${
                       editOrderMode
-                        ? 'cursor-move hover:border-purple-400 hover:bg-purple-50'
+                        ? 'cursor-move hover:border-custom-400 hover:bg-custom-50'
                         : 'bg-card'
                     } ${draggedIndex === index ? 'opacity-50' : ''}`}
                   >
@@ -1689,7 +1689,7 @@ export function Configuracoes() {
                 <CardTitle>Formas de Pagamentos</CardTitle>
                 <Dialog open={createFormaPagamentoOpen} onOpenChange={setCreateFormaPagamentoOpen}>
                   <DialogTrigger asChild>
-                    <Button className="bg-purple-600 hover:bg-purple-700">
+                    <Button className="bg-custom-600 hover:bg-custom-700">
                       <Plus className="h-4 w-4 mr-2" />
                       Nova Forma de Pagamento
                     </Button>
@@ -1765,7 +1765,7 @@ export function Configuracoes() {
                         Cancelar
                       </Button>
                       <Button
-                        className="bg-purple-600 hover:bg-purple-700"
+                        className="bg-custom-600 hover:bg-custom-700"
                         onClick={async () => {
                           try {
                             if (!createFormaPagamentoNome.trim()) {
@@ -2033,7 +2033,7 @@ export function Configuracoes() {
                   Cancelar
                 </Button>
                 <Button
-                  className="bg-purple-600 hover:bg-purple-700"
+                  className="bg-custom-600 hover:bg-custom-700"
                   onClick={async () => {
                     try {
                       if (!editFormaPagamentoId) {
@@ -2304,7 +2304,7 @@ export function Configuracoes() {
 
             <DialogFooter>
               <Button variant="ghost" onClick={() => setEditEmpresaOpen(false)}>Cancelar</Button>
-              <Button className="bg-purple-600 hover:bg-purple-700" onClick={async () => {
+              <Button className="bg-custom-600 hover:bg-custom-700" onClick={async () => {
                 try {
                   if (!editEmpresaId) {
                     toast({ title: 'Erro', description: 'Empresa sem id não pode ser editada', variant: 'destructive' });

@@ -365,12 +365,16 @@ export function Dashboard() {
     }
   };
 
-  const renderCalendar = () => {
+  const renderCalendar = (monthOffset: number = 0) => {
     const today = new Date();
     
+    // Calcular mês a ser exibido (atual ou próximo)
+    const displayYear = monthOffset === 0 ? calendarYear : (calendarMonth === 11 ? calendarYear + 1 : calendarYear);
+    const displayMonth = monthOffset === 0 ? calendarMonth : (calendarMonth === 11 ? 0 : calendarMonth + 1);
+    
     // Gerar dias do mês selecionado
-    const firstDay = new Date(calendarYear, calendarMonth, 1);
-    const lastDay = new Date(calendarYear, calendarMonth + 1, 0);
+    const firstDay = new Date(displayYear, displayMonth, 1);
+    const lastDay = new Date(displayYear, displayMonth + 1, 0);
     const daysInMonth = lastDay.getDate();
     const startDayOfWeek = firstDay.getDay();
     
@@ -378,12 +382,12 @@ export function Dashboard() {
     
     // Dias vazios antes do primeiro dia
     for (let i = 0; i < startDayOfWeek; i++) {
-      days.push(<div key={`empty-${i}`} className="h-8" />);
+      days.push(<div key={`empty-${i}`} className="h-9" />);
     }
     
     // Dias do mês
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(calendarYear, calendarMonth, day);
+      const date = new Date(displayYear, displayMonth, day);
       const isSelected = tempStartDate && isSameDay(date, tempStartDate) || 
                         tempEndDate && isSameDay(date, tempEndDate);
       const isInRange = tempStartDate && tempEndDate && 
@@ -402,11 +406,11 @@ export function Dashboard() {
           onMouseEnter={() => setHoverDate(date)}
           onMouseLeave={() => setHoverDate(null)}
           className={`
-            h-8 w-full rounded text-sm transition-colors
-            ${isSelected ? 'bg-primary text-primary-foreground font-semibold' : ''}
-            ${isInRange || isHovered ? 'bg-primary/20' : ''}
-            ${!isSelected && !isInRange && !isHovered ? 'hover:bg-accent' : ''}
-            ${isToday && !isSelected ? 'border border-primary' : ''}
+            h-9 w-9 rounded text-sm transition-colors flex items-center justify-center
+            ${isSelected ? 'bg-custom-600 text-white font-semibold' : ''}
+            ${isInRange || isHovered ? 'bg-custom-200' : ''}
+            ${!isSelected && !isInRange && !isHovered ? 'hover:bg-gray-100' : ''}
+            ${isToday && !isSelected ? 'border-2 border-custom-600' : ''}
           `}
         >
           {day}
@@ -415,34 +419,40 @@ export function Dashboard() {
     }
     
     return (
-      <div className="p-3">
+      <div className="px-4 py-3">
         <div className="flex items-center justify-between mb-3">
-          <button
-            onClick={() => navigateMonth('prev')}
-            className="p-1 hover:bg-accent rounded transition-colors"
-            type="button"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
-          <div className="text-center font-semibold">
+          {monthOffset === 0 && (
+            <button
+              onClick={() => navigateMonth('prev')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 1 && <div className="w-7" />}
+          <div className="text-center font-semibold text-base">
             {format(firstDay, 'MMMM yyyy', { locale: ptBR })}
           </div>
-          <button
-            onClick={() => navigateMonth('next')}
-            className="p-1 hover:bg-accent rounded transition-colors"
-            type="button"
-          >
-            <ChevronRight className="h-5 w-5" />
-          </button>
+          {monthOffset === 1 && (
+            <button
+              onClick={() => navigateMonth('next')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 0 && <div className="w-7" />}
         </div>
-        <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-muted-foreground text-center">
-          <div>Dom</div>
-          <div>Seg</div>
-          <div>Ter</div>
-          <div>Qua</div>
-          <div>Qui</div>
-          <div>Sex</div>
-          <div>Sáb</div>
+        <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-gray-500 text-center font-medium">
+          <div>DOM</div>
+          <div>SEG</div>
+          <div>TER</div>
+          <div>QUA</div>
+          <div>QUI</div>
+          <div>SEX</div>
+          <div>SÁB</div>
         </div>
         <div className="grid grid-cols-7 gap-1">
           {days}
@@ -469,24 +479,30 @@ export function Dashboard() {
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-auto p-0" align="end">
+              {/* Título */}
+              <div className="px-4 py-3 border-b">
+                <h3 className="font-semibold text-base">Selecionar Período</h3>
+              </div>
+              
               <div className="flex">
-                {/* Presets */}
-                <div className="w-48 border-r p-3">
-                  <div className="text-sm font-semibold mb-2">Períodos rápidos</div>
-                  <div className="space-y-1">
+                {/* Lista de períodos à esquerda */}
+                <div className="w-48 border-r">
+                  <div className="py-2">
                     {[
-                      { label: 'Hoje', fn: () => { const d = format(new Date(), 'yyyy-MM-dd'); setStartDate(d); setEndDate(d); setPickerOpen(false); } },
-                      { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = format(d, 'yyyy-MM-dd'); setStartDate(s); setEndDate(s); setPickerOpen(false); } },
-                      { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
-                      { label: 'Últimos 15 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 14); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
-                      { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
-                      { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
-                      { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setPickerOpen(false); } },
+                      { label: 'Hoje', fn: () => { const d = format(new Date(), 'yyyy-MM-dd'); setStartDate(d); setEndDate(d); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const s = format(d, 'yyyy-MM-dd'); setStartDate(s); setEndDate(s); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Ano', fn: () => { const e = new Date(); const s = new Date(e.getFullYear(), 0, 1); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
+                      { label: 'Máximo', fn: () => { const e = new Date(); const s = new Date(2020, 0, 1); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(null); setTempEndDate(null); } },
                     ].map((preset, idx) => (
                       <button
                         key={idx}
                         onClick={() => handlePreset(preset.fn)}
-                        className="w-full text-left px-3 py-2 rounded hover:bg-accent transition-colors text-sm"
+                        className="w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors text-sm"
                       >
                         {preset.label}
                       </button>
@@ -494,43 +510,15 @@ export function Dashboard() {
                   </div>
                 </div>
                 
-                {/* Calendário e inputs */}
-                <div className="p-3">
-                  <div className="text-sm font-semibold mb-3">Período personalizado</div>
-                  
-                  {/* Calendário */}
-                  {renderCalendar()}
-                  
-                  {/* Inputs de data */}
-                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t">
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Data início</label>
-                      <input
-                        type="date"
-                        value={tempStartDate ? format(tempStartDate, 'yyyy-MM-dd') : startDate}
-                        onChange={(e) => {
-                          const date = new Date(e.target.value + 'T00:00:00');
-                          setTempStartDate(date);
-                        }}
-                        className="w-full border rounded px-2 py-1 mt-1 text-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-medium text-muted-foreground">Data fim</label>
-                      <input
-                        type="date"
-                        value={tempEndDate ? format(tempEndDate, 'yyyy-MM-dd') : endDate}
-                        onChange={(e) => {
-                          const date = new Date(e.target.value + 'T00:00:00');
-                          setTempEndDate(date);
-                        }}
-                        className="w-full border rounded px-2 py-1 mt-1 text-sm"
-                      />
-                    </div>
+                {/* Dois calendários lado a lado */}
+                <div className="flex flex-col">
+                  <div className="flex">
+                    {renderCalendar(0)}
+                    {renderCalendar(1)}
                   </div>
                   
-                  {/* Botões */}
-                  <div className="flex gap-2 mt-4">
+                  {/* Botões no final */}
+                  <div className="flex gap-2 px-4 py-3 border-t">
                     <Button 
                       variant="outline" 
                       size="sm" 
@@ -545,11 +533,11 @@ export function Dashboard() {
                     </Button>
                     <Button 
                       size="sm" 
-                      className="flex-1"
+                      className="flex-1 bg-custom-600 hover:bg-custom-700"
                       onClick={applyCustomDates}
                       disabled={!tempStartDate}
                     >
-                      Aplicar
+                      Atualizar
                     </Button>
                   </div>
                 </div>
@@ -585,7 +573,7 @@ export function Dashboard() {
               value={metrics.totalPedidos.toString()}
               description={`${metrics.pedidosHoje} pedidos hoje`}
               icon={Package}
-              color="purple"
+              color="custom"
             />
             <MetricCard
               title="Receita Total"

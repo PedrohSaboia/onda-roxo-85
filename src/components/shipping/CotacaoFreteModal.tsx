@@ -344,7 +344,7 @@ export default function CotacaoFreteModal({ open, onClose, onSelect, cotacoes, l
 
                     <Button 
                       onClick={() => handleSelectCotacao(cotacao)}
-                      className="bg-purple-700 hover:bg-purple-800"
+                      className="bg-custom-700 hover:bg-custom-800"
                       disabled={sendingToCart === cotacao.service_id}
                     >
                       {sendingToCart === cotacao.service_id ? (

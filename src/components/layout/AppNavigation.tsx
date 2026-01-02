@@ -38,7 +38,7 @@ export function AppNavigation({ activeModule, onModuleChange }: AppNavigationPro
               className={cn(
                 "flex items-center gap-2 px-3 py-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap",
                 isActive
-                  ? "border-purple-600 text-purple-600"
+                  ? "border-custom-600 text-custom-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
               )}
             >

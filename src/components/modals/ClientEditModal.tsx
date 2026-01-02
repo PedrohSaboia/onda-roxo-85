@@ -320,7 +320,7 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
         <DialogFooter>
           <div className="flex justify-between w-full">
             <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button className="bg-purple-700 text-white" onClick={handleSalvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar'}</Button>
+            <Button className="bg-custom-700 text-white" onClick={handleSalvar} disabled={salvando}>{salvando ? 'Salvando...' : 'Salvar'}</Button>
           </div>
         </DialogFooter>
       </DialogContent>

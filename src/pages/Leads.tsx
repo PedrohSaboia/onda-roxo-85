@@ -462,7 +462,7 @@ export default function Leads() {
                           <div className="flex items-center justify-between">
                             {lead.nome ? (
                               <button
-                                className="font-medium text-purple-700 hover:underline cursor-pointer"
+                                className="font-medium text-custom-700 hover:underline cursor-pointer"
                                 onClick={() => copyContact(lead.nome)}
                                 title="Copiar nome"
                                 aria-label={`Copiar nome ${lead.nome}`}
@@ -470,7 +470,7 @@ export default function Leads() {
                                 {lead.nome}
                               </button>
                             ) : (
-                              <div className="font-medium text-purple-700">—</div>
+                              <div className="font-medium text-custom-700">—</div>
                             )}
                             <div className="flex items-center gap-2">
                               <button
@@ -559,7 +559,7 @@ export default function Leads() {
                         <label className="block text-sm text-muted-foreground mb-1 ml-1">Data</label>
                         <div className="flex items-center gap-3 border rounded-lg pl-1 pr-2 py-1">
                           <Input className="border-none outline-none" type="date" value={addDate} onChange={(e) => setAddDate(e.target.value)} />
-                          <button type="button" className="bg-purple-700 text-white px-3 py-1 rounded-md" onClick={() => setAddDate(new Date().toISOString().slice(0,10))}>Hoje</button>
+                          <button type="button" className="bg-custom-700 text-white px-3 py-1 rounded-md" onClick={() => setAddDate(new Date().toISOString().slice(0,10))}>Hoje</button>
                         </div>
                       </div>
                       <div>
@@ -593,7 +593,7 @@ export default function Leads() {
                                             setPaymentValues(prev => ({ ...prev, [forma.id]: '0,00' }));
                                           }
                                         }}
-                                        className={`relative p-2 rounded-lg transition-all ${isSelected ? 'border-2 border-purple-700 bg-purple-50 shadow-md' : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'}`}
+                                        className={`relative p-2 rounded-lg transition-all ${isSelected ? 'border-2 border-custom-700 bg-custom-50 shadow-md' : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'}`}
                                         title={forma.nome}
                                       >
                                         {forma.img_url && (
@@ -603,7 +603,7 @@ export default function Leads() {
                                           <span className="text-sm px-2">{forma.nome}</span>
                                         )}
                                         {isSelected && (
-                                          <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">✓</div>
+                                          <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">✓</div>
                                         )}
                                       </button>
                                       <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">{forma.nome}</div>
@@ -620,7 +620,7 @@ export default function Leads() {
                                       className={`relative p-2 rounded-lg transition-all ${selectedPaymentIds.some(id => {
                                         const p = formasPagamentos.find(f => f.id === id);
                                         return p && (p.nome?.toLowerCase().includes('cartão') || p.nome?.toLowerCase().includes('cartao'));
-                                      }) ? 'border-2 border-purple-700 bg-purple-50 shadow-md' : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'}`}
+                                      }) ? 'border-2 border-custom-700 bg-custom-50 shadow-md' : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'}`}
                                       title="Cartão"
                                     >
                                       {(() => {
@@ -635,7 +635,7 @@ export default function Leads() {
                                         const p = formasPagamentos.find(f => f.id === id);
                                         return p && (p.nome?.toLowerCase().includes('cartão') || p.nome?.toLowerCase().includes('cartao'));
                                       }) && (
-                                        <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-purple-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">✓</div>
+                                        <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-4 h-4 flex items-center justify-center text-xs font-bold">✓</div>
                                       )}
                                     </button>
 
@@ -673,11 +673,11 @@ export default function Leads() {
                                                     setPaymentValues(prev => ({ ...prev, [forma.id]: '0,00' }));
                                                   }
                                                 }}
-                                                className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${isSelected ? 'bg-purple-100 border-2 border-purple-500' : 'border-2 border-transparent hover:bg-gray-50'}`}
+                                                className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${isSelected ? 'bg-custom-100 border-2 border-custom-500' : 'border-2 border-transparent hover:bg-gray-50'}`}
                                               >
                                                 {forma.img_url && <img src={forma.img_url} alt={forma.nome} className="w-8 h-8 object-contain" />}
                                                 <span className="font-medium text-sm">{forma.nome}</span>
-                                                {isSelected && <span className="ml-auto text-purple-600">✓</span>}
+                                                {isSelected && <span className="ml-auto text-custom-600">✓</span>}
                                               </button>
                                             );
                                           })}
@@ -717,7 +717,7 @@ export default function Leads() {
                     <DialogFooter>
                       <div className="flex justify-end gap-3 w-full">
                         <Button variant="outline" onClick={() => setAddOpen(false)}>Cancelar</Button>
-                        <Button className="bg-purple-700 text-white" onClick={async () => {
+                        <Button className="bg-custom-700 text-white" onClick={async () => {
                           if (!activeLead) {
                             toast({ title: 'Erro', description: 'Lead inválido', variant: 'destructive' });
                             return;
