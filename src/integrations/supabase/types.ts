@@ -80,6 +80,7 @@ export type Database = {
           cnpj: string | null
           cor: string | null
           logo: string | null
+          cores_hsl: Json | null
         }
         Insert: {
           id?: number
@@ -88,6 +89,7 @@ export type Database = {
           cnpj?: string | null
           cor?: string | null
           logo?: string | null
+          cores_hsl?: Json | null
         }
         Update: {
           id?: number
@@ -96,6 +98,7 @@ export type Database = {
           cnpj?: string | null
           cor?: string | null
           logo?: string | null
+          cores_hsl?: Json | null
         }
         Relationships: []
       }

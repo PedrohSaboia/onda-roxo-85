@@ -508,7 +508,7 @@ export function Configuracoes() {
   };
 
   // empresas state
-  type Empresa = { id?: number; nome: string; cnpj?: string; cor?: string; logo?: string };
+  type Empresa = { id?: number; nome: string; cnpj?: string; cor?: string; logo?: string; cores_hsl?: Record<string, string> | null };
   const [empresas, setEmpresas] = useState<Empresa[]>([]);
   const [loadingEmpresas, setLoadingEmpresas] = useState(false);
   const [empresasError, setEmpresasError] = useState<string | null>(null);
@@ -517,7 +517,7 @@ export function Configuracoes() {
     setLoadingEmpresas(true);
     setEmpresasError(null);
     try {
-      const { data, error } = await supabase.from('empresas').select('id, nome, cnpj, cor, logo').order('nome', { ascending: true });
+      const { data, error } = await supabase.from('empresas').select('id, nome, cnpj, cor, logo, cores_hsl').order('nome', { ascending: true });
       if (error) throw error;
       setEmpresas((data ?? []) as Empresa[]);
     } catch (err) {
@@ -573,6 +573,75 @@ export function Configuracoes() {
     } else {
       return `${limited.slice(0, 2)}.${limited.slice(2, 5)}.${limited.slice(5, 8)}/${limited.slice(8, 12)}-${limited.slice(12)}`;
     }
+  };
+
+  // helper to generate color palette from a base color (custom-600) for both light and dark modes
+  const generateColorPalette = (hexColor: string) => {
+    // Convert hex to RGB
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substring(0, 2), 16) / 255;
+    const g = parseInt(hex.substring(2, 4), 16) / 255;
+    const b = parseInt(hex.substring(4, 6), 16) / 255;
+
+    // Convert RGB to HSL
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    let h = 0;
+    let s = 0;
+    const l = (max + min) / 2;
+
+    if (max !== min) {
+      const d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+      switch (max) {
+        case r:
+          h = ((g - b) / d + (g < b ? 6 : 0)) / 6;
+          break;
+        case g:
+          h = ((b - r) / d + 2) / 6;
+          break;
+        case b:
+          h = ((r - g) / d + 4) / 6;
+          break;
+      }
+    }
+
+    // Convert to degrees and percentages
+    const hue = Math.round(h * 360);
+    const saturation = Math.round(s * 100);
+    const lightness = Math.round(l * 100);
+
+    // Generate palette variations for LIGHT MODE
+    const light = {
+      'custom-50': `${hue} ${Math.max(saturation - 5, 20)}% 98%`,
+      'custom-100': `${hue} ${Math.max(saturation - 10, 20)}% 95%`,
+      'custom-200': `${hue} ${Math.max(saturation - 15, 20)}% 92%`,
+      'custom-300': `${hue} ${Math.max(saturation - 18, 20)}% 80%`,
+      'custom-400': `${hue} ${Math.max(saturation - 10, 20)}% 60%`,
+      'custom-500': `${hue} ${saturation}% ${Math.min(lightness + 6, 50)}%`,
+      'custom-600': `${hue} ${saturation}% ${lightness}%`,
+      'custom-700': `${hue} ${Math.max(saturation - 2, 20)}% ${Math.max(lightness - 5, 25)}%`,
+      'custom-800': `${hue} ${Math.max(saturation - 6, 20)}% ${Math.max(lightness - 10, 20)}%`,
+      'custom-900': `${hue} ${Math.max(saturation - 8, 20)}% ${Math.max(lightness - 16, 15)}%`,
+    };
+
+    // Generate palette variations for DARK MODE
+    // In dark mode, lighter shades (50-400) should be darker, while darker shades stay similar
+    const dark = {
+      'custom-50': `${hue} ${Math.max(saturation - 5, 20)}% 8%`,
+      'custom-100': `${hue} ${Math.max(saturation - 10, 20)}% 12%`,
+      'custom-200': `${hue} ${Math.max(saturation - 15, 20)}% 18%`,
+      'custom-300': `${hue} ${Math.max(saturation - 18, 20)}% 30%`,
+      'custom-400': `${hue} ${Math.max(saturation - 10, 20)}% 45%`,
+      'custom-500': `${hue} ${saturation}% ${Math.min(lightness + 6, 50)}%`,
+      'custom-600': `${hue} ${saturation}% ${lightness}%`,
+      'custom-700': `${hue} ${Math.max(saturation - 2, 20)}% ${Math.max(lightness - 5, 25)}%`,
+      'custom-800': `${hue} ${Math.max(saturation - 6, 20)}% ${Math.max(lightness - 10, 20)}%`,
+      'custom-900': `${hue} ${Math.max(saturation - 8, 20)}% ${Math.max(lightness - 16, 15)}%`,
+    };
+
+    return { light, dark };
   };
 
   // helper to upload empresa logo
@@ -2244,10 +2313,10 @@ export function Configuracoes() {
 
         {/* Edit Empresa Dialog */}
         <Dialog open={editEmpresaOpen} onOpenChange={setEditEmpresaOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Editar Empresa</DialogTitle>
-              <DialogDescription>Atualize as informações da empresa.</DialogDescription>
+              <DialogDescription>Atualize as informações da empresa. A cor selecionada será usada como base (custom-600) para gerar toda a paleta.</DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-3">
@@ -2266,10 +2335,57 @@ export function Configuracoes() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="edit-empresa-cor">Cor</Label>
+                <Label htmlFor="edit-empresa-cor">Cor (Custom-600 Base)</Label>
                 <div className="flex items-center gap-2">
                   <input id="edit-empresa-cor" type="color" value={editEmpresaCor} onChange={(e) => setEditEmpresaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
                   <Input value={editEmpresaCor} onChange={(e) => setEditEmpresaCor(e.target.value)} />
+                </div>
+                <div className="mt-2 p-3 border rounded-md bg-muted/30">
+                  <p className="text-xs text-muted-foreground mb-3">Preview das paletas geradas:</p>
+                  
+                  {/* Light Mode Palette */}
+                  <div className="mb-4">
+                    <p className="text-xs font-medium mb-2 flex items-center gap-1">
+                      <span className="inline-block w-3 h-3 rounded-full bg-yellow-400"></span>
+                      Light Mode
+                    </p>
+                    <div className="grid grid-cols-5 gap-1">
+                      {Object.entries(generateColorPalette(editEmpresaCor).light).map(([key, value]) => (
+                        <div key={key} className="text-center">
+                          <div 
+                            className="h-8 rounded border"
+                            style={{ backgroundColor: `hsl(${value})` }}
+                            title={`${key}: ${value}`}
+                          />
+                          <p className="text-[10px] mt-1">{key.replace('custom-', '')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Dark Mode Palette */}
+                  <div>
+                    <p className="text-xs font-medium mb-2 flex items-center gap-1">
+                      <span className="inline-block w-3 h-3 rounded-full bg-slate-700"></span>
+                      Dark Mode
+                    </p>
+                    <div className="grid grid-cols-5 gap-1">
+                      {Object.entries(generateColorPalette(editEmpresaCor).dark).map(([key, value]) => (
+                        <div key={key} className="text-center">
+                          <div 
+                            className="h-8 rounded border"
+                            style={{ backgroundColor: `hsl(${value})` }}
+                            title={`${key}: ${value}`}
+                          />
+                          <p className="text-[10px] mt-1">{key.replace('custom-', '')}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-muted-foreground mt-3">
+                    💡 Ambas paletas serão salvas automaticamente como JSONB
+                  </p>
                 </div>
               </div>
               <div className="space-y-1">
@@ -2316,7 +2432,15 @@ export function Configuracoes() {
                   }
                   setEditingEmpresa(true);
 
-                  const updateObj: any = { nome: editEmpresaNome, cnpj: editEmpresaCnpj || null, cor: editEmpresaCor };
+                  // Generate color palettes for both light and dark modes
+                  const paletas = generateColorPalette(editEmpresaCor);
+
+                  const updateObj: any = { 
+                    nome: editEmpresaNome, 
+                    cnpj: editEmpresaCnpj || null, 
+                    cor: editEmpresaCor,
+                    cores_hsl: paletas  // Save both light and dark palettes
+                  };
 
                   if (editEmpresaFile) {
                     const logoUrl = await uploadEmpresaLogo(editEmpresaFile, editEmpresaId);
@@ -2329,7 +2453,7 @@ export function Configuracoes() {
                   if (error) {
                     toast({ title: 'Erro ao atualizar empresa', description: error.message || String(error), variant: 'destructive' });
                   } else {
-                    toast({ title: 'Empresa atualizada' });
+                    toast({ title: 'Empresa atualizada', description: 'Paletas light e dark mode geradas e salvas!' });
                     await fetchEmpresas();
                     setEditEmpresaOpen(false);
                     setEditEmpresaFile(null);

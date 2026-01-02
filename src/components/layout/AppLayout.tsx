@@ -7,11 +7,18 @@ import { Logistica } from '@/pages/Logistica';
 import { Estoque } from '@/pages/Estoque';
 import { Configuracoes } from '@/pages/Configuracoes';
 import { Contabilidade } from '@/pages/Contabilidade';
+import { useEmpresaColors } from '@/hooks/useEmpresaColors';
+import { useAuth } from '@/hooks/useAuth';
 
 import { useLocation } from 'react-router-dom';
 
 export function AppLayout() {
   const location = useLocation();
+  const { empresaId } = useAuth();
+  
+  // Load and apply empresa colors dynamically
+  useEmpresaColors(empresaId);
+  
   const getModuleFromQuery = () => {
     try {
       const params = new URLSearchParams(location.search);
