@@ -2051,7 +2051,7 @@ export function Comercial() {
                         }}
                       >
                         {pedido.plataforma?.imagemUrl ? (
-                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-10 h-10 rounded" />
+                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-8 h-8 rounded" />
                         ) : (
                           <div 
                             className="w-6 h-6 rounded-full"
@@ -2090,7 +2090,7 @@ export function Comercial() {
                         }
                       }}
                     >
-                      <Avatar className="h-14 w-14 border-4 border-custom-600 rounded-full">
+                      <Avatar className="h-12 w-12 border-4 border-custom-600 rounded-full">
                         <AvatarImage src={pedido.responsavel?.avatar} />
                         <AvatarFallback className="text-sm">
                           {pedido.responsavel?.nome?.slice(0, 2).toUpperCase()}
