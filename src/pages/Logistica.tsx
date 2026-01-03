@@ -335,7 +335,7 @@ export function Logistica() {
           <div>
             <h1 className="text-2xl font-bold">Logística</h1>
             <p className="text-muted-foreground">
-              Gerencie etiquetas de envio e conferência de pedidos
+              Envio de pedidos
             </p>
           </div>
           <div className="text-right">
@@ -366,7 +366,7 @@ export function Logistica() {
                   const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
                   if (!hasMissing) barcodeRef.current?.focus();
                 }, 0)}
-                className="w-full text-2xl py-2 pl-3 pr-24 border rounded-[16px] bg-white"
+                className="w-full text-2xl py-2 pl-3 pr-24 border-2 rounded-[16px] bg-white focus:outline-none focus:ring-0 focus:border-custom-600 transition-colors"
                 placeholder="Escaneie o código do produto aqui"
                 aria-label="Leitor de código"
               />
