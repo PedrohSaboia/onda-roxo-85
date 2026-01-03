@@ -58,6 +58,7 @@ export function Comercial() {
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(urlPage);
   const [pageSize, setPageSize] = useState(urlPageSize);
+  const [pageInputValue, setPageInputValue] = useState(String(urlPage));
   const [total, setTotal] = useState<number>(0);
   const [totalExcludingEnviados, setTotalExcludingEnviados] = useState<number>(0);
   const [showFilters, setShowFilters] = useState(false);
@@ -155,6 +156,7 @@ export function Comercial() {
     
     setPage(newPage);
     setPageSize(newPageSize);
+    setPageInputValue(String(newPage));
     setSearchTerm(newSearch);
     setFilterEtiquetaId(newEtiqueta);
     setFilterClienteFormNotSent(newClienteForm);
@@ -1252,6 +1254,21 @@ export function Comercial() {
   const handleNext = () => {
     const newPage = Math.min(totalPages, page + 1);
     updatePageInUrl(newPage);
+  };
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPageInputValue(e.target.value);
+  };
+
+  const handlePageInputSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const inputPage = parseInt(pageInputValue, 10);
+      if (!isNaN(inputPage) && inputPage >= 1 && inputPage <= totalPages) {
+        updatePageInUrl(inputPage);
+      } else {
+        setPageInputValue(String(page));
+      }
+    }
   };
 
   const pageSizeOptions = [10, 20, 30, 50];
@@ -2416,7 +2433,19 @@ export function Comercial() {
 
           <div className="flex items-center gap-2">
             <Button size="sm" variant="outline" onClick={handlePrev} disabled={page <= 1}>Anterior</Button>
-            <div className="text-sm">{page} / {totalPages}</div>
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={pageInputValue}
+                onChange={handlePageInputChange}
+                onKeyDown={handlePageInputSubmit}
+                onFocus={(e) => e.target.select()}
+                onBlur={() => setPageInputValue(String(page))}
+                className="w-12 text-center text-sm border rounded px-1 py-0.5"
+                aria-label="Número da página"
+              />
+              <span className="text-sm">/ {totalPages}</span>
+            </div>
             <Button size="sm" variant="outline" onClick={handleNext} disabled={page >= totalPages}>Próximo</Button>
           </div>
         </div>
