@@ -12,7 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LineChart, Line } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LineChart, Line, Area, PieChart, Pie } from 'recharts';
 
 interface DashboardMetrics {
   totalPedidos: number;
@@ -604,7 +604,7 @@ export function Dashboard() {
           {/* Layout unificado - gráficos lado a lado */}
           <>
             <div className="grid gap-6 md:grid-cols-2">
-              <Card>
+              <Card className="shadow-lg">
                 <Tabs defaultValue="plataformas" className="w-full">
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -620,7 +620,7 @@ export function Dashboard() {
                   </CardHeader>
                   <CardContent className="pt-6">
                     <TabsContent value="plataformas" className="mt-0">
-                      <ResponsiveContainer width="100%" height={400}>
+                      <ResponsiveContainer width="100%" height={300}>
                         <BarChart 
                           data={metrics.vendasPorPlataforma.map(p => ({
                             nome: p.nome,
@@ -628,18 +628,26 @@ export function Dashboard() {
                             pedidos: p.pedidos,
                             cor: p.cor
                           }))}
-                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 0 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <defs>
+                            {metrics.vendasPorPlataforma.map((entry, index) => (
+                              <linearGradient key={`plat-grad-${index}`} id={`platGradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={entry.cor} stopOpacity={0.6} />
+                                <stop offset="100%" stopColor={entry.cor} stopOpacity={0.9} />
+                              </linearGradient>
+                            ))}
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                           <XAxis 
                             dataKey="nome"
                             angle={0}
                             textAnchor="middle"
-                            height={80}
-                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                            height={30}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 600 }}
                           />
                           <YAxis 
-                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 500 }}
                             tickFormatter={(value) => formatCurrency(value)}
                           />
                           <Tooltip 
@@ -651,15 +659,17 @@ export function Dashboard() {
                             }}
                             labelFormatter={(label) => `${label}`}
                             contentStyle={{ 
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                              backgroundColor: 'rgba(255, 255, 255, 0.98)', 
+                              border: 'none',
+                              borderRadius: '12px',
+                              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                              padding: '12px 16px'
                             }}
+                            cursor={{ fill: 'rgba(0,0,0,0.05)' }}
                           />
-                          <Bar dataKey="valor" radius={[8, 8, 0, 0]}>
+                          <Bar dataKey="valor" radius={[10, 10, 0, 0]}>
                             {metrics.vendasPorPlataforma.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.cor} />
+                              <Cell key={`cell-${index}`} fill={`url(#platGradient-${index})`} />
                             ))}
                           </Bar>
                         </BarChart>
@@ -675,41 +685,56 @@ export function Dashboard() {
                       </div>
                     </TabsContent>
                     <TabsContent value="total" className="mt-0">
-                      <ResponsiveContainer width="100%" height={400}>
+                      <ResponsiveContainer width="100%" height={300}>
                         <LineChart 
                           data={metrics.vendasTotaisPorDia}
-                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 0 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <defs>
+                            <linearGradient id="colorVendas" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0}/>
+                              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                           <XAxis 
                             dataKey="data"
                             angle={0}
                             textAnchor="middle"
-                            height={80}
-                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                            height={30}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 600 }}
                             tickFormatter={(value) => format(parseISO(value), 'dd/MM')}
                           />
                           <YAxis 
-                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 500 }}
                             tickFormatter={(value) => formatCurrency(value)}
                           />
                           <Tooltip 
                             formatter={(value: any) => [formatCurrency(Number(value)), 'Vendas']}
                             labelFormatter={(label) => format(parseISO(label), 'dd/MM/yyyy')}
                             contentStyle={{ 
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                              backgroundColor: 'rgba(255, 255, 255, 0.98)', 
+                              border: 'none',
+                              borderRadius: '12px',
+                              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                              padding: '12px 16px'
                             }}
+                            cursor={{ stroke: '#8b5cf6', strokeWidth: 1, strokeDasharray: '5 5' }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="valor"
+                            stroke="#8b5cf6"
+                            fillOpacity={1}
+                            fill="url(#colorVendas)"
                           />
                           <Line 
                             type="monotone" 
                             dataKey="valor" 
                             stroke="#8b5cf6" 
                             strokeWidth={3}
-                            dot={{ fill: '#8b5cf6', r: 5 }}
-                            activeDot={{ r: 7 }}
+                            dot={{ fill: '#fff', stroke: '#8b5cf6', strokeWidth: 2, r: 5 }}
+                            activeDot={{ r: 7, fill: '#8b5cf6' }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -719,7 +744,7 @@ export function Dashboard() {
               </Card>
 
               {/* Gráfico de Envios por Plataforma */}
-              <Card>
+              <Card className="shadow-lg">
                 <Tabs defaultValue="plataformas" className="w-full">
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -735,40 +760,50 @@ export function Dashboard() {
                   </CardHeader>
                   <CardContent className="pt-6">
                     <TabsContent value="plataformas" className="mt-0">
-                      <ResponsiveContainer width="100%" height={400}>
+                      <ResponsiveContainer width="100%" height={300}>
                         <BarChart 
                           data={metrics.enviosPorPlataforma.map(p => ({
                             nome: p.nome,
                             quantidade: p.quantidade,
                             cor: p.cor
                           }))}
-                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 0 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <defs>
+                            {metrics.enviosPorPlataforma.map((entry, index) => (
+                              <linearGradient key={`envio-grad-${index}`} id={`envioGradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={entry.cor} stopOpacity={0.6} />
+                                <stop offset="100%" stopColor={entry.cor} stopOpacity={0.9} />
+                              </linearGradient>
+                            ))}
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                           <XAxis 
                             dataKey="nome"
                             angle={0}
                             textAnchor="middle"
-                            height={80}
-                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                            height={30}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 600 }}
                           />
                           <YAxis 
-                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 500 }}
                             allowDecimals={false}
                           />
                           <Tooltip 
                             formatter={(value: any) => [value, 'Envios']}
                             labelFormatter={(label) => `${label}`}
                             contentStyle={{ 
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                              backgroundColor: 'rgba(255, 255, 255, 0.98)', 
+                              border: 'none',
+                              borderRadius: '12px',
+                              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                              padding: '12px 16px'
                             }}
+                            cursor={{ fill: 'rgba(0,0,0,0.05)' }}
                           />
-                          <Bar dataKey="quantidade" radius={[8, 8, 0, 0]}>
+                          <Bar dataKey="quantidade" radius={[10, 10, 0, 0]}>
                             {metrics.enviosPorPlataforma.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.cor} />
+                              <Cell key={`cell-${index}`} fill={`url(#envioGradient-${index})`} />
                             ))}
                           </Bar>
                         </BarChart>
@@ -784,41 +819,56 @@ export function Dashboard() {
                       </div>
                     </TabsContent>
                     <TabsContent value="total" className="mt-0">
-                      <ResponsiveContainer width="100%" height={400}>
+                      <ResponsiveContainer width="100%" height={300}>
                         <LineChart 
                           data={metrics.enviosPorDia}
-                          margin={{ top: 30, right: 30, left: 20, bottom: 80 }}
+                          margin={{ top: 30, right: 30, left: 20, bottom: 0 }}
                         >
-                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <defs>
+                            <linearGradient id="colorEnvios" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0}/>
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0.3}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                           <XAxis 
                             dataKey="data"
                             angle={0}
                             textAnchor="middle"
-                            height={80}
-                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                            height={30}
+                            tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 600 }}
                             tickFormatter={(value) => format(parseISO(value), 'dd/MM')}
                           />
                           <YAxis 
-                            tick={{ fill: '#6b7280', fontSize: 12 }}
+                            tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 500 }}
                             allowDecimals={false}
                           />
                           <Tooltip 
                             formatter={(value: any) => [value, 'Envios']}
                             labelFormatter={(label) => format(parseISO(label), 'dd/MM/yyyy')}
                             contentStyle={{ 
-                              backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                              border: '1px solid #e5e7eb',
-                              borderRadius: '8px',
-                              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                              backgroundColor: 'rgba(255, 255, 255, 0.98)', 
+                              border: 'none',
+                              borderRadius: '12px',
+                              boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                              padding: '12px 16px'
                             }}
+                            cursor={{ stroke: '#10b981', strokeWidth: 1, strokeDasharray: '5 5' }}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="quantidade"
+                            stroke="#10b981"
+                            fillOpacity={1}
+                            fill="url(#colorEnvios)"
                           />
                           <Line 
                             type="monotone" 
                             dataKey="quantidade" 
                             stroke="#10b981" 
                             strokeWidth={3}
-                            dot={{ fill: '#10b981', r: 5 }}
-                            activeDot={{ r: 7 }}
+                            dot={{ fill: '#fff', stroke: '#10b981', strokeWidth: 2, r: 5 }}
+                            activeDot={{ r: 7, fill: '#10b981' }}
                           />
                         </LineChart>
                       </ResponsiveContainer>
@@ -829,45 +879,55 @@ export function Dashboard() {
             </div>
 
             {/* Pedidos por Status - Largura total */}
-            <Card className="mt-6">
+            <Card className="mt-6 shadow-lg">
               <CardHeader>
                 <CardTitle>Pedidos por Status</CardTitle>
                 <CardDescription>Distribuição atual dos pedidos criados no período</CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
-                <ResponsiveContainer width="100%" height={300}>
+                <ResponsiveContainer width="100%" height={320}>
                   <BarChart 
                     data={metrics.vendasPorStatus.map(s => ({
                       nome: s.nome,
                       pedidos: s.pedidos,
                       cor: s.cor
                     }))}
-                    margin={{ top: 20, right: 30, left: 20, bottom: 60 }}
+                    margin={{ top: 20, right: 30, left: 20, bottom: 0 }}
                   >
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                    <defs>
+                      {metrics.vendasPorStatus.map((entry, index) => (
+                        <linearGradient key={`status-grad-${index}`} id={`statusGradient-${index}`} x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor={entry.cor} stopOpacity={0.6} />
+                          <stop offset="100%" stopColor={entry.cor} stopOpacity={0.9} />
+                        </linearGradient>
+                      ))}
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" opacity={0.5} />
                     <XAxis 
                       dataKey="nome"
                       angle={0}
                       textAnchor="middle"
-                      height={60}
-                      tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 500 }}
+                      height={30}
+                      tick={{ fill: '#6b7280', fontSize: 13, fontWeight: 600 }}
                     />
                     <YAxis 
-                      tick={{ fill: '#6b7280', fontSize: 12 }}
+                      tick={{ fill: '#6b7280', fontSize: 12, fontWeight: 500 }}
                       allowDecimals={false}
                     />
                     <Tooltip 
                       formatter={(value: any) => [value, 'Pedidos']}
                       contentStyle={{ 
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+                        backgroundColor: 'rgba(255, 255, 255, 0.98)', 
+                        border: 'none',
+                        borderRadius: '12px',
+                        boxShadow: '0 10px 25px rgba(0,0,0,0.15)',
+                        padding: '12px 16px'
                       }}
+                      cursor={{ fill: 'rgba(0,0,0,0.05)' }}
                     />
-                    <Bar dataKey="pedidos" radius={[8, 8, 0, 0]}>
+                    <Bar dataKey="pedidos" radius={[10, 10, 0, 0]}>
                       {metrics.vendasPorStatus.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.cor} />
+                        <Cell key={`cell-${index}`} fill={`url(#statusGradient-${index})`} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -887,7 +947,7 @@ export function Dashboard() {
 
           {/* Top Produtos e Produtos com Maior Ticket Médio */}
           <div className="grid gap-6 md:grid-cols-2">
-            <Card>
+            <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TrendingUp className="h-5 w-5 text-green-600" />
@@ -926,7 +986,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="h-5 w-5 text-blue-600" />
@@ -968,7 +1028,7 @@ export function Dashboard() {
 
           {/* Métricas Adicionais */}
           <div className="grid gap-4 md:grid-cols-3">
-            <Card>
+            <Card className="shadow-md">
               <CardHeader>
                 <CardTitle className="text-base">Taxa de Envio</CardTitle>
               </CardHeader>
@@ -981,7 +1041,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="shadow-md">
               <CardHeader>
                 <CardTitle className="text-base">Pedidos Pendentes</CardTitle>
               </CardHeader>
@@ -993,7 +1053,7 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="shadow-md">
               <CardHeader>
                 <CardTitle className="text-base">Atividade Hoje</CardTitle>
               </CardHeader>

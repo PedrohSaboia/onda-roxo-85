@@ -45,7 +45,7 @@ export function EstoqueSidebar() {
   // Sidebar begins below header because it's rendered inside the page's main area
   return (
     <aside 
-      className={`hidden lg:block relative h-[calc(100vh-4rem)] transition-all duration-300 ease-in-out ${
+      className={`hidden lg:block relative h-[calc(100vh-4rem)] transition-all duration-300 ease-in-out bg-[hsl(var(--secondary-background))] shadow-md ${
         isExpanded ? 'w-60' : 'w-16'
       }`}
       onMouseEnter={() => setIsExpanded(true)}
