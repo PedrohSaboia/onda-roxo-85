@@ -3,10 +3,13 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { Package, Box } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { FaBoxesPacking } from "react-icons/fa6";
+import { AiFillProduct } from "react-icons/ai";
+
 
 const items = [
-  { id: 'produtos', label: 'Lista de Produtos', icon: Package },
-  { id: 'embalagens', label: 'Lista de Embalagens', icon: Box },
+  { id: 'produtos', label: 'Lista de Produtos', icon: AiFillProduct },
+  { id: 'embalagens', label: 'Lista de Embalagens', icon: FaBoxesPacking },
 ]
 
 export function EstoqueSidebar() {

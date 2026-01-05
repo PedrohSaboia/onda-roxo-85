@@ -1,12 +1,15 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { List, Users, Send, XCircle } from 'lucide-react'
+import { BsSendCheckFill } from 'react-icons/bs'
+import { GoXCircleFill } from 'react-icons/go'
+import { HiMiniUsers } from 'react-icons/hi2'
+import { FaListUl } from 'react-icons/fa'
 
 const items = [
-  { id: 'pedidos', label: 'Lista de Pedidos', icon: List },
-  { id: 'leads', label: 'Lista de Leads', icon: Users },
-  { id: 'cancelados', label: 'Pedidos Cancelados', icon: XCircle },
-  { id: 'enviados', label: 'Pedidos Enviados', icon: Send },
+  { id: 'pedidos', label: 'Lista de Pedidos', icon: FaListUl },
+  { id: 'leads', label: 'Lista de Leads', icon: HiMiniUsers },
+  { id: 'cancelados', label: 'Pedidos Cancelados', icon: GoXCircleFill },
+  { id: 'enviados', label: 'Pedidos Enviados', icon: BsSendCheckFill },
 ]
 
 export function ComercialSidebar() {
