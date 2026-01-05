@@ -13,6 +13,12 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, LineChart, Line, Area, PieChart, Pie } from 'recharts';
+import { MdRequestQuote } from "react-icons/md";
+import { BiSolidPurchaseTag } from "react-icons/bi";
+import { BsSendCheckFill } from 'react-icons/bs'
+import { FaBalanceScale } from "react-icons/fa";
+import { FaCalendarAlt } from "react-icons/fa";
+
 
 interface DashboardMetrics {
   totalPedidos: number;
@@ -474,8 +480,8 @@ export function Dashboard() {
           <label className="text-sm text-muted-foreground">Período</label>
           <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" className="flex items-center gap-2">
-                <CalendarIcon className="h-4 w-4" />
+              <Button className="flex items-center justify-center gap-2 bg-custom-600 text-white hover:bg-custom-700">
+                <FaCalendarAlt className="h-4 w-4" />
                 <span className="text-sm">{format(parseISO(startDate), 'dd/MM/yy', { locale: ptBR })} → {format(parseISO(endDate), 'dd/MM/yy', { locale: ptBR })}</span>
                 <ChevronDown className="h-4 w-4 opacity-50" />
               </Button>
@@ -574,28 +580,28 @@ export function Dashboard() {
               title="Total de Pedidos"
               value={metrics.totalPedidos.toString()}
               description={`${metrics.pedidosHoje} pedidos hoje`}
-              icon={Package}
+              icon={BiSolidPurchaseTag }
               color="custom"
             />
             <MetricCard
               title="Receita Total"
               value={formatCurrency(metrics.vendasTotal)}
               description="Valor total de vendas"
-              icon={DollarSign}
+              icon={MdRequestQuote}
               color="green"
             />
             <MetricCard
               title="Ticket Médio"
               value={formatCurrency(metrics.ticketMedio)}
               description="Valor médio por pedido"
-              icon={ShoppingCart}
+              icon={FaBalanceScale }
               color="blue"
             />
             <MetricCard
               title="Pedidos Enviados"
               value={metrics.pedidosEnviados.toString()}
               description={`${((metrics.pedidosEnviados / metrics.totalPedidos) * 100).toFixed(1)}% dos pedidos`}
-              icon={Truck}
+              icon={BsSendCheckFill}
               color="orange"
             />
           </div>

@@ -20,6 +20,8 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { HiFilter } from "react-icons/hi";
+
 
 const etiquetaLabels = {
   NAO_LIBERADO: 'Não Liberado',
@@ -1322,7 +1324,7 @@ export function Comercial() {
                   setTempFilterPlataformaId(filterPlataformaId);
                   setShowFilters(s => !s);
                 }}>
-                  <Filter className="h-5 w-5" />
+                  <HiFilter className="h-5 w-5" />
                 </Button>
 
                 {showFilters && (

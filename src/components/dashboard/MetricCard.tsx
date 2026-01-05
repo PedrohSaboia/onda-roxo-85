@@ -20,6 +20,14 @@ const colorStyles = {
   red: 'from-red-500 to-red-600',
 };
 
+const borderStyles: Record<string, string> = {
+  custom: 'border-custom-600',
+  blue: 'border-blue-600',
+  green: 'border-green-600',
+  orange: 'border-orange-600',
+  red: 'border-red-600',
+};
+
 export function MetricCard({ 
   title, 
   value, 
@@ -30,7 +38,7 @@ export function MetricCard({
   color = 'custom' 
 }: MetricCardProps) {
   return (
-    <Card className="relative overflow-hidden">
+    <Card className={cn("relative overflow-hidden border-2", borderStyles[color])}>
       <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles[color])} />
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-sm font-medium text-muted-foreground">

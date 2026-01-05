@@ -12,6 +12,12 @@ import { supabase } from '@/integrations/supabase/client';
 import EstoqueSidebar from '@/components/layout/EstoqueSidebar';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { HiFilter } from "react-icons/hi";
+import { AiFillProduct } from "react-icons/ai";
+import { BiSolidCategoryAlt } from "react-icons/bi";
+import { TbReportMoney } from "react-icons/tb";
+
+
 
 export function Estoque() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -180,7 +186,7 @@ export function Estoque() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Total de Produtos</CardTitle>
-            <Package className="h-4 w-4 text-custom-600" />
+            <AiFillProduct className="h-6 w-6 text-custom-600" />
           </CardHeader>
             <CardContent>
               {loading ? (
@@ -188,7 +194,6 @@ export function Estoque() {
               ) : (
                 <>
                   <div className="text-xl sm:text-2xl font-bold">{total}</div>
-                  <p className="text-xs text-muted-foreground">produtos ativos</p>
                 </>
               )}
             </CardContent>
@@ -197,7 +202,7 @@ export function Estoque() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Categorias</CardTitle>
-            <BarChart3 className="h-4 w-4 text-blue-600" />
+            <BiSolidCategoryAlt  className="h-6 w-6 text-blue-600" />
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -207,7 +212,6 @@ export function Estoque() {
                 <div className="text-xl sm:text-2xl font-bold">
                   {new Set(produtos.map(p => p.categoria)).size}
                 </div>
-                <p className="text-xs text-muted-foreground">categorias diferentes</p>
               </>
             )}
           </CardContent>
@@ -216,7 +220,7 @@ export function Estoque() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Valor Médio</CardTitle>
-            <Package className="h-4 w-4 text-green-600" />
+            <TbReportMoney className="h-6 w-6 text-green-600" />
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -226,7 +230,6 @@ export function Estoque() {
                 <div className="text-xl sm:text-2xl font-bold">
                   R$ {produtos.length > 0 ? (produtos.reduce((acc, p) => acc + p.preco, 0) / produtos.length).toFixed(2) : '0.00'}
                 </div>
-                <p className="text-xs text-muted-foreground">preço médio</p>
               </>
             )}
           </CardContent>
@@ -247,8 +250,7 @@ export function Estoque() {
               />
             </div>
             <Button variant="outline" size="sm" className="w-full sm:w-auto">
-              <Filter className="h-4 w-4 mr-2" />
-              Filtrar
+              <HiFilter className="h-4 w-4" />
             </Button>
           </div>
         </CardHeader>
