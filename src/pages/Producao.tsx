@@ -3,16 +3,27 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { KanbanBoard } from '@/components/orders/KanbanBoard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { mockPedidos } from '@/data/mockData';
 import { Pedido } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { Copy, Check } from 'lucide-react';
 
 export function Producao() {
   const [pedidos, setPedidos] = useState<Pedido[]>(mockPedidos);
   const [statusList, setStatusList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{
+    produtoId: string;
+    variacaoId?: string;
+    produtoNome: string;
+    variacaoNome?: string;
+  } | null>(null);
+  const [idExternos, setIdExternos] = useState<string[]>([]);
+  const [copiedIds, setCopiedIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let mounted = true;
@@ -289,6 +300,77 @@ export function Producao() {
     return Object.values(agrupamento).sort((a, b) => b.quantidade - a.quantidade);
   };
 
+  const handleItemClick = (item: {
+    produtoId: string;
+    produtoNome: string;
+    variacaoId?: string;
+    variacaoNome?: string;
+  }, statusIds: string[]) => {
+    // Buscar todos os pedidos que contêm este item
+    const pedidosComItem = pedidos.filter(p => {
+      if (!statusIds.includes(p.statusId)) return false;
+      
+      return p.itens.some((i: any) => {
+        if (!i.produto?.id) return false;
+        const matchProduto = i.produto.id === item.produtoId;
+        const matchVariacao = item.variacaoId 
+          ? i.variacao?.id === item.variacaoId 
+          : !i.variacao?.id;
+        return matchProduto && matchVariacao;
+      });
+    });
+
+    const ids = pedidosComItem
+      .map(p => p.idExterno)
+      .filter(id => id) // Remove valores undefined/null
+      .sort();
+
+    setIdExternos(ids);
+    setSelectedItem(item);
+    setCopiedIds(new Set());
+  };
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIds(prev => new Set(prev).add(text));
+      setTimeout(() => {
+        setCopiedIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(text);
+          return newSet;
+        });
+      }, 2000);
+      toast({
+        title: "Copiado!",
+        description: `ID ${text} copiado para a área de transferência`,
+      });
+    } catch (err) {
+      toast({
+        title: "Erro ao copiar",
+        description: "Não foi possível copiar o ID",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const copyAllIds = async () => {
+    const allIds = idExternos.join('\n');
+    try {
+      await navigator.clipboard.writeText(allIds);
+      toast({
+        title: "Copiado!",
+        description: `${idExternos.length} IDs copiados para a área de transferência`,
+      });
+    } catch (err) {
+      toast({
+        title: "Erro ao copiar",
+        description: "Não foi possível copiar os IDs",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6 p-6">
       <div>
@@ -339,7 +421,11 @@ export function Producao() {
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {itens.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                          <div 
+                            key={idx} 
+                            className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                            onClick={() => handleItemClick(item, PRODUCAO_STATUS_IDS)}
+                          >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {item.imagem ? (
@@ -394,7 +480,11 @@ export function Producao() {
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {itens.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                          <div 
+                            key={idx} 
+                            className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                            onClick={() => handleItemClick(item, ENTRADA_LOGISTICA_STATUS_IDS)}
+                          >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {item.imagem ? (
@@ -449,7 +539,11 @@ export function Producao() {
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                         {itens.map((item, idx) => (
-                          <div key={idx} className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors">
+                          <div 
+                            key={idx} 
+                            className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors cursor-pointer"
+                            onClick={() => handleItemClick(item, LOGISTICA_STATUS_IDS)}
+                          >
                             <div className="flex items-center gap-3 flex-1 min-w-0">
                               <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
                                 {item.imagem ? (
@@ -483,6 +577,69 @@ export function Producao() {
           </div>
         </TabsContent>
       </Tabs>
+
+      {/* Modal para exibir IDs Externos */}
+      <Dialog open={!!selectedItem} onOpenChange={(open) => !open && setSelectedItem(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex flex-col gap-1">
+              <span>{selectedItem?.produtoNome}</span>
+              {selectedItem?.variacaoNome && (
+                <span className="text-sm text-muted-foreground font-normal">
+                  {selectedItem.variacaoNome}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {idExternos.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                Nenhum pedido encontrado para este item
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <span className="text-sm text-muted-foreground">
+                    {idExternos.length} {idExternos.length === 1 ? 'pedido' : 'pedidos'}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={copyAllIds}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar Todos
+                  </Button>
+                </div>
+                
+                <div className="grid gap-2">
+                  {idExternos.map((id, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                    >
+                      <span className="font-mono text-sm">{id}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboard(id)}
+                        className="ml-2"
+                      >
+                        {copiedIds.has(id) ? (
+                          <Check className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
