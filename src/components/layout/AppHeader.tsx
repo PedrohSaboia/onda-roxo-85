@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { SyntheticEvent } from 'react';
 import SearchPanel from '@/components/layout/SearchPanel';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { NotificacoesDropdown } from '@/components/notifications/NotificacoesDropdown';
 
 interface AppHeaderProps {
@@ -20,6 +21,7 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
   const { user, signOut, imgUrl, permissoes, hasPermissao } = useAuth();
   const { toast } = useToast();
   const canNavigateHome = hasPermissao ? hasPermissao(56) : ((permissoes || []).includes(56));
+  const navigate = useNavigate();
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [navigationItems, setNavigationItems] = useState<Array<{ id: string; label: string }>>([]);
@@ -147,6 +149,17 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
                     return;
                   }
                   onModuleChange?.(item.id);
+                  const map: Record<string, string> = {
+                    home: '/',
+                    comercial: '/comercial',
+                    producao: '/producao',
+                    logistica: '/logistica',
+                    contabilidade: '/contabilidade',
+                    estoque: '/estoque',
+                    configuracoes: '/configuracoes',
+                  };
+                  // navigate to mapped path
+                  navigate(map[item.id] || '/');
                 }}
                 className={`text-sm font-medium py-2 px-3 rounded-md transition-colors ${isActive ? 'text-white bg-white/10' : 'text-white/80 hover:bg-white/5'}`}
               >

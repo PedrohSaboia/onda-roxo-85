@@ -13,7 +13,6 @@ export function ComercialSidebar() {
   const navigate = useNavigate()
   const location = useLocation()
   const params = new URLSearchParams(location.search)
-  const currentModule = params.get('module') || ''
   const view = params.get('view') || 'pedidos'
   const [isExpanded, setIsExpanded] = useState(false)
 
@@ -36,13 +35,11 @@ export function ComercialSidebar() {
       return;
     }
 
-    // keep module=comercial while switching view for other items
     const next = new URLSearchParams(location.search)
-    next.set('module', 'comercial')
     next.set('view', id)
-    // If we're currently on a dedicated route like /leads or /pedidos-enviados, navigate back to the Comercial root
-    // so the Comercial page will receive the query params and render the requested view.
-    const targetPath = (location.pathname === '/leads' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados') ? '/' : location.pathname;
+    // If we're currently on a dedicated route like /leads or /pedidos-enviados, navigate to the Comercial root
+    // otherwise keep current pathname (expecting /comercial)
+    const targetPath = (location.pathname === '/leads' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados') ? '/comercial' : location.pathname || '/comercial';
     navigate({ pathname: targetPath, search: next.toString() })
   }
 
@@ -76,7 +73,9 @@ export function ComercialSidebar() {
               } else if (location.pathname === '/pedidos-enviados') {
                 isActive = it.id === 'enviados';
               } else {
-                isActive = view === it.id && currentModule === 'comercial';
+                // Treat root or /comercial as the Comercial area
+                const inComercial = location.pathname === '/' || location.pathname === '/comercial' || location.pathname.startsWith('/pedidos');
+                isActive = view === it.id && inComercial;
               }
               return (
                 <li key={it.id}>

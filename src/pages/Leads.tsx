@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
-import { AppHeader } from '@/components/layout/AppHeader';
+import { /* header provided by AppLayout */ } from '@/components/layout/AppHeader';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import { Check, X, Pencil, SquarePlus, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -334,15 +334,9 @@ export default function Leads() {
     return <span className="text-2xl">🔖</span>;
   };
 
-  if (!isLoading && !canAccessLeads) {
+    if (!isLoading && !canAccessLeads) {
     return (
       <div className="min-h-screen bg-background">
-        <AppHeader activeModule="comercial" onModuleChange={(m) => {
-          const next = new URLSearchParams(location.search);
-          next.set('module', m);
-          navigate({ pathname: '/', search: next.toString() });
-        }} />
-
         <main className="min-h-[calc(100vh-8rem)]">
           <div className="flex items-start gap-6">
             <ComercialSidebar />
@@ -364,13 +358,6 @@ export default function Leads() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader activeModule="comercial" onModuleChange={(m) => {
-        // navigate to root with module query so other modules still work
-        const next = new URLSearchParams(location.search);
-        next.set('module', m);
-        navigate({ pathname: '/', search: next.toString() });
-      }} />
-
       <main className="min-h-[calc(100vh-8rem)]">
         <div className="flex items-start gap-6">
           <ComercialSidebar />

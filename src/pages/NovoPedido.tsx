@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { AppHeader } from '@/components/layout/AppHeader';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -456,12 +455,10 @@ export default function NovoPedido() {
 
   return (
     <>
-      <AppHeader activeModule="comercial" onModuleChange={(m) => navigate('/?module=' + m)} />
-
       <main className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-              <button onClick={() => navigate('/?module=comercial')} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
+              <button onClick={() => navigate('/comercial')} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
               <h1 className="text-2xl font-bold">Novo Pedido</h1>
             </div>
 
@@ -475,7 +472,7 @@ export default function NovoPedido() {
               />
               <button type="button" className="bg-custom-700 text-white px-3 py-1 rounded-md" onClick={() => setSelectedDate(new Date().toISOString().slice(0,10))}>Hoje</button>
             </div>
-            <Button variant="outline" onClick={() => navigate('/?module=comercial')}>Cancelar</Button>
+            <Button variant="outline" onClick={() => navigate('/comercial')}>Cancelar</Button>
             <Button className="bg-custom-700 text-white" onClick={async () => await handleCreatePedido()} disabled={saving}>{saving ? 'Criando...' : '+ Criar Pedido'}</Button>
           </div>
         </div>

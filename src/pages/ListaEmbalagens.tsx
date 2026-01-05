@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import { AppHeader } from '@/components/layout/AppHeader';
+import { /* header provided by AppLayout */ } from '@/components/layout/AppHeader';
 import EmballagemModal from '@/components/shipping/EmballagemModal';
 import EstoqueSidebar from '@/components/layout/EstoqueSidebar';
 
@@ -143,12 +143,6 @@ export function ListaEmbalagens() {
 
   return (
     <div className="min-h-screen bg-background">
-      <AppHeader activeModule="estoque" onModuleChange={(m) => {
-        // navigate to root with module query so other modules still work
-        const next = new URLSearchParams(location.search);
-        next.set('module', m);
-        navigate({ pathname: '/', search: next.toString() });
-      }} />
 
       <main className="min-h-[calc(100vh-8rem)]">
         <div className="flex items-start gap-6">

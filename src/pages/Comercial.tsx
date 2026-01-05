@@ -1416,8 +1416,7 @@ export function Comercial() {
                         if (tempFilterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
                         if (tempFilterResponsavelId) next.set('responsavel_id', tempFilterResponsavelId); else next.delete('responsavel_id');
                         if (tempFilterPlataformaId) next.set('plataforma_id', tempFilterPlataformaId); else next.delete('plataforma_id');
-                        // ensure module param remains
-                        if (!next.get('module')) next.set('module', 'comercial');
+                        // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                         setShowFilters(false);
                       }}>Aplicar</Button>
@@ -1450,8 +1449,7 @@ export function Comercial() {
                       setFilterEtiquetaId(ETIQUETA_FILTER_ID);
                       next.set('etiqueta_envio_id', ETIQUETA_FILTER_ID);
                     }
-                    // Ensure the module query is preserved so we don't unintentionally return to Dashboard
-                    if (!next.get('module')) next.set('module', 'comercial');
+                    // module query removed — navigation uses pathname now
                     setPage(1);
                     navigate({ pathname: location.pathname, search: next.toString() });
                   }}
@@ -1474,8 +1472,7 @@ export function Comercial() {
                       setFilterEnvioAdiado(true);
                       next.set('envio_adiado', 'true');
                     }
-                    // Ensure the module query is preserved
-                    if (!next.get('module')) next.set('module', 'comercial');
+                    // module query removed — navigation uses pathname now
                     setPage(1);
                     navigate({ pathname: location.pathname, search: next.toString() });
                   }}
@@ -1715,7 +1712,7 @@ export function Comercial() {
                         setPage(1);
                         const next = new URLSearchParams(location.search);
                         next.delete('pedido_liberado');
-                        if (!next.get('module')) next.set('module', 'comercial');
+                        // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                       }}
                       aria-label="Remover filtro não liberado"
@@ -1735,7 +1732,7 @@ export function Comercial() {
                         setPage(1);
                         const next = new URLSearchParams(location.search);
                         next.delete('cliente_formulario_enviado');
-                        if (!next.get('module')) next.set('module', 'comercial');
+                        // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                       }}
                       aria-label="Remover filtro formulário não enviado"
@@ -1755,7 +1752,7 @@ export function Comercial() {
                         setPage(1);
                         const next = new URLSearchParams(location.search);
                         next.delete('etiqueta_envio_id');
-                        if (!next.get('module')) next.set('module', 'comercial');
+                        // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                       }}
                       aria-label="Remover filtro etiqueta pendente"
@@ -1791,7 +1788,7 @@ export function Comercial() {
                         setPage(1);
                         const next = new URLSearchParams(location.search);
                         next.delete('envio_adiado');
-                        if (!next.get('module')) next.set('module', 'comercial');
+                        // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                       }}
                       aria-label="Remover filtro envio adiado"
@@ -1811,7 +1808,7 @@ export function Comercial() {
                         setPage(1);
                         const next = new URLSearchParams(location.search);
                         next.delete('responsavel_id');
-                        if (!next.get('module')) next.set('module', 'comercial');
+                        // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                       }}
                       aria-label="Remover filtro responsável"

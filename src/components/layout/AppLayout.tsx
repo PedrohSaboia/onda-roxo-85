@@ -1,16 +1,8 @@
 import { useState, useEffect } from 'react';
 import { AppHeader } from './AppHeader';
-import { Dashboard } from '@/pages/Dashboard';
-import { Comercial } from '@/pages/Comercial';
-import { Producao } from '@/pages/Producao';
-import { Logistica } from '@/pages/Logistica';
-import { Estoque } from '@/pages/Estoque';
-import { Configuracoes } from '@/pages/Configuracoes';
-import { Contabilidade } from '@/pages/Contabilidade';
+import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useEmpresaColors } from '@/hooks/useEmpresaColors';
 import { useAuth } from '@/hooks/useAuth';
-
-import { useLocation } from 'react-router-dom';
 
 export function AppLayout() {
   const location = useLocation();
@@ -19,48 +11,60 @@ export function AppLayout() {
   // Load and apply empresa colors dynamically
   useEmpresaColors(empresaId);
   
-  const getModuleFromQuery = () => {
-    try {
-      const params = new URLSearchParams(location.search);
-      const m = params.get('module');
-      return m || 'home';
-    } catch {
-      return 'home';
-    }
+  const getModuleFromPath = () => {
+    const path = location.pathname.replace(/\/$/, '');
+    if (!path || path === '') return 'home';
+    // Match /pedido/:id but not /pedido-contabilidade
+    if (path === '/comercial' || path.startsWith('/pedidos') || path.startsWith('/pedido/') || path === '/novo-pedido') return 'comercial';
+    if (path === '/producao') return 'producao';
+    if (path === '/logistica') return 'logistica';
+    if (path === '/estoque' || path.startsWith('/estoque')) return 'estoque';
+    if (path === '/contabilidade' || path.startsWith('/pedido-contabilidade')) return 'contabilidade';
+    if (path === '/configuracoes') return 'configuracoes';
+    return 'home';
   };
 
-  const [activeModule, setActiveModule] = useState<string>(getModuleFromQuery());
+  const [activeModule, setActiveModule] = useState<string>(getModuleFromPath());
+  const navigate = useNavigate();
 
   useEffect(() => {
-    setActiveModule(getModuleFromQuery());
-  }, [location.search]);
+    setActiveModule(getModuleFromPath());
+  }, [location.pathname]);
 
-  const renderContent = () => {
-    switch (activeModule) {
+  const handleModuleChange = (moduleId: string) => {
+    setActiveModule(moduleId);
+    switch (moduleId) {
       case 'home':
-        return <Dashboard />;
+        navigate('/');
+        break;
       case 'comercial':
-        return <Comercial />;
+        navigate('/comercial');
+        break;
       case 'producao':
-        return <Producao />;
+        navigate('/producao');
+        break;
       case 'logistica':
-        return <Logistica />;
+        navigate('/logistica');
+        break;
       case 'estoque':
-        return <Estoque />;
+        navigate('/estoque');
+        break;
       case 'contabilidade':
-        return <Contabilidade />;
+        navigate('/contabilidade');
+        break;
       case 'configuracoes':
-        return <Configuracoes />;
+        navigate('/configuracoes');
+        break;
       default:
-        return <Dashboard />;
+        navigate('/');
     }
   };
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
-      <AppHeader activeModule={activeModule} onModuleChange={setActiveModule} />
+      <AppHeader activeModule={activeModule} onModuleChange={handleModuleChange} />
       <main className="flex-1 overflow-y-auto">
-        {renderContent()}
+        <Outlet />
       </main>
     </div>
   );

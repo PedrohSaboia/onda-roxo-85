@@ -21,6 +21,14 @@ import { TermosServico } from "./pages/TermosServico";
 import { TermoPrivacidade } from "./pages/TermoPrivacidade";
 import Documentacao from "./pages/Documentacao";
 import { Contabilidade } from "./pages/Contabilidade";
+import { Comercial } from "./pages/Comercial";
+import { Logistica } from "./pages/Logistica";
+import { Estoque } from "./pages/Estoque";
+import { Dashboard } from "./pages/Dashboard";
+import { Design } from "./pages/Design";
+import { Producao } from "./pages/Producao";
+import { Configuracoes } from "./pages/Configuracoes";
+import { AppLayout } from "./components/layout/AppLayout";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -46,57 +54,37 @@ const App = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route path="/pedido/:id" element={
-              <ProtectedRoute>
-                <Pedido />
-              </ProtectedRoute>
-            } />
-            <Route path="/pedido-contabilidade/:id" element={
-              <ProtectedRoute>
-                <PedidoContabilidade />
-              </ProtectedRoute>
-            } />
-            <Route path="/novo-pedido" element={
-              <ProtectedRoute>
-                <NovoPedido />
-              </ProtectedRoute>
-            } />
+            
+            {/* Pedido contabilidade moved inside AppLayout so header appears */}
+            
             <Route path="/informacoes-entrega/:id" element={
               <InformacoesEntrega />
             } />
-            <Route path="/leads" element={
+            {/* AppLayout wrapper: header + main app pages (protected) */}
+            <Route path="/" element={
               <ProtectedRoute>
-                <Leads />
+                <AppLayout />
               </ProtectedRoute>
-            } />
-            <Route path="/pedidos-cancelados" element={
-              <ProtectedRoute>
-                <PedidosCancelados />
-              </ProtectedRoute>
-            } />
-            <Route path="/pedidos-enviados" element={
-              <ProtectedRoute>
-                <PedidosEnviados />
-              </ProtectedRoute>
-            } />
-            <Route path="/estoque/embalagens" element={
-              <ProtectedRoute>
-                <ListaEmbalagens />
-              </ProtectedRoute>
-            } />
-            <Route path="/contabilidade" element={
-              <ProtectedRoute>
-                <Contabilidade />
-              </ProtectedRoute>
-            } />
+            }>
+              <Route index element={<Dashboard />} />
+              <Route path="pedido-contabilidade/:id" element={<PedidoContabilidade />} />
+              <Route path="comercial" element={<Comercial />} />
+              <Route path="pedido/:id" element={<Pedido />} />
+              <Route path="logistica" element={<Logistica />} />
+              <Route path="estoque" element={<Estoque />} />
+              <Route path="design" element={<Design />} />
+              <Route path="producao" element={<Producao />} />
+              <Route path="configuracoes" element={<Configuracoes />} />
+              <Route path="leads" element={<Leads />} />
+              <Route path="pedidos-cancelados" element={<PedidosCancelados />} />
+              <Route path="pedidos-enviados" element={<PedidosEnviados />} />
+              <Route path="estoque/embalagens" element={<ListaEmbalagens />} />
+              <Route path="contabilidade" element={<Contabilidade />} />
+                <Route path="novo-pedido" element={<NovoPedido />} />
+            </Route>
             <Route path="/termos-servico" element={<TermosServico />} />
             <Route path="/politica-privacidade" element={<TermoPrivacidade />} />
             <Route path="/documentacao" element={<Documentacao />} />
-            <Route path="/" element={
-              <ProtectedRoute>
-                <Index />
-              </ProtectedRoute>
-            } />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

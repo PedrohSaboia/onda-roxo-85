@@ -30,9 +30,9 @@ export function EstoqueSidebar() {
       return;
     }
 
-    // For produtos, stay on main page with module=estoque
+    // For produtos, navigate to /estoque
     if (id === 'produtos') {
-      navigate('/?module=estoque');
+      navigate('/estoque');
       return;
     }
 
@@ -67,8 +67,8 @@ export function EstoqueSidebar() {
               let isActive = false;
               if (location.pathname === '/estoque/embalagens') {
                 isActive = it.id === 'embalagens';
-              } else if (location.pathname === '/' && params.get('module') === 'estoque') {
-                isActive = it.id === 'produtos';
+              } else if (location.pathname === '/estoque' || location.pathname.startsWith('/estoque')) {
+                isActive = it.id === 'produtos' && it.id === view || (it.id === 'produtos' && location.pathname === '/estoque');
               } else {
                 isActive = view === it.id;
               }

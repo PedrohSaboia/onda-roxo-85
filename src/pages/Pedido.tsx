@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { AppHeader } from '@/components/layout/AppHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Trash, Copy, Edit, CalendarIcon, Pencil } from 'lucide-react';
@@ -999,7 +998,7 @@ export default function Pedido() {
       if (delPedidoErr) throw delPedidoErr;
       toast({ title: 'Pedido excluído', description: 'Pedido e itens removidos com sucesso.' });
       setDeleteConfirmOpen(false);
-      navigate('/?module=comercial');
+      navigate('/comercial');
     } catch (err: any) {
       console.error('Erro ao excluir pedido:', err);
       toast({ title: 'Erro ao excluir', description: err?.message || String(err), variant: 'destructive' });
@@ -1010,7 +1009,6 @@ export default function Pedido() {
 
   return (
     <>
-      <AppHeader activeModule="comercial" onModuleChange={(m) => navigate('/?module=' + m)} />
       <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -1026,7 +1024,7 @@ export default function Pedido() {
           <div>
             <button onClick={() => {
               // Sempre redirecionar para Comercial
-              navigate('/?module=comercial');
+              navigate('/comercial');
             }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
