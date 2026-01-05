@@ -1033,7 +1033,7 @@ export function Dashboard() {
           </div>
 
           {/* Métricas Adicionais */}
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2">
             <Card className="shadow-md">
               <CardHeader>
                 <CardTitle className="text-base">Taxa de Envio</CardTitle>
@@ -1059,17 +1059,6 @@ export function Dashboard() {
               </CardContent>
             </Card>
 
-            <Card className="shadow-md">
-              <CardHeader>
-                <CardTitle className="text-base">Atividade Hoje</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <div className="text-3xl font-bold">{metrics.pedidosHoje}</div>
-                  <p className="text-sm text-muted-foreground">Novos pedidos hoje</p>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </>
       )}

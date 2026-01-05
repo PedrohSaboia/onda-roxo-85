@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
@@ -55,6 +56,7 @@ export function Contabilidade() {
   const [page, setPage] = useState(1);
   const [pageSize] = useState(20);
   const [total, setTotal] = useState<number>(0);
+  const [pageInputValue, setPageInputValue] = useState(String(1));
 
   useEffect(() => {
     if (!hasAccess) return;
@@ -163,6 +165,30 @@ export function Contabilidade() {
   };
 
   const totalPages = Math.ceil(total / pageSize);
+
+  // Pagination handlers with input
+  const handlePrev = () => setPage(p => Math.max(1, p - 1));
+  const handleNext = () => setPage(p => Math.min(totalPages, p + 1));
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPageInputValue(e.target.value);
+  };
+
+  const handlePageInputSubmit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const inputPage = parseInt(pageInputValue, 10);
+      if (!isNaN(inputPage) && inputPage >= 1 && inputPage <= totalPages) {
+        setPage(inputPage);
+      } else {
+        setPageInputValue(String(page));
+      }
+    }
+  };
+
+  // keep input in sync with page changes
+  useEffect(() => {
+    setPageInputValue(String(page));
+  }, [page]);
   if (!isLoading && !hasAccess) {
     return (
       <div className="p-6">
@@ -178,16 +204,15 @@ export function Contabilidade() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gray-50 px-6 py-4">
       <div className="max-w-[1600px] mx-auto">
           {/* Header */}
-          <div className="mb-8">
+          <div className="mb-2">
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Contabilidade</h1>
-            <p className="text-gray-600">Pedidos finalizados para análise contábil</p>
           </div>
           
           {/* Search Bar */}
-          <div className="mb-6 flex gap-4">
+          <div className="mb-4 flex gap-4">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
@@ -225,8 +250,8 @@ export function Contabilidade() {
                         <TableHead>Plataforma</TableHead>
                         <TableHead>Responsável</TableHead>
                         <TableHead>Produtos</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                        <TableHead>Data</TableHead>
+                        <TableHead className="text-center">Valor</TableHead>
+                        <TableHead className="text-center">Data</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -246,35 +271,31 @@ export function Contabilidade() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            {pedido.plataformas?.nome && (
-                              <div className="flex items-center gap-2">
-                                {pedido.plataformas.img_url && (
-                                  <img 
-                                    src={pedido.plataformas.img_url} 
-                                    alt={pedido.plataformas.nome}
-                                    className="w-6 h-6 rounded object-contain"
-                                  />
-                                )}
-                                <Badge variant="outline">{pedido.plataformas.nome}</Badge>
-                              </div>
-                            )}
+                          <TableCell className="text-center">
+                              {pedido.plataformas?.nome && (
+                                <div 
+                                  className="flex items-center justify-center gap-2 cursor-pointer hover:opacity-80"
+                                  title={pedido.plataformas.nome}
+                                >
+                                  {pedido.plataformas.img_url ? (
+                                    <img 
+                                      src={pedido.plataformas.img_url} 
+                                      alt={pedido.plataformas.nome}
+                                      className="w-8 h-8 rounded"
+                                    />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded-full bg-gray-200" />
+                                  )}
+                                </div>
+                              )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             {pedido.usuarios?.nome && (
-                              <div className="flex items-center gap-2">
-                                {pedido.usuarios.img_url ? (
-                                  <img 
-                                    src={pedido.usuarios.img_url} 
-                                    alt={pedido.usuarios.nome}
-                                    className="w-8 h-8 rounded-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-xs font-medium text-gray-600">
-                                    {pedido.usuarios.nome.split(' ').map(n => n[0]).slice(0, 2).join('')}
-                                  </div>
-                                )}
-                                <span className="text-sm text-gray-600">{pedido.usuarios.nome}</span>
+                              <div className="flex itens-center justify-center">
+                                <Avatar className="h-12 w-12 border-4 border-custom-600 rounded-full">
+                                  <AvatarImage src={pedido.usuarios.img_url} />
+                                  <AvatarFallback className="text-sm">{pedido.usuarios.nome.split(' ').map(n => n[0]).slice(0, 2).join('')}</AvatarFallback>
+                                </Avatar>
                               </div>
                             )}
                           </TableCell>
@@ -292,12 +313,12 @@ export function Contabilidade() {
                               )}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             <span className="font-semibold text-green-600">
                               {formatarValor(calcularValorTotal(pedido))}
                             </span>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-center">
                             <span className="text-sm text-gray-600">
                               {formatarData(pedido.criado_em)}
                             </span>
@@ -313,25 +334,21 @@ export function Contabilidade() {
                       Mostrando {(page - 1) * pageSize + 1} a {Math.min(page * pageSize, total)} de {total} pedidos
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(p => Math.max(1, p - 1))}
-                        disabled={page === 1}
-                      >
-                        Anterior
-                      </Button>
-                      <span className="text-sm text-gray-600">
-                        Página {page} de {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                        disabled={page === totalPages}
-                      >
-                        Próxima
-                      </Button>
+                      <Button size="sm" variant="outline" onClick={handlePrev} disabled={page <= 1}>Anterior</Button>
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={pageInputValue}
+                          onChange={handlePageInputChange}
+                          onKeyDown={handlePageInputSubmit}
+                          onFocus={(e) => (e.target as HTMLInputElement).select()}
+                          onBlur={() => setPageInputValue(String(page))}
+                          className="w-12 text-center text-sm border rounded px-1 py-0.5"
+                          aria-label="Número da página"
+                        />
+                        <span className="text-sm">/ {totalPages}</span>
+                      </div>
+                      <Button size="sm" variant="outline" onClick={handleNext} disabled={page >= totalPages}>Próxima</Button>
                     </div>
                   </div>
                 </>
