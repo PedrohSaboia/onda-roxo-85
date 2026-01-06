@@ -206,13 +206,13 @@ export function Estoque() {
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
         <Card className={cn("relative overflow-hidden border-2", borderStyles.custom)}>
           <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.custom)} />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center px-4 pt-4 justify-between space-y-0 pb-0">
             <CardTitle className="text-xs sm:text-sm font-medium">Total de Produtos</CardTitle>
             <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.custom)}>
               <AiFillProduct className="h-6 w-6 text-white" />
             </div>
           </CardHeader>
-            <CardContent>
+          <CardContent className="px-4 pb-4 ">
               {loading ? (
                 <div className="text-sm text-muted-foreground">Carregando...</div>
               ) : (
@@ -225,13 +225,13 @@ export function Estoque() {
 
         <Card className={cn("relative overflow-hidden border-2", borderStyles.blue)}>
           <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.blue)} />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center px-4 pt-4 justify-between space-y-0 pb-0">
             <CardTitle className="text-xs sm:text-sm font-medium">Categorias</CardTitle>
             <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.blue)}>
               <BiSolidCategoryAlt className="h-6 w-6 text-white" />
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 pb-4 ">
             {loading ? (
               <div className="text-sm text-muted-foreground">Carregando...</div>
             ) : (
@@ -246,13 +246,13 @@ export function Estoque() {
 
         <Card className={cn("relative overflow-hidden border-2", borderStyles.green)}>
           <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.green)} />
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+          <CardHeader className="flex flex-row items-center px-4 pt-4 justify-between space-y-0 pb-0">
             <CardTitle className="text-xs sm:text-sm font-medium">Valor Médio</CardTitle>
             <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.green)}>
               <TbReportMoney className="h-6 w-6 text-white" />
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="px-4 pb-4 ">
             {loading ? (
               <div className="text-sm text-muted-foreground">Carregando...</div>
             ) : (
@@ -336,8 +336,7 @@ export function Estoque() {
                         <div className="font-medium">{produto.nome}</div>
                         {produto.variacoes && produto.variacoes.length > 0 && (
                           <div className="text-sm mt-1">
-                            <strong>{produto.nomeVariacao || 'Variação'}:</strong> {` ${produto.variacoes[0].nome} - `}
-                            <span className="font-mono">SKU: {produto.variacoes[0].sku}</span>
+                            <span style={{ fontSize: '12px', fontWeight: 400, color: '#545454' }}>{produto.nomeVariacao || 'Variação'}:</span> {` ${produto.variacoes[0].nome} `}
                           </div>
                         )}
                       </div>
@@ -400,7 +399,7 @@ export function Estoque() {
                   <option value={30}>30</option>
                   <option value={50}>50</option>
                 </select>
-                <span className="text-sm text-muted-foreground">/ página</span>
+                <span className="text-sm text-muted-foreground">por página</span>
               </div>
             </div>
 
@@ -413,7 +412,7 @@ export function Estoque() {
               >
                 Anterior
               </Button>
-              <div className="text-sm">{page} / {Math.max(1, Math.ceil(total / pageSize))}</div>
+              <div className="text-sm">{page} de {Math.max(1, Math.ceil(total / pageSize))}</div>
               <Button 
                 size="sm" 
                 variant="outline" 
