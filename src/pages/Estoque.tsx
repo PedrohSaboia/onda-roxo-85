@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Search, Filter, Package, BarChart3 } from 'lucide-react';
+import { Plus, Search, Package, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -16,6 +16,27 @@ import { HiFilter } from "react-icons/hi";
 import { AiFillProduct } from "react-icons/ai";
 import { BiSolidCategoryAlt } from "react-icons/bi";
 import { TbReportMoney } from "react-icons/tb";
+import { cn } from '@/lib/utils';
+import { FaPencil } from "react-icons/fa6";
+
+
+const colorStyles: Record<string, string> = {
+  custom: 'from-custom-500 to-custom-600',
+  blue: 'from-blue-500 to-blue-600',
+  green: 'from-green-500 to-green-600',
+  orange: 'from-orange-500 to-orange-600',
+  red: 'from-red-500 to-red-600',
+};
+
+const borderStyles: Record<string, string> = {
+  custom: 'border-custom-600',
+  blue: 'border-blue-600',
+  green: 'border-green-600',
+  orange: 'border-orange-600',
+  red: 'border-red-600',
+};
+
+const formatBR = (n: number) => n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 
 
@@ -183,10 +204,13 @@ export function Estoque() {
 
       {/* Métricas resumidas */}
       <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-3">
-        <Card>
+        <Card className={cn("relative overflow-hidden border-2", borderStyles.custom)}>
+          <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.custom)} />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Total de Produtos</CardTitle>
-            <AiFillProduct className="h-6 w-6 text-custom-600" />
+            <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.custom)}>
+              <AiFillProduct className="h-6 w-6 text-white" />
+            </div>
           </CardHeader>
             <CardContent>
               {loading ? (
@@ -199,10 +223,13 @@ export function Estoque() {
             </CardContent>
         </Card>
 
-        <Card>
+        <Card className={cn("relative overflow-hidden border-2", borderStyles.blue)}>
+          <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.blue)} />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Categorias</CardTitle>
-            <BiSolidCategoryAlt  className="h-6 w-6 text-blue-600" />
+            <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.blue)}>
+              <BiSolidCategoryAlt className="h-6 w-6 text-white" />
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -217,10 +244,13 @@ export function Estoque() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className={cn("relative overflow-hidden border-2", borderStyles.green)}>
+          <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.green)} />
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-xs sm:text-sm font-medium">Valor Médio</CardTitle>
-            <TbReportMoney className="h-6 w-6 text-green-600" />
+            <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.green)}>
+              <TbReportMoney className="h-6 w-6 text-white" />
+            </div>
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -228,7 +258,8 @@ export function Estoque() {
             ) : (
               <>
                 <div className="text-xl sm:text-2xl font-bold">
-                  R$ {produtos.length > 0 ? (produtos.reduce((acc, p) => acc + p.preco, 0) / produtos.length).toFixed(2) : '0.00'}
+                  <span className="text-sm align-center mr-1" style={{ fontSize: '12px', fontWeight: 600, color: '#545454' }}>R$</span>
+                  {produtos.length > 0 ? formatBR(produtos.reduce((acc, p) => acc + p.preco, 0) / produtos.length) : '0,00'}
                 </div>
               </>
             )}
@@ -266,10 +297,10 @@ export function Estoque() {
               <TableRow>
                 <TableHead>Produto</TableHead>
                 <TableHead>SKU</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Quantidade</TableHead>
-                <TableHead>Preço</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
+                <TableHead className="text-center">Qtd</TableHead>
+                <TableHead className="text-center">Preço</TableHead>
+                <TableHead className="text-center w-[140px]">Categoria</TableHead>
+                <TableHead className="text-center w-[70px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -290,17 +321,13 @@ export function Estoque() {
                     <div className="flex items-center gap-3">
                           <div className="w-10 h-10 bg-custom-100 rounded-lg flex items-center justify-center overflow-hidden">
                             {produto.imagemUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
                               <img src={produto.imagemUrl} alt={produto.nome} className="w-full h-full object-cover" />
                             ) : (
-                              <Package className="h-5 w-5 text-custom-600" />
+                              <AiFillProduct className="h-5 w-5 text-custom-600" />
                             )}
                           </div>
                       <div>
                         <div className="font-medium">{produto.nome}</div>
-                        <div className="text-sm text-muted-foreground">
-                          Criado em {new Date(produto.criadoEm).toLocaleDateString('pt-BR')}
-                        </div>
                         {produto.variacoes && produto.variacoes.length > 0 && (
                           <div className="text-sm mt-1">
                             <strong>{produto.nomeVariacao || 'Variação'}:</strong> {` ${produto.variacoes[0].nome} - `}
@@ -313,16 +340,17 @@ export function Estoque() {
                   <TableCell className="font-mono text-sm">
                     {produto.sku}
                   </TableCell>
-                  <TableCell>
+                  
+                  <TableCell className="text-center">{Number((produto as any).qntd ?? 0)}</TableCell>
+                  <TableCell className="font-medium text-center">
+                          <span className="align-top mr-0.5" style={{ fontSize: '8px', fontWeight: 400, color: '#545454' }}>R$</span>{formatBR(produto.preco)}
+                  </TableCell>
+                  <TableCell className="text-center">
                     <Badge variant="secondary">
                       {produto.categoria}
                     </Badge>
                   </TableCell>
-                  <TableCell>{Number((produto as any).qntd ?? 0)}</TableCell>
-                  <TableCell className="font-medium">
-                    R$ {produto.preco.toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right">
+                  <TableCell className="text-center">
                     <div className="flex gap-2 justify-end">
                         <Button
                           variant="outline"
@@ -336,7 +364,7 @@ export function Estoque() {
                             setShowNewProduct(true);
                           }}
                         >
-                          Editar
+                          <FaPencil className="h-4 w-4" />
                         </Button>
                       </div>
                   </TableCell>
@@ -443,7 +471,7 @@ export function Estoque() {
                     <div className="text-right">
                       <div className="text-xs text-muted-foreground">Preço</div>
                       <div className="font-semibold text-green-600">
-                        R$ {produto.preco.toFixed(2)}
+                        <span className="text-xs align-top mr-1" style={{ color: '#16A34A' }}>R$</span>{formatBR(produto.preco)}
                       </div>
                     </div>
                   </div>

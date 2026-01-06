@@ -48,7 +48,7 @@ export function EstoqueSidebar() {
   // Sidebar begins below header because it's rendered inside the page's main area
   return (
     <aside 
-      className={`hidden lg:block relative h-[calc(100vh-4rem)] transition-all duration-300 ease-in-out bg-[hsl(var(--secondary-background))] shadow-md ${
+      className={`hidden lg:block relative min-h-screen transition-all duration-300 ease-in-out bg-[hsl(var(--secondary-background))] shadow-md ${
         isExpanded ? 'w-60' : 'w-16'
       }`}
       onMouseEnter={() => setIsExpanded(true)}
@@ -61,7 +61,7 @@ export function EstoqueSidebar() {
         }
       }}
     >
-      <div className="sticky top-0 h-full overflow-hidden">
+      <div className="sticky top-0 h-[calc(100vh-4rem)] overflow-hidden">
         <nav aria-label="Menu Estoque" className="h-full">
           <ul className="px-2 py-3 space-y-2 h-full">
             {items.map((it) => {
