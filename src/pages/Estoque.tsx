@@ -207,7 +207,7 @@ export function Estoque() {
         <Card className={cn("relative overflow-hidden border-2", borderStyles.custom)}>
           <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.custom)} />
           <CardHeader className="flex flex-row items-center px-4 pt-4 justify-between space-y-0 pb-0">
-            <CardTitle className="text-xs sm:text-sm font-medium">Total de Produtos</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium" style={{ fontSize: '14px', fontWeight: 500, color: '#545454' }}>Total de Produtos</CardTitle>
             <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.custom)}>
               <AiFillProduct className="h-6 w-6 text-white" />
             </div>
@@ -226,7 +226,7 @@ export function Estoque() {
         <Card className={cn("relative overflow-hidden border-2", borderStyles.blue)}>
           <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.blue)} />
           <CardHeader className="flex flex-row items-center px-4 pt-4 justify-between space-y-0 pb-0">
-            <CardTitle className="text-xs sm:text-sm font-medium">Categorias</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium" style={{ fontSize: '14px', fontWeight: 500, color: '#545454' }}>Categorias</CardTitle>
             <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.blue)}>
               <BiSolidCategoryAlt className="h-6 w-6 text-white" />
             </div>
@@ -247,7 +247,7 @@ export function Estoque() {
         <Card className={cn("relative overflow-hidden border-2", borderStyles.green)}>
           <div className={cn("absolute inset-0 bg-gradient-to-br opacity-5", colorStyles.green)} />
           <CardHeader className="flex flex-row items-center px-4 pt-4 justify-between space-y-0 pb-0">
-            <CardTitle className="text-xs sm:text-sm font-medium">Valor Médio</CardTitle>
+            <CardTitle className="text-xs sm:text-sm font-medium" style={{ fontSize: '14px', fontWeight: 500, color: '#545454' }}>Valor Médio</CardTitle>
             <div className={cn("p-2 rounded-lg bg-gradient-to-br", colorStyles.green)}>
               <TbReportMoney className="h-6 w-6 text-white" />
             </div>
@@ -305,7 +305,6 @@ export function Estoque() {
                 <TableHead>SKU</TableHead>
                 <TableHead className="text-center">Qtd</TableHead>
                 <TableHead className="text-center">Preço</TableHead>
-                <TableHead className="text-center w-[140px]">Categoria</TableHead>
                 <TableHead className="text-center w-[70px]">Ações</TableHead>
               </TableRow>
             </TableHeader>
@@ -349,11 +348,6 @@ export function Estoque() {
                   <TableCell className="text-center">{Number((produto as any).qntd ?? 0)}</TableCell>
                   <TableCell className="font-medium text-center">
                           <span className="align-top mr-0.5" style={{ fontSize: '8px', fontWeight: 400, color: '#545454' }}>R$</span>{formatBR(produto.preco)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge variant="secondary">
-                      {produto.categoria}
-                    </Badge>
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex gap-2 justify-end">
