@@ -183,7 +183,7 @@ export function Estoque() {
           <div>
             <h1 className="text-xl sm:text-2xl font-bold">Estoque</h1>
             <p className="text-sm text-muted-foreground">
-              {total} produtos cadastrados
+              Gerencie os produtos cadastrados
             </p>
           </div>
           <Button
@@ -267,30 +267,36 @@ export function Estoque() {
         </Card>
       </div>
 
-      {/* Filtros e busca */}
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-            <div className="relative flex-1 max-w-full sm:max-w-md">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Buscar produtos..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">
-              <HiFilter className="h-4 w-4" />
-            </Button>
-          </div>
-        </CardHeader>
-      </Card>
+      {/* Filtros e busca (movido para o card de produtos) */}
 
   <ProductForm key={editingProduct?.id ?? 'new'} open={showNewProduct} onClose={handleModalClose} product={editingProduct} />
 
       {/* Tabela de produtos - Desktop */}
       <Card className="hidden md:block">
+        <CardHeader className="p-4">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-2">
+              <div>
+                <div className="font-medium">
+                  <span className="block md:inline" style={{ fontSize: '24px', fontWeight: 600, color: '#000000' }}>Produtos</span>
+                  <span className="ml-2 text-sm text-muted-foreground" style={{ fontSize: '12px', fontWeight: 400, color: '#545454' }}>{total} produtos cadastrados</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Buscar por nome ou SKU..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 w-64"
+                />
+              </div>
+            </div>
+          </div>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -417,7 +423,8 @@ export function Estoque() {
                 Próximo
               </Button>
             </div>
-          </div>        </CardContent>
+          </div>        
+        </CardContent>
       </Card>
 
       {/* Lista de produtos - Mobile */}
@@ -439,46 +446,40 @@ export function Estoque() {
         {!loading && !error && filteredProdutos.map((produto) => (
           <Card key={produto.id} className="overflow-hidden">
             <CardContent className="p-4">
-              <div className="flex gap-3">
-                <div className="w-16 h-16 bg-custom-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
-                  {produto.imagemUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={produto.imagemUrl} alt={produto.nome} className="w-full h-full object-cover" />
-                  ) : (
-                    <Package className="h-6 w-6 text-custom-600" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-base truncate">{produto.nome}</h3>
-                  <div className="flex flex-wrap items-center gap-2 mt-1">
-                    <Badge variant="secondary" className="text-xs">
-                      {produto.categoria}
-                    </Badge>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      SKU: {produto.sku}
-                    </span>
+              <div className="grid gap-3">
+                <div className="flex gap-3 items-start">
+                  <div className="w-16 h-16 bg-custom-100 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                    {produto.imagemUrl ? (
+                      <img src={produto.imagemUrl} alt={produto.nome} className="w-full h-full object-cover" />
+                    ) : (
+                      <AiFillProduct className="h-8 w-8 text-custom-600" />
+                    )}
                   </div>
-                  {produto.variacoes && produto.variacoes.length > 0 && (
-                    <div className="text-xs text-muted-foreground mt-1">
-                      <strong>{produto.nomeVariacao || 'Variação'}:</strong> {produto.variacoes[0].nome}
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between mt-3">
-                    <div>
-                      <div className="text-xs text-muted-foreground">Quantidade</div>
-                      <div className="font-semibold">{Number((produto as any).qntd ?? 0)}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-xs text-muted-foreground">Preço</div>
-                      <div className="font-semibold text-green-600">
-                        <span className="text-xs align-top mr-1" style={{ color: '#16A34A' }}>R$</span>{formatBR(produto.preco)}
+
+                  <div className="flex-1 min-w-0">
+                    <h3 className="font-semibold text-base">{produto.nome}</h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <div className="text-xs text-muted-foreground">Quantidade</div>
+                        <div className="font-semibold">{Number((produto as any).qntd ?? 0)}</div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className="text-xs text-muted-foreground">Preço</div>
+                        <div className="font-semibold">
+                          <span className="text-xs align-center mr-1" style={{ fontSize: '11px', fontWeight:'500', color: '#393939' }}>R$</span>
+                          {formatBR(produto.preco)}
+                        </div>
                       </div>
                     </div>
                   </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    className="w-full mt-3"
+                </div>
+
+                <div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="w-full"
                     onClick={() => {
                       if (!canEditProduct) {
                         toast({ title: 'Sem permissão', description: 'Você não tem permissão para editar produtos', variant: 'destructive' });
@@ -499,29 +500,8 @@ export function Estoque() {
         {/* Paginação - Mobile */}
         {!loading && !error && (
           <Card>
-            <CardContent className="p-4">
+            <CardContent className="p-2">
               <div className="flex flex-col items-center gap-4">
-                <div className="text-sm text-muted-foreground text-center">
-                  Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total)}</strong> de <strong>{total}</strong>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-muted-foreground">Mostrar</label>
-                  <select
-                    value={pageSize}
-                    onChange={(e) => {
-                      const newSize = Number(e.target.value);
-                      setPageSize(newSize);
-                      setPage(1);
-                    }}
-                    className="border rounded px-2 py-1 text-sm"
-                  >
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={30}>30</option>
-                    <option value={50}>50</option>
-                  </select>
-                  <span className="text-sm text-muted-foreground">/ página</span>
-                </div>
                 <div className="flex items-center gap-2 w-full justify-center">
                   <Button 
                     size="sm" 
@@ -531,7 +511,7 @@ export function Estoque() {
                   >
                     Anterior
                   </Button>
-                  <div className="text-sm">{page} / {Math.max(1, Math.ceil(total / pageSize))}</div>
+                  <div className="text-sm">{page} de {Math.max(1, Math.ceil(total / pageSize))}</div>
                   <Button 
                     size="sm" 
                     variant="outline" 
