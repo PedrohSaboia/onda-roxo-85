@@ -347,7 +347,7 @@ export function Estoque() {
                   
                   <TableCell className="text-center">{Number((produto as any).qntd ?? 0)}</TableCell>
                   <TableCell className="font-medium text-center">
-                          <span className="align-top mr-0.5" style={{ fontSize: '8px', fontWeight: 400, color: '#545454' }}>R$</span>{formatBR(produto.preco)}
+                          <span className="align-center mr-0.5" style={{ fontSize: '8px', fontWeight: 400, color: '#545454' }}>R$</span>{formatBR(produto.preco)}
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex gap-2 justify-end">
