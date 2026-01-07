@@ -67,6 +67,7 @@ export default function Pedido() {
   const [etiquetaMLModalOpen, setEtiquetaMLModalOpen] = useState(false);
   const [etiquetaMLPdfUrl, setEtiquetaMLPdfUrl] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<Record<number, string> | null>(null);
+  const [temProdutoEntregueML, setTemProdutoEntregueML] = useState(false);
   
   // Estados para gerenciar embalagem/remetente selecionados
   const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
@@ -577,6 +578,44 @@ export default function Pedido() {
             status_up_sell: it.status_up_sell || null,
           };
         });
+        
+        // Check if any product has entregue_ml = true in produtos_sku_plataformas
+        // The relationship is through SKU field (check both product and variation SKU)
+        let hasEntregueML = false;
+        const allSkus: string[] = [];
+        
+        // Collect all SKUs from products and variations
+        itens.forEach((it: any) => {
+          if (it.produto?.sku) allSkus.push(it.produto.sku);
+          if (it.variacao?.sku) allSkus.push(it.variacao.sku);
+        });
+        
+        const uniqueSkus = [...new Set(allSkus)].filter(Boolean);
+        
+        console.log('SKUs do pedido:', uniqueSkus);
+        
+        if (uniqueSkus.length > 0) {
+          try {
+            const { data: skuPlataformasData, error: skuError } = await (supabase as any)
+              .from('produtos_sku_plataformas')
+              .select('sku, entregue_ml')
+              .in('sku', uniqueSkus);
+            
+            console.log('Dados de produtos_sku_plataformas:', skuPlataformasData);
+            console.log('Erro ao buscar produtos_sku_plataformas:', skuError);
+            
+            if (!skuError && skuPlataformasData) {
+              // Check if any of the returned records has entregue_ml = true
+              hasEntregueML = skuPlataformasData.some((item: any) => item.entregue_ml === true);
+              console.log('Tem produto com entregue_ml = true?', hasEntregueML);
+            }
+          } catch (err) {
+            console.error('Erro ao verificar produtos_sku_plataformas:', err);
+          }
+        }
+        
+        // Update state to control button visibility
+        setTemProdutoEntregueML(hasEntregueML);
 
         setPedido({
           ...pedidoRow,
@@ -1848,10 +1887,10 @@ export default function Pedido() {
                     </Button>
                   </>
                 ) : (
-                  // Botões baseados no campo etiqueta_ml
+                  // Botões baseados na verificação de entregue_ml
                   <>
-                    {pedido?.etiqueta_ml === true ? (
-                      // Botão para etiqueta Mercado Livre
+                    {temProdutoEntregueML ? (
+                      // Botão para etiqueta Mercado Livre (quando entregue_ml = true)
                       <Button
                         onClick={() => {
                           if (!readonly) {
@@ -1871,7 +1910,7 @@ export default function Pedido() {
                         )}
                       </Button>
                     ) : (
-                      // Botões originais para calcular e enviar mais barato
+                      // Botões originais para calcular e enviar mais barato (quando entregue_ml = null ou false)
                       <>
                         <Button
                           onClick={() => { if (!readonly) handleCalcularFrete(); }}
