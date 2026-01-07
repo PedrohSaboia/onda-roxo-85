@@ -580,42 +580,47 @@ export default function Pedido() {
         });
         
         // Check if any product has entregue_ml = true in produtos_sku_plataformas
-        // The relationship is through SKU field (check both product and variation SKU)
+        // ONLY for Mercado Livre platform - otherwise use default buttons
         let hasEntregueML = false;
-        const allSkus: string[] = [];
+        const isMercadoLivre = plataforma?.nome?.toLowerCase().includes('mercado livre');
         
-        // Collect all SKUs from products and variations
-        itens.forEach((it: any) => {
-          if (it.produto?.sku) allSkus.push(it.produto.sku);
-          if (it.variacao?.sku) allSkus.push(it.variacao.sku);
-        });
-        
-        const uniqueSkus = [...new Set(allSkus)].filter(Boolean);
-        
-        console.log('SKUs do pedido:', uniqueSkus);
-        
-        if (uniqueSkus.length > 0) {
-          try {
-            const { data: skuPlataformasData, error: skuError } = await (supabase as any)
-              .from('produtos_sku_plataformas')
-              .select('sku, entregue_ml')
-              .in('sku', uniqueSkus);
-            
-            console.log('Dados de produtos_sku_plataformas:', skuPlataformasData);
-            console.log('Erro ao buscar produtos_sku_plataformas:', skuError);
-            
-            if (!skuError && skuPlataformasData) {
-              // Check if any of the returned records has entregue_ml = true
-              hasEntregueML = skuPlataformasData.some((item: any) => item.entregue_ml === true);
-              console.log('Tem produto com entregue_ml = true?', hasEntregueML);
+        if (isMercadoLivre) {
+          // The relationship is through SKU field (check both product and variation SKU)
+          const allSkus: string[] = [];
+          
+          // Collect all SKUs from products and variations
+          itens.forEach((it: any) => {
+            if (it.produto?.sku) allSkus.push(it.produto.sku);
+            if (it.variacao?.sku) allSkus.push(it.variacao.sku);
+          });
+          
+          const uniqueSkus = [...new Set(allSkus)].filter(Boolean);
+          
+          console.log('SKUs do pedido:', uniqueSkus);
+          
+          if (uniqueSkus.length > 0) {
+            try {
+              const { data: skuPlataformasData, error: skuError } = await (supabase as any)
+                .from('produtos_sku_plataformas')
+                .select('sku, entregue_ml')
+                .in('sku', uniqueSkus);
+              
+              console.log('Dados de produtos_sku_plataformas:', skuPlataformasData);
+              console.log('Erro ao buscar produtos_sku_plataformas:', skuError);
+              
+              if (!skuError && skuPlataformasData) {
+                // Check if any of the returned records has entregue_ml = true
+                hasEntregueML = skuPlataformasData.some((item: any) => item.entregue_ml === true);
+                console.log('Tem produto com entregue_ml = true?', hasEntregueML);
+              }
+            } catch (err) {
+              console.error('Erro ao verificar produtos_sku_plataformas:', err);
             }
-          } catch (err) {
-            console.error('Erro ao verificar produtos_sku_plataformas:', err);
           }
         }
         
-        // Update state to control button visibility
-        setTemProdutoEntregueML(hasEntregueML);
+        // Update state to control button visibility (only for Mercado Livre)
+        setTemProdutoEntregueML(isMercadoLivre && hasEntregueML);
 
         setPedido({
           ...pedidoRow,
