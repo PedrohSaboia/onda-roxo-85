@@ -28,6 +28,7 @@ type Variation = {
   comprimento?: number;
   peso?: number;
   bling_id?: string;
+  entregue_ml?: boolean | null;
 }
 
 export default function ProductForm({ open, onClose, product }: { open: boolean; onClose: () => void; product?: Produto | null }) {
@@ -64,6 +65,7 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const [selectedUpSellIds, setSelectedUpSellIds] = useState<string[]>([]);
   const [availableProducts, setAvailableProducts] = useState<any[]>([]);
   const [upSellSearchTerm, setUpSellSearchTerm] = useState<string>('');
+  const [entregueML, setEntregueML] = useState<boolean | null>(null);
 
 
 
@@ -78,9 +80,10 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
     setOriginalVariationIds([]);
     setUpCell(false);
     setSelectedUpSellIds([]);
+    setEntregueML(null);
   }
 
-  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length, altura: undefined, largura: undefined, comprimento: undefined, peso: undefined, bling_id: '' }]);
+  const addVariation = () => setVariations(v => [...v, { nome: '', sku: '', valor: '0.00', img_url: '', qntd: 0, codigo_barras_v: '', ordem: v.length, altura: undefined, largura: undefined, comprimento: undefined, peso: undefined, bling_id: '', entregue_ml: null }]);
   const updateVariation = (idx: number, patch: Partial<Variation>) => setVariations(v => v.map((it,i)=> i===idx ? { ...it, ...patch } : it));
   const removeVariation = (idx: number) => setVariations(v => v.filter((_,i)=> i!==idx));
 
@@ -208,6 +211,75 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
 
         toast({ title: 'Produto criado', description: `Produto ${nome} criado com sucesso` });
       }
+      
+      // Save/Update entregue_ml in produtos_sku_plataformas
+      try {
+        if (hasVariations) {
+          // For each variation, upsert in produtos_sku_plataformas
+          for (const v of variations) {
+            if (v.sku && v.entregue_ml !== undefined && v.entregue_ml !== null) {
+              // Check if record exists
+              const { data: existing, error: checkErr } = await (supabase as any)
+                .from('produtos_sku_plataformas')
+                .select('id')
+                .eq('sku', v.sku)
+                .maybeSingle();
+              
+              if (checkErr) throw checkErr;
+              
+              if (existing) {
+                // Update existing record
+                const { error: updateErr } = await (supabase as any)
+                  .from('produtos_sku_plataformas')
+                  .update({ entregue_ml: v.entregue_ml })
+                  .eq('sku', v.sku);
+                
+                if (updateErr) throw updateErr;
+              } else {
+                // Insert new record
+                const { error: insertErr } = await (supabase as any)
+                  .from('produtos_sku_plataformas')
+                  .insert({ sku: v.sku, entregue_ml: v.entregue_ml, nome: v.nome });
+                
+                if (insertErr) throw insertErr;
+              }
+            }
+          }
+        } else {
+          // For product without variations
+          if (sku && entregueML !== undefined && entregueML !== null) {
+            // Check if record exists
+            const { data: existing, error: checkErr } = await (supabase as any)
+              .from('produtos_sku_plataformas')
+              .select('id')
+              .eq('sku', sku)
+              .maybeSingle();
+            
+            if (checkErr) throw checkErr;
+            
+            if (existing) {
+              // Update existing record
+              const { error: updateErr } = await (supabase as any)
+                .from('produtos_sku_plataformas')
+                .update({ entregue_ml: entregueML })
+                .eq('sku', sku);
+              
+              if (updateErr) throw updateErr;
+            } else {
+              // Insert new record
+              const { error: insertErr } = await (supabase as any)
+                .from('produtos_sku_plataformas')
+                .insert({ sku: sku, entregue_ml: entregueML, nome: nome });
+              
+              if (insertErr) throw insertErr;
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('Erro ao salvar entregue_ml:', err);
+        // Don't throw, just log - this shouldn't block the main save operation
+      }
+      
       reset();
       onClose();
     } catch (err: any) {
@@ -337,14 +409,52 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
               comprimento: v.comprimento ?? undefined,
               peso: v.peso ?? undefined,
               bling_id: v.bling_id || '',
+              entregue_ml: null,
             }));
             setVariations(mappedDb);
             setOriginalVariationIds(mappedDb.map((v: any) => v.id).filter(Boolean));
+            
+            // Load entregue_ml from produtos_sku_plataformas for variations
+            const varSkus = mappedDb.map((v: any) => v.sku).filter(Boolean);
+            if (varSkus.length > 0) {
+              const { data: skuData, error: skuErr } = await (supabase as any)
+                .from('produtos_sku_plataformas')
+                .select('sku, entregue_ml')
+                .in('sku', varSkus);
+              
+              if (!skuErr && skuData) {
+                const skuMap = new Map(skuData.map((item: any) => [item.sku, item.entregue_ml]));
+                const updatedVariations = mappedDb.map((v: any) => ({
+                  ...v,
+                  entregue_ml: skuMap.has(v.sku) ? skuMap.get(v.sku) : null,
+                }));
+                setVariations(updatedVariations);
+              }
+            }
           }
         } catch (err: any) {
           console.error('Erro ao carregar variações do DB:', err);
         }
       })();
+      
+      // Load entregue_ml from produtos_sku_plataformas for product (if no variations)
+      if (!hasVar && p.sku) {
+        (async () => {
+          try {
+            const { data: skuData, error: skuErr } = await (supabase as any)
+              .from('produtos_sku_plataformas')
+              .select('entregue_ml')
+              .eq('sku', p.sku)
+              .maybeSingle();
+            
+            if (!skuErr && skuData) {
+              setEntregueML(skuData.entregue_ml ?? null);
+            }
+          } catch (err: any) {
+            console.error('Erro ao carregar produtos_sku_plataformas:', err);
+          }
+        })();
+      }
 
       // If product has no variations and barcode/bling_id not present in the passed product object,
       // fetch the product row to obtain `codigo_barras` and `bling_id` (some APIs omit that field in the prop)
@@ -435,6 +545,21 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
               <Label>Quantidade (qntd)</Label>
               <Input type="number" value={qntd as any} onChange={(e)=>setQntd(e.target.value === '' ? '' : Number(e.target.value))} />
             </div>
+            {!hasVariations && (
+              <div>
+                <Label>Entregue pelo Mercado Livre</Label>
+                <Select value={entregueML === null ? 'null' : entregueML ? 'true' : 'false'} onValueChange={(val) => setEntregueML(val === 'null' ? null : val === 'true')}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="null" className="cursor-pointer">Não definido</SelectItem>
+                    <SelectItem value="true" className="cursor-pointer">Sim</SelectItem>
+                    <SelectItem value="false" className="cursor-pointer">Não</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {!hasVariations && (
               <div>
                 <Label>Bling ID</Label>
@@ -560,6 +685,22 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
                         <div>
                           <Label>Quantidade</Label>
                           <Input type="number" value={v.qntd as any} onChange={(e)=>updateVariation(idx, { qntd: Number(e.target.value) })} />
+                        </div>
+                        <div>
+                          <Label>Entregue pelo Mercado Livre</Label>
+                          <Select 
+                            value={v.entregue_ml === null || v.entregue_ml === undefined ? 'null' : v.entregue_ml ? 'true' : 'false'} 
+                            onValueChange={(val) => updateVariation(idx, { entregue_ml: val === 'null' ? null : val === 'true' })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent className='cursor-pointer'>
+                              <SelectItem value="null" className="cursor-pointer">Não definido</SelectItem>
+                              <SelectItem value="true" className="cursor-pointer">Sim</SelectItem>
+                              <SelectItem value="false" className="cursor-pointer">Não</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div>
                           <Label>Código de Barras</Label>
