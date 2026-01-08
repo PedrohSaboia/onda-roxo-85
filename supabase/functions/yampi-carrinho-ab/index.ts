@@ -109,17 +109,38 @@ serve(async (req)=>{
     const primeiroItemSku = resource.items?.data?.[0]?.sku?.data?.sku ?? null;
     if (primeiroItemSku) {
       // 2. Procura na sua tabela 'produtos' pelo produto com esse SKU
-      const { data: produtoEncontrado, error: produtoError } = await supabase.from("produtos").select("id, empresa_id") // Seleciona id e empresa_id
-      .eq("sku", primeiroItemSku).maybeSingle();
+      const { data: produtoEncontrado, error: produtoError } = await supabase
+        .from("produtos")
+        .select("id, empresa_id")
+        .eq("sku", primeiroItemSku)
+        .maybeSingle();
+      
       if (produtoError) {
         console.error("Erro ao buscar produto por SKU:", produtoError);
       }
+      
       // 3. Se encontrou, armazena o UUID e empresa_id
       if (produtoEncontrado) {
         produtoUuid = produtoEncontrado.id;
         empresaIdFromProduto = produtoEncontrado.empresa_id;
       } else {
-        console.warn(`SKU '${primeiroItemSku}' do carrinho abandonado não foi encontrado na tabela 'produtos'.`);
+        // 4. Se não encontrou em produtos, busca em variacoes_produto
+        const { data: variacaoEncontrada, error: variacaoError } = await supabase
+          .from("variacoes_produto")
+          .select("produto_id, empresa_id")
+          .eq("sku", primeiroItemSku)
+          .maybeSingle();
+        
+        if (variacaoError) {
+          console.error("Erro ao buscar variação por SKU:", variacaoError);
+        }
+        
+        if (variacaoEncontrada) {
+          produtoUuid = variacaoEncontrada.produto_id;
+          empresaIdFromProduto = variacaoEncontrada.empresa_id;
+        } else {
+          console.warn(`SKU '${primeiroItemSku}' não foi encontrado em 'produtos' nem em 'variacoes_produto'.`);
+        }
       }
     }
     // ***** FIM DA CORREÇÃO *****

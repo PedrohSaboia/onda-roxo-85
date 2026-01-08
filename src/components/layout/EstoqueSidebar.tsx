@@ -1,15 +1,17 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Package, Box } from 'lucide-react'
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/hooks/useAuth';
-import { FaBoxesPacking } from "react-icons/fa6";
-import { AiFillProduct } from "react-icons/ai";
+import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/hooks/useAuth'
+import { FaBoxesPacking } from "react-icons/fa6"
+import { AiFillProduct } from "react-icons/ai"
+import { BiBarcode } from "react-icons/bi";
+
 
 
 const items = [
   { id: 'produtos', label: 'Lista de Produtos', icon: AiFillProduct },
   { id: 'embalagens', label: 'Lista de Embalagens', icon: FaBoxesPacking },
+  { id: 'sku_plataformas', label: 'SKU Plataformas', icon: BiBarcode },
 ]
 
 export function EstoqueSidebar() {
@@ -30,6 +32,11 @@ export function EstoqueSidebar() {
         return;
       }
       navigate('/estoque/embalagens');
+      return;
+    }
+
+    if (id === 'sku_plataformas') {
+      navigate('/estoque/sku-plataformas');
       return;
     }
 
@@ -70,8 +77,10 @@ export function EstoqueSidebar() {
               let isActive = false;
               if (location.pathname === '/estoque/embalagens') {
                 isActive = it.id === 'embalagens';
+              } else if (location.pathname === '/estoque/sku-plataformas') {
+                isActive = it.id === 'sku_plataformas';
               } else if (location.pathname === '/estoque' || location.pathname.startsWith('/estoque')) {
-                isActive = it.id === 'produtos' && it.id === view || (it.id === 'produtos' && location.pathname === '/estoque');
+                isActive = (it.id === 'produtos' && it.id === view) || (it.id === 'produtos' && location.pathname === '/estoque');
               } else {
                 isActive = view === it.id;
               }

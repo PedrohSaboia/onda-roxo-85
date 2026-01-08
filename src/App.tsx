@@ -17,6 +17,7 @@ import Leads from "./pages/Leads";
 import PedidosEnviados from "./pages/PedidosEnviados";
 import PedidosCancelados from "./pages/PedidosCancelados";
 import ListaEmbalagens from "./pages/ListaEmbalagens";
+import SkuPlataformas from "./pages/SkuPlataformas";
 import { TermosServico } from "./pages/TermosServico";
 import { TermoPrivacidade } from "./pages/TermoPrivacidade";
 import Documentacao from "./pages/Documentacao";
@@ -72,6 +73,7 @@ const App = () => {
               <Route path="pedido/:id" element={<Pedido />} />
               <Route path="logistica" element={<Logistica />} />
               <Route path="estoque" element={<Estoque />} />
+              <Route path="estoque/sku-plataformas" element={<SkuPlataformas />} />
               <Route path="design" element={<Design />} />
               <Route path="producao" element={<Producao />} />
               <Route path="configuracoes" element={<Configuracoes />} />
