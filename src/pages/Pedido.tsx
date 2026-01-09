@@ -471,9 +471,12 @@ export default function Pedido() {
         setEmbalagens(embalagensData || []);
         setRemetentes(remetentesData || []);
 
-        // Auto-selecionar primeiro remetente e embalagem
+        // Auto-selecionar primeira embalagem
         if (embalagensData?.length) setSelectedEmbalagem(embalagensData[0]);
-        if (remetentesData?.length) setSelectedRemetente(remetentesData[0]);
+        
+        // Nota: remetente será definido após carregar o pedido, baseado no pedido.remetente_id
+        // if (remetentesData?.length) setSelectedRemetente(remetentesData[0]);
+        
         // try to load payment methods table if exists
         (async () => {
           try {
@@ -659,6 +662,16 @@ export default function Pedido() {
     fetchData();
     return () => { mounted = false };
   }, [id]);
+
+  // Definir remetente selecionado quando pedido e remetentes forem carregados
+  useEffect(() => {
+    if (pedido && pedido.remetente_id && remetentes.length > 0) {
+      const remetenteEncontrado = remetentes.find(r => r.id === pedido.remetente_id);
+      if (remetenteEncontrado) {
+        setSelectedRemetente(remetenteEncontrado);
+      }
+    }
+  }, [pedido, remetentes]);
 
   // Load formas de pagamento when wizard opens
   useEffect(() => {
