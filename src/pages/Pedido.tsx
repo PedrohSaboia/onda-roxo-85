@@ -908,9 +908,16 @@ export default function Pedido() {
     try {
       setCalculandoFrete(true);
 
+      // Usar remetente do pedido se existir, caso contrário usar o padrão
+      const remetenteId = pedido.remetente_id || '128a7de7-d649-43e1-8ba3-2b54c3496b14';
+
       // Chamar a edge function processar_etiqueta_em_envio_de_pedido
       const { data: response, error: functionError } = await supabase.functions.invoke('processar_etiqueta_em_envio_de_pedido', {
-        body: { pedido_id: pedido.id, empresa_id: empresaId }
+        body: { 
+          pedido_id: pedido.id, 
+          empresa_id: empresaId,
+          remetente_id: remetenteId
+        }
       });
 
       if (functionError) {
@@ -1782,7 +1789,7 @@ export default function Pedido() {
                           disabled={readonly}
                         >
                           {remetentes.map(r => (
-                            <option key={r.id} value={r.id}>{r.nome}</option>
+                            <option key={r.id} value={r.id}>{r.nome}{r.cidade ? ` - ${r.cidade}` : ''}</option>
                           ))}
                         </select>
                         <Button
