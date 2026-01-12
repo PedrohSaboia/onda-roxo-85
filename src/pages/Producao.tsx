@@ -5,17 +5,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { mockPedidos } from '@/data/mockData';
 import { Pedido } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, Search } from 'lucide-react';
 
 export function Producao() {
   const [pedidos, setPedidos] = useState<Pedido[]>(mockPedidos);
   const [statusList, setStatusList] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedItem, setSelectedItem] = useState<{
     produtoId: string;
     variacaoId?: string;
@@ -386,11 +388,34 @@ export function Producao() {
           <TabsTrigger value="itens">Itens a serem produzidos</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="status">
+        <TabsContent value="status" className="space-y-4">
+          {/* Input de busca */}
+          <Card>
+            <CardContent className="pt-6">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+                <Input
+                  placeholder="Buscar por ID Externo, Cliente, Observações..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {loading && <div className="text-sm text-muted-foreground">Carregando pedidos...</div>}
           {error && <div className="text-sm text-red-600">{error}</div>}
           <KanbanBoard
-            pedidos={pedidos}
+            pedidos={pedidos.filter(pedido => {
+              if (!searchTerm) return true;
+              const term = searchTerm.toLowerCase();
+              return (
+                pedido.idExterno?.toLowerCase().includes(term) ||
+                pedido.clienteNome?.toLowerCase().includes(term) ||
+                pedido.observacoes?.toLowerCase().includes(term)
+              );
+            })}
             status={statusList}
             onOrderMove={handleOrderMove}
           />

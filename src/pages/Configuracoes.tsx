@@ -2316,7 +2316,7 @@ export function Configuracoes() {
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Editar Empresa</DialogTitle>
-              <DialogDescription>Atualize as informações da empresa. A cor selecionada será usada como base (custom-600) para gerar toda a paleta.</DialogDescription>
+              <DialogDescription>Atualize as informações da empresa. A cor selecionada será usada como base para gerar toda a paleta.</DialogDescription>
             </DialogHeader>
 
             <div className="grid gap-3">
@@ -2335,7 +2335,7 @@ export function Configuracoes() {
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="edit-empresa-cor">Cor (Custom-600 Base)</Label>
+                <Label htmlFor="edit-empresa-cor">Cor principal</Label>
                 <div className="flex items-center gap-2">
                   <input id="edit-empresa-cor" type="color" value={editEmpresaCor} onChange={(e) => setEditEmpresaCor(e.target.value)} className="w-10 h-10 p-0 border-0" />
                   <Input value={editEmpresaCor} onChange={(e) => setEditEmpresaCor(e.target.value)} />
