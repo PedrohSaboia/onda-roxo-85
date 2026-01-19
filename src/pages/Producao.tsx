@@ -52,9 +52,27 @@ export function Producao() {
 
         setStatusList(mappedStatuses);
 
+        // IDs de status relevantes para a página de Produção
+        const PRODUCAO_STATUS_ID = 'ce505c97-8a44-4e4b-956b-d837013b252e';
+        const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
+        
+        // Buscar também Entrada Logística dinamicamente
+        const entradaLogisticaStatus = mappedStatuses.find(s => {
+          const nomeNorm = s.nome.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          return nomeNorm.includes('entrada') && nomeNorm.includes('logistica');
+        });
+        
+        const statusRelevantes = [PRODUCAO_STATUS_ID, LOGISTICA_STATUS_ID];
+        if (entradaLogisticaStatus) {
+          statusRelevantes.push(entradaLogisticaStatus.id);
+        }
+
+        console.log('[Producao] Carregando pedidos dos status:', statusRelevantes);
+
         const { data, error: supaError } = await supabase
           .from('pedidos')
           .select(`*, usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario,item_faltante, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url,ordem))`) 
+          .in('status_id', statusRelevantes)
           .order('criado_em', { ascending: false });
 
         if (supaError) throw supaError;
@@ -102,6 +120,15 @@ export function Producao() {
         };
 
         const mapped: Pedido[] = (data || []).map(mapPedidoRow);
+
+        console.log('[Producao] Pedidos carregados:', {
+          total: mapped.length,
+          porStatus: mapped.reduce((acc, p) => {
+            const nome = p.status?.nome || 'Sem status';
+            acc[nome] = (acc[nome] || 0) + 1;
+            return acc;
+          }, {} as Record<string, number>)
+        });
 
         setPedidos(mapped);
 
@@ -244,21 +271,73 @@ export function Producao() {
     })();
   };
 
-  // Status IDs que representam produção
-  const PRODUCAO_STATUS_IDS = statusList
-    .filter(s => s.nome === 'Produção')
-    .map(s => s.id);
+  // Status IDs específicos
+  const PRODUCAO_STATUS_ID = 'ce505c97-8a44-4e4b-956b-d837013b252e';
+  const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
+  
+  // Buscar também por nomes como fallback e Entrada Logística
+  const normalizarNome = (nome: string) => {
+    return nome.toLowerCase().trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  };
+  
+  const PRODUCAO_STATUS_IDS = [PRODUCAO_STATUS_ID];
   
   const ENTRADA_LOGISTICA_STATUS_IDS = statusList
-    .filter(s => s.nome === 'Entrada Logística')
+    .filter(s => {
+      const nomeNorm = normalizarNome(s.nome);
+      return nomeNorm.includes('entrada') && nomeNorm.includes('logistica');
+    })
     .map(s => s.id);
   
-  const LOGISTICA_STATUS_IDS = statusList
-    .filter(s => s.nome === 'Logística')
-    .map(s => s.id);
+  const LOGISTICA_STATUS_IDS = [LOGISTICA_STATUS_ID];
+  
+  // Log de diagnóstico
+  console.log('[Producao] Status identificados:', {
+    todosStatus: statusList.map(s => ({ id: s.id, nome: s.nome })),
+    producaoIDs: PRODUCAO_STATUS_IDS,
+    producaoStatus: statusList.find(s => s.id === PRODUCAO_STATUS_ID),
+    logisticaIDs: LOGISTICA_STATUS_IDS,
+    logisticaStatus: statusList.find(s => s.id === LOGISTICA_STATUS_ID),
+    entradaLogisticaIDs: ENTRADA_LOGISTICA_STATUS_IDS
+  });
+  
+  console.log('[Producao] Pedidos por status:', {
+    total: pedidos.length,
+    emProducao: pedidos.filter(p => PRODUCAO_STATUS_IDS.includes(p.statusId)).length,
+    emLogistica: pedidos.filter(p => LOGISTICA_STATUS_IDS.includes(p.statusId)).length,
+    emEntradaLogistica: pedidos.filter(p => ENTRADA_LOGISTICA_STATUS_IDS.includes(p.statusId)).length,
+    pedidosProducao: pedidos.filter(p => PRODUCAO_STATUS_IDS.includes(p.statusId)).map(p => ({
+      idExterno: p.idExterno,
+      statusId: p.statusId,
+      statusNome: p.status?.nome,
+      itens: p.itens.length
+    })),
+    pedidosLogistica: pedidos.filter(p => LOGISTICA_STATUS_IDS.includes(p.statusId)).map(p => ({
+      idExterno: p.idExterno,
+      statusId: p.statusId,
+      statusNome: p.status?.nome,
+      itens: p.itens.length
+    }))
+  });
 
   const getItensAgrupados = (statusIds: string[]) => {
+    console.log('[getItensAgrupados] Iniciando:', {
+      statusIdsBuscados: statusIds,
+      statusNomes: statusList.filter(s => statusIds.includes(s.id)).map(s => s.nome),
+      totalPedidos: pedidos.length
+    });
+    
     const pedidosFiltrados = pedidos.filter(p => statusIds.includes(p.statusId));
+    
+    console.log('[getItensAgrupados] Pedidos filtrados:', {
+      quantidade: pedidosFiltrados.length,
+      primeiros5: pedidosFiltrados.slice(0, 5).map(p => ({
+        idExterno: p.idExterno,
+        statusId: p.statusId,
+        statusNome: p.status?.nome,
+        totalItens: p.itens.length
+      }))
+    });
     
     // Agrupar itens por produto/variação
     const agrupamento: Record<string, {
@@ -271,10 +350,19 @@ export function Producao() {
     }> = {};
 
     pedidosFiltrados.forEach(pedido => {
+      if (pedido.itens.length === 0) {
+        console.warn(`[getItensAgrupados] Pedido ${pedido.idExterno} não tem itens!`);
+        return;
+      }
+      
       pedido.itens.forEach((item: any) => {
         // Pula itens sem produto vinculado
         if (!item.produto || !item.produto.id) {
-          console.warn('Item sem produto vinculado encontrado:', item);
+          console.warn(`[getItensAgrupados] Item sem produto vinculado no pedido ${pedido.idExterno}:`, {
+            item,
+            produtoId: item.produto?.id,
+            produtoNome: item.produto?.nome
+          });
           return;
         }
 
@@ -297,7 +385,15 @@ export function Producao() {
       });
     });
 
-    return Object.values(agrupamento).sort((a, b) => b.quantidade - a.quantidade);
+    const resultado = Object.values(agrupamento).sort((a, b) => b.quantidade - a.quantidade);
+    
+    console.log('[getItensAgrupados] Resultado final:', {
+      totalItensUnicos: resultado.length,
+      totalQuantidade: resultado.reduce((sum, i) => sum + i.quantidade, 0),
+      itens: resultado
+    });
+    
+    return resultado;
   };
 
   const handleItemClick = (item: {
@@ -306,6 +402,8 @@ export function Producao() {
     variacaoId?: string;
     variacaoNome?: string;
   }, statusIds: string[]) => {
+    console.log('[handleItemClick] Item clicado:', { item, statusIds });
+    
     // Buscar todos os pedidos que contêm este item
     const pedidosComItem = pedidos.filter(p => {
       if (!statusIds.includes(p.statusId)) return false;
@@ -313,11 +411,23 @@ export function Producao() {
       return p.itens.some((i: any) => {
         if (!i.produto?.id) return false;
         const matchProduto = i.produto.id === item.produtoId;
-        const matchVariacao = item.variacaoId 
-          ? i.variacao?.id === item.variacaoId 
-          : !i.variacao?.id;
-        return matchProduto && matchVariacao;
+        
+        // Se tem variação específica, buscar apenas essa variação
+        // Se não tem variação, buscar apenas itens sem variação
+        if (item.variacaoId) {
+          return matchProduto && i.variacao?.id === item.variacaoId;
+        } else {
+          return matchProduto && !i.variacao?.id;
+        }
       });
+    });
+
+    console.log('[handleItemClick] Pedidos encontrados:', {
+      quantidade: pedidosComItem.length,
+      pedidos: pedidosComItem.map(p => ({
+        idExterno: p.idExterno,
+        statusId: p.statusId
+      }))
     });
 
     const ids = pedidosComItem
