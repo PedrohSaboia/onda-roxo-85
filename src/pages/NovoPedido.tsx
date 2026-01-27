@@ -45,6 +45,9 @@ export default function NovoPedido() {
   const [paymentValues, setPaymentValues] = useState<Record<string, string>>({});
   const [showCartaoDropdown, setShowCartaoDropdown] = useState(false);
   const cartaoDropdownRef = useRef<HTMLDivElement>(null);
+  const [remetentes, setRemetentes] = useState<any[]>([]);
+  const [selectedRemetente, setSelectedRemetente] = useState<string>('');
+  const [loadingRemetentes, setLoadingRemetentes] = useState(false);
 
   const parsePtBR = (v: string) => {
     if (!v) return 0;
@@ -198,6 +201,20 @@ export default function NovoPedido() {
         setLoadingFormasPagamentos(false);
       }
     })();
+    // load remetentes
+    (async () => {
+      setLoadingRemetentes(true);
+      try {
+        const { data, error } = await supabase.from('remetentes').select('*').order('nome');
+        if (error) throw error;
+        if (!mounted) return;
+        setRemetentes(data || []);
+      } catch (err: any) {
+        console.error('Erro ao carregar remetentes:', err);
+      } finally {
+        setLoadingRemetentes(false);
+      }
+    })();
     return () => { mounted = false };
   }, []);
 
@@ -240,7 +257,8 @@ export default function NovoPedido() {
         frete_venda: parsePtBR(freteVendaStr),
         pagamento: formaPagamento || null,
         criado_em: criadoEm,
-        empresa_id: empresaId || null
+        empresa_id: empresaId || null,
+        remetente_id: selectedRemetente || null
       };
 
       const { data: pedidoData, error: pedidoError } = await supabase.from('pedidos').insert(pedidoPayload).select('id').single();
@@ -497,6 +515,26 @@ export default function NovoPedido() {
                   onChange={(e) => setContato(normalizePhoneInput(e.target.value))}
                   onBlur={() => setContato(formatPhonePtBR(contato))}
                 />
+              </div>
+
+              <div>
+                <label className="text-sm">Remetente</label>
+                <select
+                  className="w-full border rounded px-3 py-2 text-sm"
+                  value={selectedRemetente}
+                  onChange={(e) => setSelectedRemetente(e.target.value)}
+                >
+                  <option value="">Selecione um remetente</option>
+                  {loadingRemetentes ? (
+                    <option disabled>Carregando...</option>
+                  ) : (
+                    remetentes.map((r) => (
+                      <option key={r.id} value={r.id}>
+                        {r.nome}{r.cidade ? ` - ${r.cidade}` : ''}
+                      </option>
+                    ))
+                  )}
+                </select>
               </div>
 
               {/* Currency inputs e formas de pagamento na mesma linha */}

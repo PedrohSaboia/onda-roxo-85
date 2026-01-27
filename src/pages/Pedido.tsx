@@ -67,6 +67,7 @@ export default function Pedido() {
   const [etiquetaMLModalOpen, setEtiquetaMLModalOpen] = useState(false);
   const [etiquetaMLPdfUrl, setEtiquetaMLPdfUrl] = useState<string | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<Record<number, string> | null>(null);
+  const [temProdutoEntregueML, setTemProdutoEntregueML] = useState(false);
   
   // Estados para gerenciar embalagem/remetente selecionados
   const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
@@ -470,9 +471,12 @@ export default function Pedido() {
         setEmbalagens(embalagensData || []);
         setRemetentes(remetentesData || []);
 
-        // Auto-selecionar primeiro remetente e embalagem
+        // Auto-selecionar primeira embalagem
         if (embalagensData?.length) setSelectedEmbalagem(embalagensData[0]);
-        if (remetentesData?.length) setSelectedRemetente(remetentesData[0]);
+        
+        // Nota: remetente será definido após carregar o pedido, baseado no pedido.remetente_id
+        // if (remetentesData?.length) setSelectedRemetente(remetentesData[0]);
+        
         // try to load payment methods table if exists
         (async () => {
           try {
@@ -577,6 +581,49 @@ export default function Pedido() {
             status_up_sell: it.status_up_sell || null,
           };
         });
+        
+        // Check if any product has entregue_ml = true in produtos_sku_plataformas
+        // ONLY for Mercado Livre platform - otherwise use default buttons
+        let hasEntregueML = false;
+        const isMercadoLivre = plataforma?.nome?.toLowerCase().includes('mercado livre');
+        
+        if (isMercadoLivre) {
+          // The relationship is through SKU field (check both product and variation SKU)
+          const allSkus: string[] = [];
+          
+          // Collect all SKUs from products and variations
+          itens.forEach((it: any) => {
+            if (it.produto?.sku) allSkus.push(it.produto.sku);
+            if (it.variacao?.sku) allSkus.push(it.variacao.sku);
+          });
+          
+          const uniqueSkus = [...new Set(allSkus)].filter(Boolean);
+          
+          console.log('SKUs do pedido:', uniqueSkus);
+          
+          if (uniqueSkus.length > 0) {
+            try {
+              const { data: skuPlataformasData, error: skuError } = await (supabase as any)
+                .from('produtos_sku_plataformas')
+                .select('sku, entregue_ml')
+                .in('sku', uniqueSkus);
+              
+              console.log('Dados de produtos_sku_plataformas:', skuPlataformasData);
+              console.log('Erro ao buscar produtos_sku_plataformas:', skuError);
+              
+              if (!skuError && skuPlataformasData) {
+                // Check if any of the returned records has entregue_ml = true
+                hasEntregueML = skuPlataformasData.some((item: any) => item.entregue_ml === true);
+                console.log('Tem produto com entregue_ml = true?', hasEntregueML);
+              }
+            } catch (err) {
+              console.error('Erro ao verificar produtos_sku_plataformas:', err);
+            }
+          }
+        }
+        
+        // Update state to control button visibility (only for Mercado Livre)
+        setTemProdutoEntregueML(isMercadoLivre && hasEntregueML);
 
         setPedido({
           ...pedidoRow,
@@ -615,6 +662,16 @@ export default function Pedido() {
     fetchData();
     return () => { mounted = false };
   }, [id]);
+
+  // Definir remetente selecionado quando pedido e remetentes forem carregados
+  useEffect(() => {
+    if (pedido && pedido.remetente_id && remetentes.length > 0) {
+      const remetenteEncontrado = remetentes.find(r => r.id === pedido.remetente_id);
+      if (remetenteEncontrado) {
+        setSelectedRemetente(remetenteEncontrado);
+      }
+    }
+  }, [pedido, remetentes]);
 
   // Load formas de pagamento when wizard opens
   useEffect(() => {
@@ -864,9 +921,16 @@ export default function Pedido() {
     try {
       setCalculandoFrete(true);
 
+      // Usar remetente do pedido se existir, caso contrário usar o padrão
+      const remetenteId = pedido.remetente_id || '128a7de7-d649-43e1-8ba3-2b54c3496b14';
+
       // Chamar a edge function processar_etiqueta_em_envio_de_pedido
       const { data: response, error: functionError } = await supabase.functions.invoke('processar_etiqueta_em_envio_de_pedido', {
-        body: { pedido_id: pedido.id, empresa_id: empresaId }
+        body: { 
+          pedido_id: pedido.id, 
+          empresa_id: empresaId,
+          remetente_id: remetenteId
+        }
       });
 
       if (functionError) {
@@ -1738,7 +1802,7 @@ export default function Pedido() {
                           disabled={readonly}
                         >
                           {remetentes.map(r => (
-                            <option key={r.id} value={r.id}>{r.nome}</option>
+                            <option key={r.id} value={r.id}>{r.nome}{r.cidade ? ` - ${r.cidade}` : ''}</option>
                           ))}
                         </select>
                         <Button
@@ -1848,10 +1912,10 @@ export default function Pedido() {
                     </Button>
                   </>
                 ) : (
-                  // Botões baseados no campo etiqueta_ml
+                  // Botões baseados na verificação de entregue_ml
                   <>
-                    {pedido?.etiqueta_ml === true ? (
-                      // Botão para etiqueta Mercado Livre
+                    {temProdutoEntregueML ? (
+                      // Botão para etiqueta Mercado Livre (quando entregue_ml = true)
                       <Button
                         onClick={() => {
                           if (!readonly) {
@@ -1871,7 +1935,7 @@ export default function Pedido() {
                         )}
                       </Button>
                     ) : (
-                      // Botões originais para calcular e enviar mais barato
+                      // Botões originais para calcular e enviar mais barato (quando entregue_ml = null ou false)
                       <>
                         <Button
                           onClick={() => { if (!readonly) handleCalcularFrete(); }}
