@@ -322,8 +322,8 @@ export function Producao() {
     }))
   });
 
-  const getItensAgrupados = (statusIds: string[]) => {
-    console.log('[getItensAgrupados] Iniciando:', {
+  const getItensAgrupadosPorProduto = (statusIds: string[]) => {
+    console.log('[getItensAgrupadosPorProduto] Iniciando:', {
       statusIdsBuscados: statusIds,
       statusNomes: statusList.filter(s => statusIds.includes(s.id)).map(s => s.nome),
       totalPedidos: pedidos.length
@@ -331,7 +331,7 @@ export function Producao() {
     
     const pedidosFiltrados = pedidos.filter(p => statusIds.includes(p.statusId));
     
-    console.log('[getItensAgrupados] Pedidos filtrados:', {
+    console.log('[getItensAgrupadosPorProduto] Pedidos filtrados:', {
       quantidade: pedidosFiltrados.length,
       primeiros5: pedidosFiltrados.slice(0, 5).map(p => ({
         idExterno: p.idExterno,
@@ -341,26 +341,30 @@ export function Producao() {
       }))
     });
     
-    // Agrupar itens por produto/variação
-    const agrupamento: Record<string, {
+    // Agrupar itens por produto com suas variações
+    const agrupamentoPorProduto: Record<string, {
       produtoId: string;
       produtoNome: string;
-      variacaoId?: string;
-      variacaoNome?: string;
       imagem?: string;
-      quantidade: number;
+      totalQuantidade: number;
+      variacoes: Array<{
+        variacaoId?: string;
+        variacaoNome?: string;
+        imagem?: string;
+        quantidade: number;
+      }>;
     }> = {};
 
     pedidosFiltrados.forEach(pedido => {
       if (pedido.itens.length === 0) {
-        console.warn(`[getItensAgrupados] Pedido ${pedido.idExterno} não tem itens!`);
+        console.warn(`[getItensAgrupadosPorProduto] Pedido ${pedido.idExterno} não tem itens!`);
         return;
       }
       
       pedido.itens.forEach((item: any) => {
         // Pula itens sem produto vinculado
         if (!item.produto || !item.produto.id) {
-          console.warn(`[getItensAgrupados] Item sem produto vinculado no pedido ${pedido.idExterno}:`, {
+          console.warn(`[getItensAgrupadosPorProduto] Item sem produto vinculado no pedido ${pedido.idExterno}:`, {
             item,
             produtoId: item.produto?.id,
             produtoNome: item.produto?.nome
@@ -368,31 +372,52 @@ export function Producao() {
           return;
         }
 
-        const key = item.variacao 
-          ? `${item.produto.id}-${item.variacao.id}`
-          : `${item.produto.id}`;
+        const produtoId = item.produto.id;
         
-        if (!agrupamento[key]) {
-          agrupamento[key] = {
+        // Inicializa o produto se não existir
+        if (!agrupamentoPorProduto[produtoId]) {
+          agrupamentoPorProduto[produtoId] = {
             produtoId: item.produto.id,
             produtoNome: item.produto.nome || 'Produto sem nome',
-            variacaoId: item.variacao?.id,
-            variacaoNome: item.variacao?.nome,
-            imagem: item.variacao?.imagem || item.produto?.imagem,
-            quantidade: 0,
+            imagem: item.produto?.imagem,
+            totalQuantidade: 0,
+            variacoes: [],
           };
         }
         
-        agrupamento[key].quantidade += item.quantidade;
+        // Adiciona ou atualiza a variação
+        const variacaoKey = item.variacao?.id || 'sem-variacao';
+        const variacaoExistente = agrupamentoPorProduto[produtoId].variacoes.find(
+          v => (v.variacaoId || 'sem-variacao') === variacaoKey
+        );
+        
+        if (variacaoExistente) {
+          variacaoExistente.quantidade += item.quantidade;
+        } else {
+          agrupamentoPorProduto[produtoId].variacoes.push({
+            variacaoId: item.variacao?.id,
+            variacaoNome: item.variacao?.nome,
+            imagem: item.variacao?.imagem,
+            quantidade: item.quantidade,
+          });
+        }
+        
+        agrupamentoPorProduto[produtoId].totalQuantidade += item.quantidade;
       });
     });
 
-    const resultado = Object.values(agrupamento).sort((a, b) => b.quantidade - a.quantidade);
+    // Converte para array e ordena por quantidade total
+    const resultado = Object.values(agrupamentoPorProduto)
+      .sort((a, b) => b.totalQuantidade - a.totalQuantidade)
+      .map(produto => ({
+        ...produto,
+        variacoes: produto.variacoes.sort((a, b) => b.quantidade - a.quantidade)
+      }));
     
-    console.log('[getItensAgrupados] Resultado final:', {
-      totalItensUnicos: resultado.length,
-      totalQuantidade: resultado.reduce((sum, i) => sum + i.quantidade, 0),
-      itens: resultado
+    console.log('[getItensAgrupadosPorProduto] Resultado final:', {
+      totalProdutos: resultado.length,
+      totalQuantidade: resultado.reduce((sum, p) => sum + p.totalQuantidade, 0),
+      produtos: resultado
     });
     
     return resultado;
@@ -535,8 +560,8 @@ export function Producao() {
           <div className="space-y-6">
             {/* Produção */}
             {PRODUCAO_STATUS_IDS.length > 0 && (() => {
-              const itens = getItensAgrupados(PRODUCAO_STATUS_IDS);
-              const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+              const produtos = getItensAgrupadosPorProduto(PRODUCAO_STATUS_IDS);
+              const totalItens = produtos.reduce((sum, produto) => sum + produto.totalQuantidade, 0);
               
               return (
                 <Card>
@@ -549,41 +574,70 @@ export function Producao() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {itens.length === 0 ? (
+                    {produtos.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         Nenhum item em produção
                       </p>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {itens.map((item, idx) => (
-                          <div 
-                            key={idx} 
-                            className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-                            onClick={() => handleItemClick(item, PRODUCAO_STATUS_IDS)}
-                          >
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                                {item.imagem ? (
-                                  <img 
-                                    src={item.imagem} 
-                                    alt={item.produtoNome}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">Sem foto</span>
-                                )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {produtos.map((produto, idx) => (
+                          <Card key={idx} className="overflow-hidden">
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {produto.imagem ? (
+                                    <img 
+                                      src={produto.imagem} 
+                                      alt={produto.produtoNome}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Sem foto</span>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-base truncate">{produto.produtoNome}</h3>
+                                  <Badge variant="secondary" className="mt-1">
+                                    Total: {produto.totalQuantidade}×
+                                  </Badge>
+                                </div>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{item.produtoNome}</p>
-                                {item.variacaoNome && (
-                                  <p className="text-xs text-muted-foreground truncate">{item.variacaoNome}</p>
-                                )}
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                              <div className="space-y-2">
+                                {produto.variacoes.map((variacao, vIdx) => (
+                                  <div 
+                                    key={vIdx}
+                                    className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                                    onClick={() => handleItemClick({
+                                      produtoId: produto.produtoId,
+                                      produtoNome: produto.produtoNome,
+                                      variacaoId: variacao.variacaoId,
+                                      variacaoNome: variacao.variacaoNome
+                                    }, PRODUCAO_STATUS_IDS)}
+                                  >
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      {variacao.imagem && (
+                                        <div className="w-8 h-8 rounded bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
+                                          <img 
+                                            src={variacao.imagem} 
+                                            alt={variacao.variacaoNome || 'Variação'}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                      )}
+                                      <span className="text-sm truncate">
+                                        {variacao.variacaoNome || 'Sem variação'}
+                                      </span>
+                                    </div>
+                                    <Badge variant="outline" className="text-sm font-semibold ml-2">
+                                      {variacao.quantidade}×
+                                    </Badge>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                            <Badge variant="outline" className="text-base font-semibold px-3 py-1 flex-shrink-0">
-                              {item.quantidade}×
-                            </Badge>
-                          </div>
+                            </CardContent>
+                          </Card>
                         ))}
                       </div>
                     )}
@@ -594,8 +648,8 @@ export function Producao() {
 
             {/* Entrada Logística */}
             {ENTRADA_LOGISTICA_STATUS_IDS.length > 0 && (() => {
-              const itens = getItensAgrupados(ENTRADA_LOGISTICA_STATUS_IDS);
-              const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+              const produtos = getItensAgrupadosPorProduto(ENTRADA_LOGISTICA_STATUS_IDS);
+              const totalItens = produtos.reduce((sum, produto) => sum + produto.totalQuantidade, 0);
               
               return (
                 <Card>
@@ -608,41 +662,70 @@ export function Producao() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {itens.length === 0 ? (
+                    {produtos.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         Nenhum item em entrada logística
                       </p>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {itens.map((item, idx) => (
-                          <div 
-                            key={idx} 
-                            className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-                            onClick={() => handleItemClick(item, ENTRADA_LOGISTICA_STATUS_IDS)}
-                          >
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                                {item.imagem ? (
-                                  <img 
-                                    src={item.imagem} 
-                                    alt={item.produtoNome}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">Sem foto</span>
-                                )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {produtos.map((produto, idx) => (
+                          <Card key={idx} className="overflow-hidden">
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {produto.imagem ? (
+                                    <img 
+                                      src={produto.imagem} 
+                                      alt={produto.produtoNome}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Sem foto</span>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-base truncate">{produto.produtoNome}</h3>
+                                  <Badge variant="secondary" className="mt-1">
+                                    Total: {produto.totalQuantidade}×
+                                  </Badge>
+                                </div>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{item.produtoNome}</p>
-                                {item.variacaoNome && (
-                                  <p className="text-xs text-muted-foreground truncate">{item.variacaoNome}</p>
-                                )}
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                              <div className="space-y-2">
+                                {produto.variacoes.map((variacao, vIdx) => (
+                                  <div 
+                                    key={vIdx}
+                                    className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                                    onClick={() => handleItemClick({
+                                      produtoId: produto.produtoId,
+                                      produtoNome: produto.produtoNome,
+                                      variacaoId: variacao.variacaoId,
+                                      variacaoNome: variacao.variacaoNome
+                                    }, ENTRADA_LOGISTICA_STATUS_IDS)}
+                                  >
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      {variacao.imagem && (
+                                        <div className="w-8 h-8 rounded bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
+                                          <img 
+                                            src={variacao.imagem} 
+                                            alt={variacao.variacaoNome || 'Variação'}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                      )}
+                                      <span className="text-sm truncate">
+                                        {variacao.variacaoNome || 'Sem variação'}
+                                      </span>
+                                    </div>
+                                    <Badge variant="outline" className="text-sm font-semibold ml-2">
+                                      {variacao.quantidade}×
+                                    </Badge>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                            <Badge variant="outline" className="text-base font-semibold px-3 py-1 flex-shrink-0">
-                              {item.quantidade}×
-                            </Badge>
-                          </div>
+                            </CardContent>
+                          </Card>
                         ))}
                       </div>
                     )}
@@ -653,8 +736,8 @@ export function Producao() {
 
             {/* Logística */}
             {LOGISTICA_STATUS_IDS.length > 0 && (() => {
-              const itens = getItensAgrupados(LOGISTICA_STATUS_IDS);
-              const totalItens = itens.reduce((sum, item) => sum + item.quantidade, 0);
+              const produtos = getItensAgrupadosPorProduto(LOGISTICA_STATUS_IDS);
+              const totalItens = produtos.reduce((sum, produto) => sum + produto.totalQuantidade, 0);
               
               return (
                 <Card>
@@ -667,41 +750,70 @@ export function Producao() {
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
-                    {itens.length === 0 ? (
+                    {produtos.length === 0 ? (
                       <p className="text-sm text-muted-foreground text-center py-4">
                         Nenhum item em logística
                       </p>
                     ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                        {itens.map((item, idx) => (
-                          <div 
-                            key={idx} 
-                            className="flex items-center justify-between gap-3 p-3 border rounded-lg bg-card hover:bg-accent/50 transition-colors cursor-pointer"
-                            onClick={() => handleItemClick(item, LOGISTICA_STATUS_IDS)}
-                          >
-                            <div className="flex items-center gap-3 flex-1 min-w-0">
-                              <div className="w-12 h-12 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                                {item.imagem ? (
-                                  <img 
-                                    src={item.imagem} 
-                                    alt={item.produtoNome}
-                                    className="w-full h-full object-cover"
-                                  />
-                                ) : (
-                                  <span className="text-xs text-muted-foreground">Sem foto</span>
-                                )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {produtos.map((produto, idx) => (
+                          <Card key={idx} className="overflow-hidden">
+                            <CardHeader className="pb-3">
+                              <div className="flex items-center gap-3">
+                                <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                                  {produto.imagem ? (
+                                    <img 
+                                      src={produto.imagem} 
+                                      alt={produto.produtoNome}
+                                      className="w-full h-full object-cover"
+                                    />
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Sem foto</span>
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <h3 className="font-semibold text-base truncate">{produto.produtoNome}</h3>
+                                  <Badge variant="secondary" className="mt-1">
+                                    Total: {produto.totalQuantidade}×
+                                  </Badge>
+                                </div>
                               </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm truncate">{item.produtoNome}</p>
-                                {item.variacaoNome && (
-                                  <p className="text-xs text-muted-foreground truncate">{item.variacaoNome}</p>
-                                )}
+                            </CardHeader>
+                            <CardContent className="pt-0">
+                              <div className="space-y-2">
+                                {produto.variacoes.map((variacao, vIdx) => (
+                                  <div 
+                                    key={vIdx}
+                                    className="flex items-center justify-between p-2 rounded-md bg-muted/50 hover:bg-accent/50 transition-colors cursor-pointer"
+                                    onClick={() => handleItemClick({
+                                      produtoId: produto.produtoId,
+                                      produtoNome: produto.produtoNome,
+                                      variacaoId: variacao.variacaoId,
+                                      variacaoNome: variacao.variacaoNome
+                                    }, LOGISTICA_STATUS_IDS)}
+                                  >
+                                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                                      {variacao.imagem && (
+                                        <div className="w-8 h-8 rounded bg-background flex items-center justify-center overflow-hidden flex-shrink-0">
+                                          <img 
+                                            src={variacao.imagem} 
+                                            alt={variacao.variacaoNome || 'Variação'}
+                                            className="w-full h-full object-cover"
+                                          />
+                                        </div>
+                                      )}
+                                      <span className="text-sm truncate">
+                                        {variacao.variacaoNome || 'Sem variação'}
+                                      </span>
+                                    </div>
+                                    <Badge variant="outline" className="text-sm font-semibold ml-2">
+                                      {variacao.quantidade}×
+                                    </Badge>
+                                  </div>
+                                ))}
                               </div>
-                            </div>
-                            <Badge variant="outline" className="text-base font-semibold px-3 py-1 flex-shrink-0">
-                              {item.quantidade}×
-                            </Badge>
-                          </div>
+                            </CardContent>
+                          </Card>
                         ))}
                       </div>
                     )}
