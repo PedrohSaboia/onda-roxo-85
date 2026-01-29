@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Eye, Copy } from 'lucide-react';
+import { TbTruckReturn } from 'react-icons/tb';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -497,8 +498,7 @@ export function PedidosEnviados() {
                   <TableHead className="text-center">Plataforma</TableHead>
                   <TableHead className="text-center">Transportadora</TableHead>
                   <TableHead className="text-center">Responsável</TableHead>
-                  <TableHead className="text-center">Status</TableHead>
-                  <TableHead className="text-right">Ações</TableHead>
+                  <TableHead className="text-center">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -584,16 +584,15 @@ export function PedidosEnviados() {
                       </div>
                     </TableCell>
                     <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-2">
+                      <div className="flex items-center justify-center">
                         {pedido.plataforma?.imagemUrl ? (
-                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-6 h-6 rounded" />
+                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-8 h-8 rounded" />
                         ) : (
-                          <div
-                            className="w-3 h-3 rounded-full"
+                          <div 
+                            className="w-6 h-6 rounded-full"
                             style={{ backgroundColor: pedido.plataforma?.cor }}
                           />
                         )}
-                        {pedido.plataforma?.nome}
                       </div>
                     </TableCell>
 
@@ -615,48 +614,29 @@ export function PedidosEnviados() {
                     </TableCell>
 
                     <TableCell>
-                      <div className="flex items-center gap-2 justify-center">
-                        <Avatar className="h-6 w-6">
+                      <div className="flex items-center justify-center">
+                        <Avatar className="h-12 w-12 border-4 border-custom-600 rounded-full">
                           <AvatarImage src={pedido.responsavel?.avatar} />
-                          <AvatarFallback className="text-xs">
+                          <AvatarFallback className="text-sm">
                             {pedido.responsavel?.nome?.slice(0, 2).toUpperCase()}
                           </AvatarFallback>
                         </Avatar>
-                        <span className="text-sm">{pedido.responsavel?.nome}</span>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center justify-center">
-                        <Badge
-                          variant="outline"
-                          style={{
-                            backgroundColor: `${pedido.status?.corHex}15`,
-                            borderColor: pedido.status?.corHex,
-                            color: pedido.status?.corHex
-                          }}
-                        >
-                          {pedido.status?.nome}
-                        </Badge>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-center">
                       <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="sm" onClick={(e) => {
-                          e.stopPropagation();
-                          const currentParams = new URLSearchParams();
-                          currentParams.set('readonly', '1');
-                          currentParams.set('returnTo', location.pathname + location.search);
-                          navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
-                        }}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Visualizar
-                        </Button>
                         <Button variant="ghost" size="sm" onClick={(e) => {
                           e.stopPropagation();
                           setPedidoToDuplicate(pedido.id);
                           setConfirmDuplicateOpen(true);
                         }} title="Duplicar pedido">
                           <Copy className="h-4 w-4" />
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={(e) => {
+                          e.stopPropagation();
+                          // TODO: implementar lógica de pedido retornado
+                        }} title="Pedido retornado">
+                          <TbTruckReturn className="h-4 w-4" />
                         </Button>
                       </div>
                     </TableCell>

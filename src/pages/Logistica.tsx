@@ -32,6 +32,13 @@ export function Logistica() {
   const [saldoMelhorEnvio, setSaldoMelhorEnvio] = useState<number | null>(null);
   const [loadingSaldo, setLoadingSaldo] = useState(false);
 
+  // Estados para envio por pedido
+  const [senhaModalOpen, setSenhaModalOpen] = useState(false);
+  const [senhaInput, setSenhaInput] = useState('');
+  const [pedidoIdModalOpen, setPedidoIdModalOpen] = useState(false);
+  const [pedidoIdInput, setPedidoIdInput] = useState('');
+  const [loadingPedidoManual, setLoadingPedidoManual] = useState(false);
+
   // Buscar saldo do Melhor Envio
   const fetchSaldoMelhorEnvio = async () => {
     setLoadingSaldo(true);
@@ -255,8 +262,8 @@ export function Logistica() {
       let pedidoRow: any = null;
       let pedErr: any = null;
 
-  const selectWithBipado = `id,id_externo,plataforma_id,shipping_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras,bipado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
-  const selectWithoutBipado = `id,id_externo,plataforma_id,shipping_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const selectWithBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras,bipado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const selectWithoutBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       // first attempt including bipado
       const res1: any = await supabase
@@ -328,6 +335,121 @@ export function Logistica() {
     }
   };
 
+  const handleEnviarPorPedido = () => {
+    setSenhaInput('');
+    setSenhaModalOpen(true);
+  };
+
+  const handleVerificarSenha = () => {
+    if (senhaInput === 'zgtmadmin202') {
+      setSenhaModalOpen(false);
+      setSenhaInput('');
+      setPedidoIdInput('');
+      setPedidoIdModalOpen(true);
+    } else {
+      toast({ 
+        title: 'Senha incorreta', 
+        description: 'A senha digitada está incorreta', 
+        variant: 'destructive' 
+      });
+    }
+  };
+
+  const handleBuscarPedidoPorId = async () => {
+    const pedidoId = pedidoIdInput.trim();
+    if (!pedidoId) {
+      toast({ 
+        title: 'ID inválido', 
+        description: 'Digite um ID de pedido válido', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
+    setLoadingPedidoManual(true);
+    try {
+      const selectWithBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras,bipado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectWithoutBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+
+      // Tentar buscar por ID ou ID externo
+      let pedidoRow: any = null;
+      let pedErr: any = null;
+
+      // Primeira tentativa: buscar por id_externo
+      const res1: any = await supabase
+        .from('pedidos')
+        .select(selectWithBipado)
+        .eq('id_externo', pedidoId)
+        .single();
+
+      pedidoRow = res1.data;
+      pedErr = res1.error;
+
+      // Se não encontrou por id_externo, tenta por id
+      if (pedErr || !pedidoRow) {
+        const res2: any = await supabase
+          .from('pedidos')
+          .select(selectWithBipado)
+          .eq('id', pedidoId)
+          .single();
+
+        pedidoRow = res2.data;
+        pedErr = res2.error;
+      }
+
+      // Se ainda der erro de coluna bipado, tenta sem bipado
+      if (pedErr && (pedErr?.code === '42703' || String(pedErr?.message || '').includes('bipado'))) {
+        const res3: any = await supabase
+          .from('pedidos')
+          .select(selectWithoutBipado)
+          .or(`id_externo.eq.${pedidoId}`)
+          .single();
+
+        pedidoRow = res3.data;
+        pedErr = res3.error;
+      }
+
+      if (pedErr) throw pedErr;
+
+      if (!pedidoRow) {
+        throw new Error('Pedido não encontrado');
+      }
+
+      console.log('Pedido encontrado manualmente:', pedidoRow);
+
+      setFoundPedido(pedidoRow);
+      setFoundItemIds([]);
+      setPedidoIdModalOpen(false);
+      setPedidoIdInput('');
+
+      toast({ 
+        title: 'Pedido carregado', 
+        description: `Pedido ${pedidoRow.id_externo || pedidoRow.id} carregado com sucesso` 
+      });
+
+      // Focar no primeiro item
+      setTimeout(() => {
+        const items = pedidoRow?.itens_pedido || [];
+        const first = items.find((it: any) => !it.bipado);
+        if (first && itemRefs.current[first.id]) {
+          itemRefs.current[first.id]?.focus();
+        } else {
+          barcodeRef.current?.focus();
+        }
+      }, 100);
+
+    } catch (err: any) {
+      console.error('Erro ao buscar pedido:', err);
+      toast({ 
+        title: 'Erro ao buscar pedido', 
+        description: err.message || String(err), 
+        variant: 'destructive' 
+      });
+    } finally {
+      setLoadingPedidoManual(false);
+    }
+  };
+
  return (
     <div className="space-y-6 p-6">
       <div>
@@ -390,6 +512,9 @@ export function Logistica() {
                 <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
                   <RefreshCw className="h-4 w-4" />
                   Atualizar
+                </Button>
+                <Button onClick={handleEnviarPorPedido} className="rounded-md px-3 py-1 flex items-center gap-2">
+                  Enviar por pedido
                 </Button>
               </div>
             </div>
@@ -581,6 +706,7 @@ export function Logistica() {
                               body: JSON.stringify({
                                 pedido_id: foundPedido?.id,
                                 empresa_id: empresaId,
+                                remetente_id: foundPedido?.remetente_id,
                               }),
                             });
 
@@ -718,6 +844,75 @@ export function Logistica() {
                 Abrir em Nova Guia
               </Button>
             </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Senha Admin */}
+      <Dialog open={senhaModalOpen} onOpenChange={setSenhaModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>🔐 Senha de Administrador</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <input
+              type="password"
+              value={senhaInput}
+              onChange={(e) => setSenhaInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleVerificarSenha();
+                }
+              }}
+              placeholder="Digite a senha de administrador"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-custom-600"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSenhaModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleVerificarSenha}>
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: ID do Pedido */}
+      <Dialog open={pedidoIdModalOpen} onOpenChange={setPedidoIdModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>📦 Buscar Pedido</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <label className="text-sm text-muted-foreground mb-2 block">
+              Digite o ID ou ID Externo do pedido:
+            </label>
+            <input
+              type="text"
+              value={pedidoIdInput}
+              onChange={(e) => setPedidoIdInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleBuscarPedidoPorId();
+                }
+              }}
+              placeholder="Ex: 12345 ou abc-123-xyz"
+              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-custom-600"
+              autoFocus
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPedidoIdModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleBuscarPedidoPorId} disabled={loadingPedidoManual}>
+              {loadingPedidoManual ? 'Buscando...' : 'Buscar'}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
