@@ -451,6 +451,7 @@ export function Logistica() {
   };
 
  return (
+    <div className="h-full overflow-y-auto">
     <div className="space-y-6 p-6">
       <div>
         <div className="flex items-center justify-between">
@@ -916,6 +917,7 @@ export function Logistica() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
     </div>
   );
 }

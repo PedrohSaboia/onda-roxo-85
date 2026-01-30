@@ -16,6 +16,7 @@ import InformacoesEntrega from "./pages/InformacoesEntrega";
 import Leads from "./pages/Leads";
 import PedidosEnviados from "./pages/PedidosEnviados";
 import PedidosCancelados from "./pages/PedidosCancelados";
+import PedidosRetornados from "./pages/PedidosRetornados";
 import ListaEmbalagens from "./pages/ListaEmbalagens";
 import SkuPlataformas from "./pages/SkuPlataformas";
 import { TermosServico } from "./pages/TermosServico";
@@ -80,6 +81,7 @@ const App = () => {
               <Route path="leads" element={<Leads />} />
               <Route path="pedidos-cancelados" element={<PedidosCancelados />} />
               <Route path="pedidos-enviados" element={<PedidosEnviados />} />
+              <Route path="pedidos-retornados" element={<PedidosRetornados />} />
               <Route path="estoque/embalagens" element={<ListaEmbalagens />} />
               <Route path="contabilidade" element={<Contabilidade />} />
                 <Route path="novo-pedido" element={<NovoPedido />} />

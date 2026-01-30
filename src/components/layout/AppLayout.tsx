@@ -62,8 +62,10 @@ export function AppLayout() {
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
-      <AppHeader activeModule={activeModule} onModuleChange={handleModuleChange} />
-      <main className="flex-1 overflow-y-auto">
+      <div className="flex-shrink-0">
+        <AppHeader activeModule={activeModule} onModuleChange={handleModuleChange} />
+      </div>
+      <main className="flex-1 min-h-0 overflow-y-auto">
         <Outlet />
       </main>
     </div>

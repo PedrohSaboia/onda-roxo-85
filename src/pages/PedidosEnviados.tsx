@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Eye, Copy } from 'lucide-react';
+import { Search, Eye, Copy, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { TbTruckReturn } from 'react-icons/tb';
+import { FaUserAltSlash, FaCalendarAlt } from 'react-icons/fa';
+import { format, parseISO, startOfMonth, subMonths, isSameDay, isWithinInterval } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -41,6 +45,18 @@ export function PedidosEnviados() {
   const { toast } = useToast();
   const [confirmDuplicateOpen, setConfirmDuplicateOpen] = useState(false);
   const [pedidoToDuplicate, setPedidoToDuplicate] = useState<string | null>(null);
+  const [confirmRetornadoOpen, setConfirmRetornadoOpen] = useState(false);
+  const [pedidoToRetornar, setPedidoToRetornar] = useState<string | null>(null);
+  
+  // Date picker states
+  const [startDate, setStartDate] = useState<string | null>(null);
+  const [endDate, setEndDate] = useState<string | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
+  const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState<number>(() => new Date().getFullYear());
   
   // Sync state from URL when location changes
   useEffect(() => {
@@ -68,9 +84,16 @@ export function PedidosEnviados() {
         // Query the vw_clientes_pedidos view which flattens cliente+pedido fields
         const query = (supabase as any)
           .from('vw_clientes_pedidos')
-          .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio`, { count: 'exact' })
+          .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, resp_envio, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio, data_enviado`, { count: 'exact' })
           .eq('status_id', ENVIADO_STATUS_ID)
           .order('pedido_criado_em', { ascending: false });
+
+        // apply date filter if set
+        if (startDate && endDate) {
+          const startISO = new Date(startDate + 'T00:00:00').toISOString();
+          const endISO = new Date(endDate + 'T23:59:59').toISOString();
+          (query as any).gte('data_enviado', startISO).lte('data_enviado', endISO);
+        }
 
         // apply search term server-side
         if (searchTrim.length > 0) {
@@ -131,6 +154,7 @@ export function PedidosEnviados() {
           const freteMe = row.frete_melhor_envio || null;
           const plataformaRow = plataformasMap[row.plataforma_id];
           const usuarioRow = usuariosMap[row.responsavel_id];
+          const respEnvioRow = row.resp_envio ? usuariosMap[row.resp_envio] : null;
           const statusRow = statusMap[row.status_id];
           const etiquetaRow = etiquetaMap[row.etiqueta_envio_id];
 
@@ -159,6 +183,18 @@ export function PedidosEnviados() {
                   email: '',
                   papel: 'operador',
                   avatar: usuarioRow.img_url || undefined,
+                  ativo: true,
+                  criadoEm: '',
+                  atualizadoEm: '',
+                }
+              : undefined,
+            responsavelEnvio: respEnvioRow
+              ? {
+                  id: respEnvioRow.id,
+                  nome: respEnvioRow.nome,
+                  email: '',
+                  papel: 'operador',
+                  avatar: respEnvioRow.img_url || undefined,
                   ativo: true,
                   criadoEm: '',
                   atualizadoEm: '',
@@ -222,7 +258,7 @@ export function PedidosEnviados() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, searchTerm]);
+  }, [page, pageSize, searchTerm, startDate, endDate]);
 
   const normalize = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
   const digitsOnly = (s?: string) => (s || '').replace(/\D/g, '').trim();
@@ -267,6 +303,53 @@ export function PedidosEnviados() {
   };
 
   const pageSizeOptions = [10, 20, 30, 50];
+
+  const marcarPedidoRetornado = async () => {
+    const pedidoId = pedidoToRetornar;
+    if (!pedidoId) return;
+    
+    setConfirmRetornadoOpen(false);
+    setPedidoToRetornar(null);
+    
+    try {
+      // Inserir registro na tabela pedidos_retornados
+      const { error: insertError } = await supabase
+        .from('pedidos_retornados')
+        .insert({
+          pedido_id: pedidoId,
+          data_retornado: new Date().toISOString()
+        });
+
+      if (insertError) throw insertError;
+
+      // Atualizar campo pedido_retornado para true na tabela pedidos
+      const { error: updateError } = await supabase
+        .from('pedidos')
+        .update({ 
+          pedido_retornado: true,
+          atualizado_em: new Date().toISOString()
+        })
+        .eq('id', pedidoId);
+
+      if (updateError) throw updateError;
+
+      toast({ 
+        title: 'Pedido marcado como retornado', 
+        description: 'O pedido foi registrado como retornado com sucesso' 
+      });
+
+      // Atualizar lista de pedidos (opcional - pode remover da lista ou recarregar)
+      // Para simplificar, vamos apenas mostrar o toast e deixar o usuário atualizar a página
+      
+    } catch (err: any) {
+      console.error('Erro ao marcar pedido como retornado:', err);
+      toast({ 
+        title: 'Erro', 
+        description: err?.message || String(err), 
+        variant: 'destructive' 
+      });
+    }
+  };
 
   const duplicatePedido = async () => {
     const pedidoId = pedidoToDuplicate;
@@ -447,15 +530,166 @@ export function PedidosEnviados() {
     }
   };
 
-  return (
-    <div className="flex flex-col h-screen">
-      
-      <div className="flex flex-1 overflow-hidden">
-        <div className="flex-shrink-0">
-          <ComercialSidebar />
-        </div>
+  // Date picker functions
+  const handleDateClick = (date: Date) => {
+    if (!tempStartDate || (tempStartDate && tempEndDate)) {
+      setTempStartDate(date);
+      setTempEndDate(null);
+    } else {
+      if (date < tempStartDate) {
+        setTempEndDate(tempStartDate);
+        setTempStartDate(date);
+      } else {
+        setTempEndDate(date);
+      }
+    }
+  };
 
-        <div className="flex-1 overflow-y-auto">
+  const applyCustomDates = () => {
+    if (tempStartDate) {
+      setStartDate(format(tempStartDate, 'yyyy-MM-dd'));
+      if (tempEndDate) {
+        setEndDate(format(tempEndDate, 'yyyy-MM-dd'));
+      } else {
+        setEndDate(format(tempStartDate, 'yyyy-MM-dd'));
+      }
+    }
+    setPickerOpen(false);
+  };
+
+  const clearDateFilter = () => {
+    setStartDate(null);
+    setEndDate(null);
+    setTempStartDate(null);
+    setTempEndDate(null);
+    setPickerOpen(false);
+  };
+
+  const handlePreset = (presetFn: () => void) => {
+    presetFn();
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      if (calendarMonth === 0) {
+        setCalendarMonth(11);
+        setCalendarYear(calendarYear - 1);
+      } else {
+        setCalendarMonth(calendarMonth - 1);
+      }
+    } else {
+      if (calendarMonth === 11) {
+        setCalendarMonth(0);
+        setCalendarYear(calendarYear + 1);
+      } else {
+        setCalendarMonth(calendarMonth + 1);
+      }
+    }
+  };
+
+  const renderCalendar = (monthOffset: number = 0) => {
+    const today = new Date();
+    
+    const displayYear = monthOffset === 0 ? calendarYear : (calendarMonth === 11 ? calendarYear + 1 : calendarYear);
+    const displayMonth = monthOffset === 0 ? calendarMonth : (calendarMonth === 11 ? 0 : calendarMonth + 1);
+    
+    const firstDay = new Date(displayYear, displayMonth, 1);
+    const lastDay = new Date(displayYear, displayMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(<div key={`empty-${i}`} className="h-9" />);
+    }
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(displayYear, displayMonth, day);
+      const isFirstDay = tempStartDate && isSameDay(date, tempStartDate);
+      const isLastDay = tempEndDate && isSameDay(date, tempEndDate);
+      const isSelected = isFirstDay || isLastDay;
+      const isInRange = tempStartDate && tempEndDate && 
+                       isWithinInterval(date, { start: tempStartDate, end: tempEndDate }) &&
+                       !isFirstDay && !isLastDay;
+      const isHovered = hoverDate && tempStartDate && !tempEndDate &&
+                       isWithinInterval(date, { 
+                         start: tempStartDate < hoverDate ? tempStartDate : hoverDate,
+                         end: tempStartDate < hoverDate ? hoverDate : tempStartDate
+                       });
+      const isToday = isSameDay(date, today);
+      
+      days.push(
+        <button
+          key={day}
+          onClick={() => handleDateClick(date)}
+          onMouseEnter={() => setHoverDate(date)}
+          onMouseLeave={() => setHoverDate(null)}
+          className={`
+            h-9 w-9 text-sm transition-colors flex items-center justify-center
+            ${isFirstDay && !isLastDay ? 'rounded-l-full bg-custom-600 text-white font-semibold' : ''}
+            ${isLastDay && !isFirstDay ? 'rounded-r-full bg-custom-600 text-white font-semibold' : ''}
+            ${isFirstDay && isLastDay ? 'rounded-full bg-custom-600 text-white font-semibold' : ''}
+            ${isInRange || isHovered ? 'bg-custom-600 text-white' : ''}
+            ${!isSelected && !isInRange && !isHovered ? 'rounded hover:bg-gray-100' : ''}
+            ${isToday && !isSelected ? 'border-2 rounded-full border-custom-600' : ''}
+          `}
+        >
+          {day}
+        </button>
+      );
+    }
+    
+    return (
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-3">
+          {monthOffset === 0 && (
+            <button
+              onClick={() => navigateMonth('prev')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 1 && <div className="w-7" />}
+          <div className="text-center font-semibold text-base">
+            {format(firstDay, 'MMMM yyyy', { locale: ptBR })}
+          </div>
+          {monthOffset === 1 && (
+            <button
+              onClick={() => navigateMonth('next')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 0 && <div className="w-7" />}
+        </div>
+        <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-gray-500 text-center font-medium">
+          <div>DOM</div>
+          <div>SEG</div>
+          <div>TER</div>
+          <div>QUA</div>
+          <div>QUI</div>
+          <div>SEX</div>
+          <div>SÁB</div>
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {days}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex h-full">
+      <div className="flex-shrink-0">
+        <ComercialSidebar />
+      </div>
+
+      <div className="flex-1 overflow-y-auto">
         <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
@@ -463,6 +697,83 @@ export function PedidosEnviados() {
             <p className="text-muted-foreground">
               {filteredPedidos.length} pedidos encontrados
             </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-muted-foreground">Filtrar por Data de Envio</label>
+            <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+              <PopoverTrigger asChild>
+                <Button className="flex items-center justify-center gap-2 bg-custom-600 text-white hover:bg-custom-700">
+                  <FaCalendarAlt className="h-4 w-4" />
+                  <span className="text-sm">
+                    {startDate && endDate 
+                      ? `${format(parseISO(startDate), 'dd/MM/yy', { locale: ptBR })} → ${format(parseISO(endDate), 'dd/MM/yy', { locale: ptBR })}`
+                      : 'Selecionar período'
+                    }
+                  </span>
+                  <ChevronDown className="h-4 w-4 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <div className="px-4 py-3 border-b">
+                  <h3 className="font-semibold text-base">Selecionar Período</h3>
+                </div>
+                
+                <div className="flex">
+                  <div className="w-48 border-r">
+                    <div className="py-2">
+                      {[
+                        { label: 'Hoje', fn: () => { const d = new Date(); setStartDate(format(d, 'yyyy-MM-dd')); setEndDate(format(d, 'yyyy-MM-dd')); setTempStartDate(d); setTempEndDate(d); } },
+                        { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); setStartDate(format(d, 'yyyy-MM-dd')); setEndDate(format(d, 'yyyy-MM-dd')); setTempStartDate(d); setTempEndDate(d); } },
+                        { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                        { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                        { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                        { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                        { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                        { label: 'Limpar filtro', fn: () => { clearDateFilter(); } },
+                      ].map((preset, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => handlePreset(preset.fn)}
+                          className="w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors text-sm"
+                        >
+                          {preset.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div className="flex flex-col">
+                    <div className="flex">
+                      {renderCalendar(0)}
+                      {renderCalendar(1)}
+                    </div>
+                    
+                    <div className="flex gap-2 px-4 py-3 border-t">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        className="flex-1"
+                        onClick={() => {
+                          setTempStartDate(null);
+                          setTempEndDate(null);
+                          setPickerOpen(false);
+                        }}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="flex-1 bg-custom-600 hover:bg-custom-700"
+                        onClick={applyCustomDates}
+                        disabled={!tempStartDate}
+                      >
+                        Atualizar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
         </div>
 
@@ -491,20 +802,20 @@ export function PedidosEnviados() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>ID do Pedido</TableHead>
+                  <TableHead>Informações do Pedido</TableHead>
                   <TableHead className="text-center">Data Criado</TableHead>
                   <TableHead className="text-center">Data Enviado</TableHead>
-                  <TableHead>Cliente</TableHead>
-                  <TableHead className="text-center">Plataforma</TableHead>
+                  <TableHead className="text-center">Resp. Pedido</TableHead>
+                  <TableHead className="text-center">Resp. Envio</TableHead>
                   <TableHead className="text-center">Transportadora</TableHead>
-                  <TableHead className="text-center">Responsável</TableHead>
-                  <TableHead className="text-center">Ações</TableHead>
+                  <TableHead className="text-center"></TableHead>
+                  <TableHead className="text-center w-[100px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {error && (
                   <TableRow>
-                    <TableCell colSpan={9} className="text-center text-red-600">
+                    <TableCell colSpan={8} className="text-center text-red-600">
                       {error}
                     </TableCell>
                   </TableRow>
@@ -518,46 +829,57 @@ export function PedidosEnviados() {
                     navigate(`/pedido/${pedido.id}?${currentParams.toString()}`);
                   }}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        {pedido.urgente && (
-                          <div className="w-2 h-2 bg-red-500 rounded-full" />
-                        )}
-                        <div
-                          className="max-w-[220px] truncate overflow-hidden whitespace-nowrap cursor-pointer"
-                          title="Clique para copiar"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const text = String(pedido.idExterno || '');
-                            try {
-                              if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
-                                navigator.clipboard.writeText(text).then(() => {
-                                  toast({ title: 'Copiado', description: 'ID do pedido copiado para a área de transferência.' });
-                                }).catch((err) => {
-                                  console.error('Erro ao copiar:', err);
-                                  toast({ title: 'Erro', description: 'Não foi possível copiar o ID.', variant: 'destructive' });
-                                });
-                              } else {
-                                const ta = document.createElement('textarea');
-                                ta.value = text;
-                                document.body.appendChild(ta);
-                                ta.select();
-                                try {
-                                  document.execCommand('copy');
-                                  toast({ title: 'Copiado', description: 'ID do pedido copiado para a área de transferência.' });
-                                } catch (ex) {
-                                  console.error('Fallback copy failed', ex);
-                                  toast({ title: 'Erro', description: 'Não foi possível copiar o ID.', variant: 'destructive' });
+                      <div className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          {pedido.urgente && (
+                            <div className="w-2 h-2 bg-red-500 rounded-full" />
+                          )}
+                          <div
+                            className="max-w-[220px] truncate overflow-hidden whitespace-nowrap cursor-pointer"
+                            title="Clique para copiar"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const text = String(pedido.idExterno || '');
+                              try {
+                                if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+                                  navigator.clipboard.writeText(text).then(() => {
+                                    toast({ title: 'Copiado', description: 'ID do pedido copiado para a área de transferência.' });
+                                  }).catch((err) => {
+                                    console.error('Erro ao copiar:', err);
+                                    toast({ title: 'Erro', description: 'Não foi possível copiar o ID.', variant: 'destructive' });
+                                  });
+                                } else {
+                                  const ta = document.createElement('textarea');
+                                  ta.value = text;
+                                  document.body.appendChild(ta);
+                                  ta.select();
+                                  try {
+                                    document.execCommand('copy');
+                                    toast({ title: 'Copiado', description: 'ID do pedido copiado para a área de transferência.' });
+                                  } catch (ex) {
+                                    console.error('Fallback copy failed', ex);
+                                    toast({ title: 'Erro', description: 'Não foi possível copiar o ID.', variant: 'destructive' });
+                                  }
+                                  document.body.removeChild(ta);
                                 }
-                                document.body.removeChild(ta);
+                              } catch (err) {
+                                console.error('Copy exception', err);
+                                toast({ title: 'Erro', description: 'Não foi possível copiar o ID.', variant: 'destructive' });
                               }
-                            } catch (err) {
-                              console.error('Copy exception', err);
-                              toast({ title: 'Erro', description: 'Não foi possível copiar o ID.', variant: 'destructive' });
-                            }
-                          }}
-                          style={{ color: pedido.corDoPedido || '#8B5E3C' }}
-                        >
-                          {pedido.idExterno}
+                            }}
+                            style={{ color: pedido.corDoPedido || '#8B5E3C' }}
+                          >
+                            {pedido.idExterno}
+                          </div>
+                        </div>
+                        <div>
+                          <div
+                            className="text-xs max-w-[260px] truncate overflow-hidden whitespace-nowrap"
+                            title={`${pedido.clienteNome} - ${pedido.contato}`}
+                          >
+                            <span className="text-gray-700">{pedido.clienteNome}</span>
+                            <span className="text-gray-400"> - {pedido.contato}</span>
+                          </div>
                         </div>
                       </div>
                     </TableCell>
@@ -567,31 +889,31 @@ export function PedidosEnviados() {
                     <TableCell className="text-center">
                       {(pedido as any).dataEnviado ? new Date((pedido as any).dataEnviado).toLocaleDateString('pt-BR') : '—'}
                     </TableCell>
+                    
                     <TableCell>
-                      <div>
-                        <div
-                          className="font-medium max-w-[260px] truncate overflow-hidden whitespace-nowrap"
-                          title={pedido.clienteNome}
-                        >
-                          {pedido.clienteNome}
-                        </div>
-                        <div
-                          className="text-sm text-muted-foreground max-w-[260px] truncate overflow-hidden whitespace-nowrap"
-                          title={pedido.contato}
-                        >
-                          {pedido.contato}
-                        </div>
+                      <div className="flex items-center justify-center">
+                        <Avatar className="h-12 w-12 border-4 border-custom-600 rounded-full">
+                          <AvatarImage src={pedido.responsavel?.avatar} />
+                          <AvatarFallback className="text-sm">
+                            {pedido.responsavel?.nome?.slice(0, 2).toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
+                    
+                    <TableCell>
                       <div className="flex items-center justify-center">
-                        {pedido.plataforma?.imagemUrl ? (
-                          <img src={pedido.plataforma.imagemUrl} alt={pedido.plataforma.nome} className="w-8 h-8 rounded" />
+                        {pedido.responsavelEnvio ? (
+                          <Avatar className="h-12 w-12 border-4 border-custom-600 rounded-full">
+                            <AvatarImage src={pedido.responsavelEnvio.avatar} />
+                            <AvatarFallback className="text-sm">
+                              {pedido.responsavelEnvio.nome?.slice(0, 2).toUpperCase()}
+                            </AvatarFallback>
+                          </Avatar>
                         ) : (
-                          <div 
-                            className="w-6 h-6 rounded-full"
-                            style={{ backgroundColor: pedido.plataforma?.cor }}
-                          />
+                          <div className="h-12 w-12 border-4 border-custom-600 rounded-full bg-custom-600 flex items-center justify-center">
+                            <FaUserAltSlash className="h-5 w-5 text-white" />
+                          </div>
                         )}
                       </div>
                     </TableCell>
@@ -614,15 +936,9 @@ export function PedidosEnviados() {
                     </TableCell>
 
                     <TableCell>
-                      <div className="flex items-center justify-center">
-                        <Avatar className="h-12 w-12 border-4 border-custom-600 rounded-full">
-                          <AvatarImage src={pedido.responsavel?.avatar} />
-                          <AvatarFallback className="text-sm">
-                            {pedido.responsavel?.nome?.slice(0, 2).toUpperCase()}
-                          </AvatarFallback>
-                        </Avatar>
-                      </div>
+                      {/* TAG QUANTAS VEZES FOI REENVIADO */}
                     </TableCell>
+                    
                     <TableCell className="text-center">
                       <div className="flex items-center justify-end gap-2">
                         <Button variant="ghost" size="sm" onClick={(e) => {
@@ -634,7 +950,8 @@ export function PedidosEnviados() {
                         </Button>
                         <Button variant="ghost" size="sm" onClick={(e) => {
                           e.stopPropagation();
-                          // TODO: implementar lógica de pedido retornado
+                          setPedidoToRetornar(pedido.id);
+                          setConfirmRetornadoOpen(true);
                         }} title="Pedido retornado">
                           <TbTruckReturn className="h-4 w-4" />
                         </Button>
@@ -681,7 +998,6 @@ export function PedidosEnviados() {
           </div>
         </Card>
         </div>
-        </div>
       </div>
 
       <AlertDialog open={confirmDuplicateOpen} onOpenChange={setConfirmDuplicateOpen}>
@@ -698,6 +1014,24 @@ export function PedidosEnviados() {
               setPedidoToDuplicate(null);
             }}>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={duplicatePedido}>Duplicar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmRetornadoOpen} onOpenChange={setConfirmRetornadoOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Pedido Retornado</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja marcar este pedido como retornado? Esta ação registrará o retorno do pedido no sistema.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => {
+              setConfirmRetornadoOpen(false);
+              setPedidoToRetornar(null);
+            }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={marcarPedidoRetornado}>Confirmar Retorno</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

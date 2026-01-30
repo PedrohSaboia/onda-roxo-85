@@ -4,12 +4,14 @@ import { BsSendCheckFill } from 'react-icons/bs'
 import { GoXCircleFill } from 'react-icons/go'
 import { HiMiniUsers } from 'react-icons/hi2'
 import { FaListUl } from 'react-icons/fa'
+import { TbTruckReturn } from 'react-icons/tb'
 
 const items = [
   { id: 'pedidos', label: 'Lista de Pedidos', icon: FaListUl },
   { id: 'leads', label: 'Lista de Leads', icon: HiMiniUsers },
   { id: 'cancelados', label: 'Pedidos Cancelados', icon: GoXCircleFill },
   { id: 'enviados', label: 'Pedidos Enviados', icon: BsSendCheckFill },
+  { id: 'retornados', label: 'Pedidos Retornados', icon: TbTruckReturn },
 ]
 
 export function ComercialSidebar() {
@@ -38,11 +40,17 @@ export function ComercialSidebar() {
       return;
     }
 
+    // Special-case: open the dedicated PedidosRetornados page
+    if (id === 'retornados') {
+      navigate('/pedidos-retornados');
+      return;
+    }
+
     const next = new URLSearchParams(location.search)
     next.set('view', id)
     // If we're currently on a dedicated route like /leads or /pedidos-enviados, navigate to the Comercial root
     // otherwise keep current pathname (expecting /comercial)
-    const targetPath = (location.pathname === '/leads' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados') ? '/comercial' : location.pathname || '/comercial';
+    const targetPath = (location.pathname === '/leads' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados' || location.pathname === '/pedidos-retornados') ? '/comercial' : location.pathname || '/comercial';
     navigate({ pathname: targetPath, search: next.toString() })
   }
 
@@ -75,6 +83,8 @@ export function ComercialSidebar() {
                 isActive = it.id === 'cancelados';
               } else if (location.pathname === '/pedidos-enviados') {
                 isActive = it.id === 'enviados';
+              } else if (location.pathname === '/pedidos-retornados') {
+                isActive = it.id === 'retornados';
               } else {
                 // Treat root or /comercial as the Comercial area
                 const inComercial = location.pathname === '/' || location.pathname === '/comercial' || location.pathname.startsWith('/pedidos');

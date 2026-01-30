@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { /* header provided by AppLayout */ } from '@/components/layout/AppHeader';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
-import { Check, X, Pencil, SquarePlus, AlertCircle } from 'lucide-react';
+import { Check, X, Pencil, SquarePlus, AlertCircle, Users } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 type LeadRow = {
@@ -357,12 +357,13 @@ export default function Leads() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <main className="min-h-[calc(100vh-8rem)]">
-        <div className="flex items-start gap-6">
-          <ComercialSidebar />
+    <div className="flex h-full">
+      <div className="flex-shrink-0">
+        <ComercialSidebar />
+      </div>
 
-          <div className="flex-1 p-6">
+      <div className="flex-1 overflow-y-auto p-6">
+        <div>
             <div className="flex items-center justify-between mb-4">
               <h1 className="text-2xl font-bold">Lista de Leads</h1>
               <div className="flex items-center gap-4">
@@ -426,7 +427,22 @@ export default function Leads() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filtered.map((lead) => (
+                    {filtered.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="h-64 text-center">
+                          <div className="flex flex-col items-center justify-center gap-3 text-muted-foreground">
+                            <Users className="h-16 w-16 opacity-20" />
+                            <div>
+                              <p className="text-lg font-medium">Nenhum lead encontrado</p>
+                              <p className="text-sm">
+                                {search ? 'Tente ajustar sua busca' : activeFilter === 'pix' ? 'Não há leads Pix pendentes' : activeFilter === 'carrinho' ? 'Não há leads de Carrinho Abandonado pendentes' : 'Não há leads cadastrados'}
+                              </p>
+                            </div>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      filtered.map((lead) => (
                       <TableRow key={lead.id}>
                         <TableCell>
                           {(() => {
@@ -531,7 +547,8 @@ export default function Leads() {
                           )}
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
                 {/* Popup para adicionar — usa Dialog reutilizando o padrão do projeto */}
@@ -867,9 +884,8 @@ export default function Leads() {
                 </div>
               </div>
             </Card>
-          </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
