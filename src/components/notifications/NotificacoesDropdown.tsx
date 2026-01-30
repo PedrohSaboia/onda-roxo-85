@@ -316,11 +316,11 @@ export const NotificacoesDropdown: React.FC = () => {
                       </p>
 
                       {/* ID Externo com botão de copiar */}
-                      {notificacao.id_externo && (
+                      {notificacao.valor_copiar && (
                         <div className="flex items-center gap-2 mt-2">
                           <div className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded-md border border-gray-200 max-w-full">
                             <code className="text-[11px] font-mono text-amber-700 truncate">
-                              {notificacao.id_externo}
+                              {notificacao.valor_copiar}
                             </code>
                             <Button
                               variant="ghost"
@@ -329,7 +329,7 @@ export const NotificacoesDropdown: React.FC = () => {
                               onClick={(e) => {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                copiarParaClipboard(notificacao.id_externo!, notificacao.notificacao_id, marcarComoLida, estaLida(notificacao));
+                                copiarParaClipboard(notificacao.valor_copiar!, notificacao.notificacao_id, marcarComoLida, estaLida(notificacao));
                               }}
                               title="Copiar ID"
                             >

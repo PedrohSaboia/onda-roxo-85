@@ -17,7 +17,7 @@ export interface Notificacao {
   titulo: string | null;
   mensagem: string | null;
   data_prog: string | null;
-  id_externo: string | null;
+  valor_copiar: string | null;
   historico_id: number | null;
   lido: boolean | null;
   concluida: boolean | null;
@@ -82,10 +82,10 @@ const NotificacaoToast = ({ notificacao, onCopiar }: NotificacaoToastProps) => {
         {notificacao.mensagem || 'Você recebeu uma nova notificação'}
       </p>
       
-      {notificacao.id_externo && (
+      {notificacao.valor_copiar && (
         <div className="flex items-center gap-2 mt-1 p-3 bg-gradient-to-r from-gray-50 to-amber-50 rounded-xl border-2 border-amber-200 shadow-sm">
           <code className="text-amber-800 text-xs font-semibold font-mono flex-1 truncate">
-            ID: {notificacao.id_externo}
+            ID: {notificacao.valor_copiar}
           </code>
           <Button
             size="sm"
@@ -93,7 +93,7 @@ const NotificacaoToast = ({ notificacao, onCopiar }: NotificacaoToastProps) => {
             className="h-8 px-3 hover:bg-amber-200 text-gray-600 hover:text-amber-800 transition-all rounded-lg font-medium"
             onClick={(e) => {
               e.stopPropagation();
-              copiarParaClipboard(notificacao.id_externo!, onCopiar);
+              copiarParaClipboard(notificacao.valor_copiar!, onCopiar);
             }}
           >
             <Copy className="h-4 w-4 mr-1" />
@@ -320,7 +320,7 @@ export const NotificacoesProvider: React.FC<{ children: React.ReactNode }> = ({ 
             titulo: rawNotificacao.titulo,
             mensagem: rawNotificacao.mensagem,
             data_prog: rawNotificacao.data_prog,
-            id_externo: rawNotificacao.id_externo,
+            valor_copiar: rawNotificacao.valor_copiar,
             historico_id: null,
             lido: false,
             concluida: null,
