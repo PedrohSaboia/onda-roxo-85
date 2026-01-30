@@ -85,11 +85,16 @@ export function Comercial() {
   const urlEnvioAdiado = params.get('envio_adiado') === 'true';
   const [filterEnvioAdiado, setFilterEnvioAdiado] = useState(urlEnvioAdiado);
   
+  // Estado para filtro de duplicados
+  const urlDuplicados = params.get('duplicados') === 'true';
+  const [filterDuplicados, setFilterDuplicados] = useState(urlDuplicados);
+  
   // Estados temporários para o modal de filtros (antes de aplicar)
   const [tempFilterNotLiberado, setTempFilterNotLiberado] = useState(urlLiberado);
   const [tempFilterClienteFormNotSent, setTempFilterClienteFormNotSent] = useState(urlClienteForm);
   const [tempFilterResponsavelId, setTempFilterResponsavelId] = useState(urlResponsavel);
   const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState(urlPlataforma);
+  const [tempFilterDuplicados, setTempFilterDuplicados] = useState(urlDuplicados);
   
   // Estados para filtro de produtos
   const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
@@ -155,6 +160,7 @@ export function Comercial() {
     const newResponsavel = params.get('responsavel_id') || '';
     const newPlataforma = params.get('plataforma_id') || '';
     const newEnvioAdiado = params.get('envio_adiado') === 'true';
+    const newDuplicados = params.get('duplicados') === 'true';
     
     setPage(newPage);
     setPageSize(newPageSize);
@@ -166,12 +172,14 @@ export function Comercial() {
     setFilterResponsavelId(newResponsavel);
     setFilterPlataformaId(newPlataforma);
     setFilterEnvioAdiado(newEnvioAdiado);
+    setFilterDuplicados(newDuplicados);
     
     // Sincronizar estados temporários
     setTempFilterNotLiberado(newLiberado);
     setTempFilterClienteFormNotSent(newClienteForm);
     setTempFilterResponsavelId(newResponsavel);
     setTempFilterPlataformaId(newPlataforma);
+    setTempFilterDuplicados(newDuplicados);
   }, [location.search]);
 
   // Fechar dropdown de filtros ao clicar fora
@@ -256,6 +264,11 @@ export function Comercial() {
         // apply cliente formulario not sent filter (formulario_enviado = false)
         if (filterClienteFormNotSent) {
           (query as any).eq('formulario_enviado', false);
+        }
+
+        // apply duplicados filter
+        if (filterDuplicados) {
+          (query as any).eq('duplicata', true);
         }
 
         // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
@@ -448,7 +461,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterPlataformaId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, searchTerm, selectedProdutos]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterPlataformaId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, filterDuplicados, searchTerm, selectedProdutos]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -1322,6 +1335,7 @@ export function Comercial() {
                   setTempFilterClienteFormNotSent(filterClienteFormNotSent);
                   setTempFilterResponsavelId(filterResponsavelId);
                   setTempFilterPlataformaId(filterPlataformaId);
+                  setTempFilterDuplicados(filterDuplicados);
                   setShowFilters(s => !s);
                 }}>
                   <HiFilter className="h-5 w-5" />
@@ -1340,6 +1354,10 @@ export function Comercial() {
                     <div className="flex items-center gap-2 mb-3">
                       <input id="filter-cliente-formulario" type="checkbox" checked={tempFilterClienteFormNotSent} onChange={(e) => setTempFilterClienteFormNotSent(e.target.checked)} />
                       <label htmlFor="filter-cliente-formulario" className="text-sm">Somente pedidos com formulário não enviado</label>
+                    </div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <input id="filter-duplicados" type="checkbox" checked={tempFilterDuplicados} onChange={(e) => setTempFilterDuplicados(e.target.checked)} />
+                      <label htmlFor="filter-duplicados" className="text-sm">Somente pedidos duplicados</label>
                     </div>
                     <div className="mb-3">
                       <label htmlFor="filter-responsavel" className="text-sm block mb-1">Filtrar por responsável</label>
@@ -1407,6 +1425,7 @@ export function Comercial() {
                         setTempFilterClienteFormNotSent(false);
                         setTempFilterResponsavelId('');
                         setTempFilterPlataformaId('');
+                        setTempFilterDuplicados(false);
                         setSelectedProdutos([]);
                         setProdutoSearchTerm('');
                         setProdutosList([]);
@@ -1418,6 +1437,7 @@ export function Comercial() {
                         if (tempFilterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
                         if (tempFilterResponsavelId) next.set('responsavel_id', tempFilterResponsavelId); else next.delete('responsavel_id');
                         if (tempFilterPlataformaId) next.set('plataforma_id', tempFilterPlataformaId); else next.delete('plataforma_id');
+                        if (tempFilterDuplicados) next.set('duplicados', 'true'); else next.delete('duplicados');
                         // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                         setShowFilters(false);

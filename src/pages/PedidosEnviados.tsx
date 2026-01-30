@@ -48,6 +48,9 @@ export function PedidosEnviados() {
   const [confirmRetornadoOpen, setConfirmRetornadoOpen] = useState(false);
   const [pedidoToRetornar, setPedidoToRetornar] = useState<string | null>(null);
   
+  // Filter states
+  const [filterDuplicados, setFilterDuplicados] = useState(false);
+  
   // Date picker states
   const [startDate, setStartDate] = useState<string | null>(null);
   const [endDate, setEndDate] = useState<string | null>(null);
@@ -93,6 +96,11 @@ export function PedidosEnviados() {
           const startISO = new Date(startDate + 'T00:00:00').toISOString();
           const endISO = new Date(endDate + 'T23:59:59').toISOString();
           (query as any).gte('data_enviado', startISO).lte('data_enviado', endISO);
+        }
+
+        // apply duplicados filter
+        if (filterDuplicados) {
+          (query as any).eq('duplicata', true);
         }
 
         // apply search term server-side
@@ -258,7 +266,7 @@ export function PedidosEnviados() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, searchTerm, startDate, endDate]);
+  }, [page, pageSize, searchTerm, startDate, endDate, filterDuplicados]);
 
   const normalize = (s?: string) => (s || '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '').trim();
   const digitsOnly = (s?: string) => (s || '').replace(/\D/g, '').trim();
@@ -791,6 +799,18 @@ export function PedidosEnviados() {
                     className="pl-10"
                   />
                 </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <input 
+                  id="filter-duplicados" 
+                  type="checkbox" 
+                  checked={filterDuplicados} 
+                  onChange={(e) => setFilterDuplicados(e.target.checked)} 
+                  className="h-4 w-4 rounded border-gray-300"
+                />
+                <label htmlFor="filter-duplicados" className="text-sm text-muted-foreground whitespace-nowrap">
+                  Somente duplicados
+                </label>
               </div>
             </div>
           </CardHeader>
