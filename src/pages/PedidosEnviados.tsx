@@ -823,19 +823,19 @@ export function PedidosEnviados() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Informações do Pedido</TableHead>
-                  <TableHead className="text-center">Data Criado</TableHead>
-                  <TableHead className="text-center">Data Enviado</TableHead>
-                  <TableHead className="text-center">Resp. Pedido</TableHead>
-                  <TableHead className="text-center">Resp. Envio</TableHead>
-                  <TableHead className="text-center">Transportadora</TableHead>
                   <TableHead className="text-center"></TableHead>
-                  <TableHead className="text-center w-[100px]">Ações</TableHead>
+                  <TableHead className="text-center w-[120px] px-1">Data Enviado</TableHead>
+                  <TableHead className="text-center w-[100px] px-1">Resp. Pedido</TableHead>
+                  <TableHead className="text-center w-[80px] px-1">Plataf.</TableHead>
+                  <TableHead className="text-center w-[100px] px-1">Resp. Envio</TableHead>
+                  <TableHead className="text-center w-[160px] px-1">Transportadora</TableHead>
+                  <TableHead className="text-center w-[90px]">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {error && (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center text-red-600">
+                    <TableCell colSpan={9} className="text-center text-red-600">
                       {error}
                     </TableCell>
                   </TableRow>
@@ -903,9 +903,11 @@ export function PedidosEnviados() {
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="text-center">
-                      {new Date(pedido.criadoEm).toLocaleDateString('pt-BR')}
+                    
+                    <TableCell>
+                      {/* TAG QUANTAS VEZES FOI REENVIADO */}
                     </TableCell>
+
                     <TableCell className="text-center">
                       {(pedido as any).dataEnviado ? new Date((pedido as any).dataEnviado).toLocaleDateString('pt-BR') : '—'}
                     </TableCell>
@@ -920,7 +922,31 @@ export function PedidosEnviados() {
                         </Avatar>
                       </div>
                     </TableCell>
-                    
+
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center">
+                        {pedido.plataforma?.imagemUrl ? (
+                          <div className="w-10 h-8 overflow-hidden flex items-center justify-center">
+                            <img
+                              src={pedido.plataforma.imagemUrl}
+                              alt={pedido.plataforma.nome || 'Plataforma'}
+                              loading="lazy"
+                              className="max-w-full max-h-full object-contain"
+                            />
+                          </div>
+                        ) : pedido.plataforma?.nome ? (
+                          <Badge 
+                            style={{ backgroundColor: pedido.plataforma.cor || '#6b7280' }}
+                            className="text-white text-xs"
+                          >
+                            {pedido.plataforma.nome}
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </div>
+                    </TableCell>  
+
                     <TableCell>
                       <div className="flex items-center justify-center">
                         {pedido.responsavelEnvio ? (
@@ -955,12 +981,10 @@ export function PedidosEnviados() {
                       </div>
                     </TableCell>
 
-                    <TableCell>
-                      {/* TAG QUANTAS VEZES FOI REENVIADO */}
-                    </TableCell>
+
                     
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-end gap-2">
+                    <TableCell className="text-center px-1">
+                      <div className="flex items-center justify-end gap-1">
                         <Button variant="ghost" size="sm" onClick={(e) => {
                           e.stopPropagation();
                           setPedidoToDuplicate(pedido.id);
