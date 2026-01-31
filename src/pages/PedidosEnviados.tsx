@@ -703,7 +703,7 @@ export function PedidosEnviados() {
           <div>
             <h1 className="text-2xl font-bold">Pedidos Enviados</h1>
             <p className="text-muted-foreground">
-              {filteredPedidos.length} pedidos encontrados
+              {total} pedidos encontrados
             </p>
           </div>
           <div className="flex items-center gap-2">
