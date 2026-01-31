@@ -33,6 +33,9 @@ export function PedidosEnviados() {
   const urlPage = parseInt(params.get('page') || '1', 10);
   const urlPageSize = parseInt(params.get('pageSize') || '10', 10);
   const urlSearch = params.get('search') || '';
+  const urlStartDate = params.get('startDate') || null;
+  const urlEndDate = params.get('endDate') || null;
+  const urlDuplicados = params.get('duplicados') === 'true';
   
   // State using URL as source of truth
   const [searchTerm, setSearchTerm] = useState(urlSearch);
@@ -49,11 +52,11 @@ export function PedidosEnviados() {
   const [pedidoToRetornar, setPedidoToRetornar] = useState<string | null>(null);
   
   // Filter states
-  const [filterDuplicados, setFilterDuplicados] = useState(false);
+  const [filterDuplicados, setFilterDuplicados] = useState(urlDuplicados);
   
   // Date picker states
-  const [startDate, setStartDate] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState<string | null>(null);
+  const [startDate, setStartDate] = useState<string | null>(urlStartDate);
+  const [endDate, setEndDate] = useState<string | null>(urlEndDate);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
   const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
@@ -67,10 +70,28 @@ export function PedidosEnviados() {
     const newPage = parseInt(params.get('page') || '1', 10);
     const newPageSize = parseInt(params.get('pageSize') || '10', 10);
     const newSearch = params.get('search') || '';
+    const newStartDate = params.get('startDate') || null;
+    const newEndDate = params.get('endDate') || null;
+    const newDuplicados = params.get('duplicados') === 'true';
     
     setPage(newPage);
     setPageSize(newPageSize);
     setSearchTerm(newSearch);
+    setStartDate(newStartDate);
+    setEndDate(newEndDate);
+    setFilterDuplicados(newDuplicados);
+    
+    // Sincronizar tempStartDate e tempEndDate para o date picker
+    if (newStartDate) {
+      setTempStartDate(new Date(newStartDate + 'T00:00:00'));
+    } else {
+      setTempStartDate(null);
+    }
+    if (newEndDate) {
+      setTempEndDate(new Date(newEndDate + 'T00:00:00'));
+    } else {
+      setTempEndDate(null);
+    }
   }, [location.search]);
 
   useEffect(() => {
@@ -292,12 +313,37 @@ export function PedidosEnviados() {
 
   const totalPages = Math.max(1, Math.ceil((total || filteredPedidos.length) / pageSize));
 
-  const updatePageInUrl = (newPage: number) => {
+  // Função para atualizar todos os filtros na URL
+  const updateFiltersInUrl = (overrides: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    startDate?: string | null;
+    endDate?: string | null;
+    duplicados?: boolean;
+  } = {}) => {
     const params = new URLSearchParams(location.search);
+    
+    const newPage = overrides.page ?? page;
+    const newPageSize = overrides.pageSize ?? pageSize;
+    const newSearch = overrides.search ?? searchTerm;
+    const newStartDate = overrides.startDate !== undefined ? overrides.startDate : startDate;
+    const newEndDate = overrides.endDate !== undefined ? overrides.endDate : endDate;
+    const newDuplicados = overrides.duplicados !== undefined ? overrides.duplicados : filterDuplicados;
+    
     params.set('page', String(newPage));
-    params.set('pageSize', String(pageSize));
-    if (searchTerm) params.set('search', searchTerm);
+    params.set('pageSize', String(newPageSize));
+    
+    if (newSearch) params.set('search', newSearch); else params.delete('search');
+    if (newStartDate) params.set('startDate', newStartDate); else params.delete('startDate');
+    if (newEndDate) params.set('endDate', newEndDate); else params.delete('endDate');
+    if (newDuplicados) params.set('duplicados', 'true'); else params.delete('duplicados');
+    
     navigate({ pathname: location.pathname, search: params.toString() });
+  };
+
+  const updatePageInUrl = (newPage: number) => {
+    updateFiltersInUrl({ page: newPage });
   };
 
   const handlePrev = () => {
@@ -555,12 +601,11 @@ export function PedidosEnviados() {
 
   const applyCustomDates = () => {
     if (tempStartDate) {
-      setStartDate(format(tempStartDate, 'yyyy-MM-dd'));
-      if (tempEndDate) {
-        setEndDate(format(tempEndDate, 'yyyy-MM-dd'));
-      } else {
-        setEndDate(format(tempStartDate, 'yyyy-MM-dd'));
-      }
+      const newStartDate = format(tempStartDate, 'yyyy-MM-dd');
+      const newEndDate = tempEndDate ? format(tempEndDate, 'yyyy-MM-dd') : newStartDate;
+      setStartDate(newStartDate);
+      setEndDate(newEndDate);
+      updateFiltersInUrl({ startDate: newStartDate, endDate: newEndDate, page: 1 });
     }
     setPickerOpen(false);
   };
@@ -571,6 +616,7 @@ export function PedidosEnviados() {
     setTempStartDate(null);
     setTempEndDate(null);
     setPickerOpen(false);
+    updateFiltersInUrl({ startDate: null, endDate: null, page: 1 });
   };
 
   const handlePreset = (presetFn: () => void) => {
@@ -730,13 +776,13 @@ export function PedidosEnviados() {
                   <div className="w-48 border-r">
                     <div className="py-2">
                       {[
-                        { label: 'Hoje', fn: () => { const d = new Date(); setStartDate(format(d, 'yyyy-MM-dd')); setEndDate(format(d, 'yyyy-MM-dd')); setTempStartDate(d); setTempEndDate(d); } },
-                        { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); setStartDate(format(d, 'yyyy-MM-dd')); setEndDate(format(d, 'yyyy-MM-dd')); setTempStartDate(d); setTempEndDate(d); } },
-                        { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
-                        { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
-                        { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
-                        { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
-                        { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); setStartDate(format(s, 'yyyy-MM-dd')); setEndDate(format(e, 'yyyy-MM-dd')); setTempStartDate(s); setTempEndDate(e); } },
+                        { label: 'Hoje', fn: () => { const d = new Date(); const sd = format(d, 'yyyy-MM-dd'); setStartDate(sd); setEndDate(sd); setTempStartDate(d); setTempEndDate(d); updateFiltersInUrl({ startDate: sd, endDate: sd, page: 1 }); } },
+                        { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const sd = format(d, 'yyyy-MM-dd'); setStartDate(sd); setEndDate(sd); setTempStartDate(d); setTempEndDate(d); updateFiltersInUrl({ startDate: sd, endDate: sd, page: 1 }); } },
+                        { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setStartDate(sd); setEndDate(ed); setTempStartDate(s); setTempEndDate(e); updateFiltersInUrl({ startDate: sd, endDate: ed, page: 1 }); } },
+                        { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setStartDate(sd); setEndDate(ed); setTempStartDate(s); setTempEndDate(e); updateFiltersInUrl({ startDate: sd, endDate: ed, page: 1 }); } },
+                        { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setStartDate(sd); setEndDate(ed); setTempStartDate(s); setTempEndDate(e); updateFiltersInUrl({ startDate: sd, endDate: ed, page: 1 }); } },
+                        { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setStartDate(sd); setEndDate(ed); setTempStartDate(s); setTempEndDate(e); updateFiltersInUrl({ startDate: sd, endDate: ed, page: 1 }); } },
+                        { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setStartDate(sd); setEndDate(ed); setTempStartDate(s); setTempEndDate(e); updateFiltersInUrl({ startDate: sd, endDate: ed, page: 1 }); } },
                         { label: 'Limpar filtro', fn: () => { clearDateFilter(); } },
                       ].map((preset, idx) => (
                         <button
@@ -805,7 +851,10 @@ export function PedidosEnviados() {
                   id="filter-duplicados" 
                   type="checkbox" 
                   checked={filterDuplicados} 
-                  onChange={(e) => setFilterDuplicados(e.target.checked)} 
+                  onChange={(e) => {
+                    setFilterDuplicados(e.target.checked);
+                    updateFiltersInUrl({ duplicados: e.target.checked, page: 1 });
+                  }} 
                   className="h-4 w-4 rounded border-gray-300"
                 />
                 <label htmlFor="filter-duplicados" className="text-sm text-muted-foreground whitespace-nowrap">
@@ -1018,11 +1067,7 @@ export function PedidosEnviados() {
                   value={pageSize}
                   onChange={(e) => {
                     const newSize = Number(e.target.value);
-                    const params = new URLSearchParams(location.search);
-                    params.set('page', '1');
-                    params.set('pageSize', String(newSize));
-                    if (searchTerm) params.set('search', searchTerm);
-                    navigate({ pathname: location.pathname, search: params.toString() });
+                    updateFiltersInUrl({ page: 1, pageSize: newSize });
                   }}
                   className="border rounded px-2 py-1"
                 >

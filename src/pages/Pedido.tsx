@@ -1087,8 +1087,14 @@ export default function Pedido() {
 
           <div>
             <button onClick={() => {
-              // Sempre redirecionar para Comercial
-              navigate('/comercial');
+              // Verificar se há uma página de retorno especificada
+              const returnTo = params.get('returnTo');
+              if (returnTo) {
+                navigate(returnTo);
+              } else {
+                // Fallback para Comercial
+                navigate('/comercial');
+              }
             }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
