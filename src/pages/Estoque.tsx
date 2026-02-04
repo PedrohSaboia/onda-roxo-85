@@ -64,21 +64,33 @@ export function Estoque() {
         const from = (page - 1) * pageSize;
         const to = from + pageSize - 1;
 
-        // Buscar total primeiro para paginação
-        const { count: totalCount } = await supabase
-          .from('produtos')
-          .select('*', { count: 'exact', head: true });
+        // Aplicar filtro de busca se houver
+        const term = searchTerm.trim();
+
+        // Buscar total primeiro para paginação (aplica filtro quando houver)
+        let countQuery: any = supabase.from('produtos').select('*', { count: 'exact', head: true });
+        if (term) {
+          countQuery = countQuery.or(`nome.ilike.%${term}%,sku.ilike.%${term}%,categoria.ilike.%${term}%`);
+        }
+
+        const { count: totalCount } = await countQuery;
 
         if (totalCount !== null) {
           setTotal(totalCount);
         }
 
-        const { data, error: supaError } = await supabase
+        // Buscar dados com paginação e filtro
+        let dataQuery: any = supabase
           .from('produtos')
           .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem,altura,largura,comprimento,peso, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)')
           .order('contagem', { ascending: false, nullsFirst: false })
-          .order('criado_em', { ascending: false })
-          .range(from, to);
+          .order('criado_em', { ascending: false });
+
+        if (term) {
+          dataQuery = dataQuery.or(`nome.ilike.%${term}%,sku.ilike.%${term}%,categoria.ilike.%${term}%`);
+        }
+
+        const { data, error: supaError } = await dataQuery.range(from, to);
 
         if (supaError) throw supaError;
         if (!mounted) return;
@@ -118,7 +130,12 @@ export function Estoque() {
 
     fetchProdutos();
     return () => { mounted = false };
-  }, [page, pageSize]);
+  }, [page, pageSize, searchTerm]);
+
+  // Resetar página quando o termo de busca mudar
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm]);
 
   const [showNewProduct, setShowNewProduct] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any | null>(null);
@@ -131,16 +148,22 @@ export function Estoque() {
       setLoading(true);
       const from = (page - 1) * pageSize;
       const to = from + pageSize - 1;
+      const term = searchTerm.trim();
 
-      const { count: totalCount } = await supabase
-        .from('produtos')
-        .select('*', { count: 'exact', head: true });
+      let countQuery: any = supabase.from('produtos').select('*', { count: 'exact', head: true });
+      if (term) {
+        countQuery = countQuery.or(`nome.ilike.%${term}%,sku.ilike.%${term}%,categoria.ilike.%${term}%`);
+      }
+
+      const { count: totalCount } = await countQuery;
 
       if (totalCount !== null) {
         setTotal(totalCount);
       }
 
-      const { data } = await supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem,altura,largura,comprimento,peso, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('contagem', { ascending: false, nullsFirst: false }).order('criado_em', { ascending: false }).range(from, to);
+      let dataQuery: any = supabase.from('produtos').select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,criado_em,atualizado_em,up_cell,lista_id_upsell,contagem,altura,largura,comprimento,peso, variacoes_produto(id,nome,sku,valor,qntd,img_url,ordem)').order('contagem', { ascending: false, nullsFirst: false }).order('criado_em', { ascending: false });
+      if (term) dataQuery = dataQuery.or(`nome.ilike.%${term}%,sku.ilike.%${term}%,categoria.ilike.%${term}%`);
+      const { data } = await dataQuery.range(from, to);
       if (data) setProdutos(data.map((p: any) => ({
         id: p.id,
         nome: p.nome,

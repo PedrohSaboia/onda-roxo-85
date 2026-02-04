@@ -90,6 +90,8 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
   const handleSubmit = async () => {
     if (!nome.trim()) { toast({ title: 'Nome é obrigatório' }); return; }
 
+    const isEditing = Boolean(product && (product as any).id);
+
     // If the product has variations, require validations on variations instead of product-level SKU/price/qntd
     if (hasVariations) {
       if (!nomeVariacao.trim()) { toast({ title: 'Nome da variação é obrigatório' }); return; }
@@ -101,20 +103,48 @@ export default function ProductForm({ open, onClose, product }: { open: boolean;
         if (isNaN(Number(v.valor))) { toast({ title: `Valor da variação ${i + 1} inválido` }); return; }
         if (v.qntd === undefined || v.qntd === null || isNaN(Number(v.qntd))) { toast({ title: `Quantidade da variação ${i + 1} inválida` }); return; }
         // Validar campos de volume da variação
-        if (!v.altura || v.altura <= 0) { toast({ title: `Altura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
-        if (!v.largura || v.largura <= 0) { toast({ title: `Largura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
-        if (!v.comprimento || v.comprimento <= 0) { toast({ title: `Comprimento da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
-        if (!v.peso || v.peso <= 0) { toast({ title: `Peso da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
+        // Durante edição esses campos são opcionais; somente validamos se foram fornecidos.
+        if (v.altura !== undefined && v.altura !== null && isNaN(Number(v.altura))) { toast({ title: `Altura da variação ${i + 1} inválida`, variant: 'destructive' }); return; }
+        if (v.largura !== undefined && v.largura !== null && isNaN(Number(v.largura))) { toast({ title: `Largura da variação ${i + 1} inválida`, variant: 'destructive' }); return; }
+        if (v.comprimento !== undefined && v.comprimento !== null && isNaN(Number(v.comprimento))) { toast({ title: `Comprimento da variação ${i + 1} inválido`, variant: 'destructive' }); return; }
+        if (v.peso !== undefined && v.peso !== null && isNaN(Number(v.peso))) { toast({ title: `Peso da variação ${i + 1} inválido`, variant: 'destructive' }); return; }
+
+        if (!isEditing) {
+          // Em criação, campos de volume são obrigatórios
+          if (!v.altura || v.altura <= 0) { toast({ title: `Altura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
+          if (!v.largura || v.largura <= 0) { toast({ title: `Largura da variação ${i + 1} é obrigatória`, variant: 'destructive' }); return; }
+          if (!v.comprimento || v.comprimento <= 0) { toast({ title: `Comprimento da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
+          if (!v.peso || v.peso <= 0) { toast({ title: `Peso da variação ${i + 1} é obrigatório`, variant: 'destructive' }); return; }
+        } else {
+          // Em edição, se informado, devem ser positivos
+          if (v.altura !== undefined && v.altura !== null && Number(v.altura) <= 0) { toast({ title: `Altura da variação ${i + 1} inválida`, variant: 'destructive' }); return; }
+          if (v.largura !== undefined && v.largura !== null && Number(v.largura) <= 0) { toast({ title: `Largura da variação ${i + 1} inválida`, variant: 'destructive' }); return; }
+          if (v.comprimento !== undefined && v.comprimento !== null && Number(v.comprimento) <= 0) { toast({ title: `Comprimento da variação ${i + 1} inválido`, variant: 'destructive' }); return; }
+          if (v.peso !== undefined && v.peso !== null && Number(v.peso) <= 0) { toast({ title: `Peso da variação ${i + 1} inválido`, variant: 'destructive' }); return; }
+        }
       }
     } else {
       // No variations: product-level validations apply
       if (!sku.trim()) { toast({ title: 'SKU é obrigatório' }); return; }
       if (isNaN(Number(preco))) { toast({ title: 'Preço inválido' }); return; }
       // Validar campos de volume do produto
-      if (!altura || altura <= 0) { toast({ title: 'Altura é obrigatória', description: 'Por favor, preencha a altura do produto.', variant: 'destructive' }); return; }
-      if (!largura || largura <= 0) { toast({ title: 'Largura é obrigatória', description: 'Por favor, preencha a largura do produto.', variant: 'destructive' }); return; }
-      if (!comprimento || comprimento <= 0) { toast({ title: 'Comprimento é obrigatório', description: 'Por favor, preencha o comprimento do produto.', variant: 'destructive' }); return; }
-      if (!peso || peso <= 0) { toast({ title: 'Peso é obrigatório', description: 'Por favor, preencha o peso do produto.', variant: 'destructive' }); return; }
+      // Em edição, tornar opcionais — quando informados, devem ser positivos
+      if (altura !== '' && altura !== undefined && altura !== null && isNaN(Number(altura))) { toast({ title: 'Altura inválida', description: 'Por favor, informe um número válido para altura.', variant: 'destructive' }); return; }
+      if (largura !== '' && largura !== undefined && largura !== null && isNaN(Number(largura))) { toast({ title: 'Largura inválida', description: 'Por favor, informe um número válido para largura.', variant: 'destructive' }); return; }
+      if (comprimento !== '' && comprimento !== undefined && comprimento !== null && isNaN(Number(comprimento))) { toast({ title: 'Comprimento inválido', description: 'Por favor, informe um número válido para comprimento.', variant: 'destructive' }); return; }
+      if (peso !== '' && peso !== undefined && peso !== null && isNaN(Number(peso))) { toast({ title: 'Peso inválido', description: 'Por favor, informe um número válido para peso.', variant: 'destructive' }); return; }
+
+      if (!isEditing) {
+        if (!altura || altura <= 0) { toast({ title: 'Altura é obrigatória', description: 'Por favor, preencha a altura do produto.', variant: 'destructive' }); return; }
+        if (!largura || largura <= 0) { toast({ title: 'Largura é obrigatória', description: 'Por favor, preencha a largura do produto.', variant: 'destructive' }); return; }
+        if (!comprimento || comprimento <= 0) { toast({ title: 'Comprimento é obrigatório', description: 'Por favor, preencha o comprimento do produto.', variant: 'destructive' }); return; }
+        if (!peso || peso <= 0) { toast({ title: 'Peso é obrigatório', description: 'Por favor, preencha o peso do produto.', variant: 'destructive' }); return; }
+      } else {
+        if (altura !== '' && altura !== undefined && altura !== null && Number(altura) <= 0) { toast({ title: 'Altura inválida', description: 'Altura deve ser maior que zero.', variant: 'destructive' }); return; }
+        if (largura !== '' && largura !== undefined && largura !== null && Number(largura) <= 0) { toast({ title: 'Largura inválida', description: 'Largura deve ser maior que zero.', variant: 'destructive' }); return; }
+        if (comprimento !== '' && comprimento !== undefined && comprimento !== null && Number(comprimento) <= 0) { toast({ title: 'Comprimento inválido', description: 'Comprimento deve ser maior que zero.', variant: 'destructive' }); return; }
+        if (peso !== '' && peso !== undefined && peso !== null && Number(peso) <= 0) { toast({ title: 'Peso inválido', description: 'Peso deve ser maior que zero.', variant: 'destructive' }); return; }
+      }
     }
 
   setSaving(true);
