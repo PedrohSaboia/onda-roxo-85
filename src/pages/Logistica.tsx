@@ -753,6 +753,41 @@ export function Logistica() {
                               throw new Error('Empresa do usuário não encontrada');
                             }
 
+                            // 1️⃣ VERIFICAR SALDO DO MELHOR ENVIO PRIMEIRO
+                            const { data: { session } } = await supabase.auth.getSession();
+                            
+                            if (!session) {
+                              throw new Error('Usuário não autenticado');
+                            }
+
+                            const saldoResponse = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${session.access_token}`,
+                              },
+                            });
+
+                            if (!saldoResponse.ok) {
+                              const errorData = await saldoResponse.json().catch(() => ({ message: 'Erro ao verificar saldo' }));
+                              throw new Error(errorData.message || 'Erro ao verificar saldo do Melhor Envio');
+                            }
+
+                            const saldoData = await saldoResponse.json();
+                            const saldoAtual = saldoData?.balance || 0;
+
+                            // Verificar se o saldo é suficiente (mínimo R$ 50)
+                            if (saldoAtual < 50) {
+                              toast({
+                                title: '⚠️ Saldo Insuficiente',
+                                description: `Saldo atual: R$ ${saldoAtual.toFixed(2)}. Mínimo necessário: R$ 50,00. Por favor, recarregue sua conta no Melhor Envio.`,
+                                variant: 'destructive',
+                                duration: 8000,
+                              });
+                              return; // Interromper o fluxo
+                            }
+
+                            // 2️⃣ SALDO OK - PROSSEGUIR COM A GERAÇÃO DA ETIQUETA
                             // Chamar Edge Function para processar etiqueta
                             const edgeFunctionUrl = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/processar_etiqueta_em_envio_de_pedido';
                             const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
