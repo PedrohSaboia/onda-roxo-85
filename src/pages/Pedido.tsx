@@ -143,6 +143,7 @@ export default function Pedido() {
   const [editPaymentOpen, setEditPaymentOpen] = useState(false);
   const [formasPagamentos, setFormasPagamentos] = useState<any[]>([]);
   const [savingPayment, setSavingPayment] = useState(false);
+  const [revertendoStatus, setRevertendoStatus] = useState(false);
 
   const formatCurrencyBR = (n: number) => {
     if (isNaN(n) || !isFinite(n)) return '0,00';
@@ -1122,6 +1123,69 @@ export default function Pedido() {
           </div>
         </div>
         <div className="flex items-center gap-3">
+          
+          {/* Botão para reverter status de enviado */}
+          {pedido?.status?.id === 'fa6b38ba-1d67-4bc3-821e-ab089d641a25' && (() => {
+            const canRevert = hasPermissao ? hasPermissao(60) : ((permissoes ?? []).includes(60));
+            return canRevert;
+          })() && (
+            <Button
+              onClick={async () => {
+                if (!pedido) return;
+                
+                const canRevert = hasPermissao ? hasPermissao(60) : ((permissoes ?? []).includes(60));
+                if (!canRevert) {
+                  toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                  return;
+                }
+                
+                try {
+                  setRevertendoStatus(true);
+                  
+                  // Reverter para o status "Logística" e limpar dados de envio
+                  const { error } = await supabase
+                    .from('pedidos')
+                    .update({ 
+                      status_id: '3473cae9-47c8-4b85-96af-b41fe0e15fa9',
+                      resp_envio: null,
+                      data_enviado: null,
+                      atualizado_em: new Date().toISOString() 
+                    } as any)
+                    .eq('id', pedido.id);
+                  
+                  if (error) throw error;
+                  
+                  toast({ 
+                    title: 'Status revertido', 
+                    description: 'Pedido voltou para Logística' 
+                  });
+                  
+                  // Recarregar página para atualizar dados
+                  navigate(0);
+                } catch (err: any) {
+                  console.error('Erro ao reverter status:', err);
+                  toast({ 
+                    title: 'Erro', 
+                    description: err?.message || String(err), 
+                    variant: 'destructive' 
+                  });
+                } finally {
+                  setRevertendoStatus(false);
+                }
+              }}
+              variant="outline"
+              size="sm"
+              className="inline-flex items-center gap-2"
+              disabled={revertendoStatus}
+            >
+              {revertendoStatus ? (
+                <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
+              ) : (
+                <span>↩️</span>
+              )}
+              <span>Reverter Envio</span>
+            </Button>
+          )}
           <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
             {pedido?.status?.nome}
           </Badge>
