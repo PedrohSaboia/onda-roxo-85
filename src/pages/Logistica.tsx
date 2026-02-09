@@ -395,7 +395,7 @@ export function Logistica() {
   };
 
   const handleVerificarSenha = () => {
-    if (senhaInput === '040621') {
+    if (senhaInput === '210310') {
       setSenhaModalOpen(false);
       setSenhaInput('');
       setPedidoIdInput('');
