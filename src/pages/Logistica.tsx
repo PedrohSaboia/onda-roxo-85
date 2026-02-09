@@ -395,7 +395,7 @@ export function Logistica() {
   };
 
   const handleVerificarSenha = () => {
-    if (senhaInput === 'zgtmadmin202') {
+    if (senhaInput === '040621') {
       setSenhaModalOpen(false);
       setSenhaInput('');
       setPedidoIdInput('');
