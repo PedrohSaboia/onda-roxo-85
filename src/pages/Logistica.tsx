@@ -39,9 +39,6 @@ export function Logistica() {
   const [pedidoIdInput, setPedidoIdInput] = useState('');
   const [loadingPedidoManual, setLoadingPedidoManual] = useState(false);
 
-  // Estado para o usuário que está bipando
-  const [usuarioBipando, setUsuarioBipando] = useState<any | null>(null);
-
   // Buscar saldo do Melhor Envio
   const fetchSaldoMelhorEnvio = async () => {
     setLoadingSaldo(true);
@@ -236,59 +233,12 @@ export function Logistica() {
     if (!code) return;
     setLoadingScan(true);
     try {
-      // Extrair código de barras e id_numerico do usuário
-      // Formato esperado: codigo_barras.id_numerico (ex: LV2B.9)
-      const parts = code.split('.');
-      
-      if (parts.length !== 2) {
-        toast({ 
-          title: 'Formato inválido', 
-          description: 'O código deve estar no formato: codigo_barras.id_usuario (ex: LV2B.9)', 
-          variant: 'destructive' 
-        });
-        setBarcode('');
-        return;
-      }
-
-      const codigoBarras = parts[0].trim();
-      const idNumericoStr = parts[1].trim();
-      const idNumerico = parseInt(idNumericoStr, 10);
-
-      if (!codigoBarras || isNaN(idNumerico)) {
-        toast({ 
-          title: 'Código inválido', 
-          description: 'Código de barras ou ID de usuário inválido', 
-          variant: 'destructive' 
-        });
-        setBarcode('');
-        return;
-      }
-
-      // Buscar usuário pelo id_numerico
-      const { data: usuarioData, error: usuarioError } = await (supabase as any)
-        .from('usuarios')
-        .select('id, nome, id_numerico')
-        .eq('id_numerico', idNumerico)
-        .single();
-
-      if (usuarioError || !usuarioData) {
-        toast({ 
-          title: 'Usuário não encontrado', 
-          description: `Nenhum usuário encontrado com ID numérico ${idNumerico}`, 
-          variant: 'destructive' 
-        });
-        setBarcode('');
-        return;
-      }
-
-      console.log('Usuário bipando:', usuarioData);
-      setUsuarioBipando(usuarioData);
 
       // Call RPC to find item by barcode (server function `achar_item_por_codigo_bipado`)
       let data: any = null;
       let error: any = null;
       try {
-        const rpcRes: any = await (supabase as any).rpc('achar_item_por_codigo_bipado', { codigo_bipado: codigoBarras });
+        const rpcRes: any = await (supabase as any).rpc('achar_item_por_codigo_bipado', { codigo_bipado: code });
         data = rpcRes?.data ?? rpcRes;
         error = rpcRes?.error ?? null;
       } catch (e: any) {
@@ -298,11 +248,7 @@ export function Logistica() {
       if (error) throw error;
 
       if (!data || (Array.isArray(data) && data.length === 0)) {
-        toast({ 
-          title: 'Não encontrado', 
-          description: `Nenhum item encontrado para o código ${codigoBarras}`, 
-          variant: 'destructive' 
-        });
+        toast({ title: 'Não encontrado', description: 'Nenhum item encontrado para esse código', variant: 'destructive' });
         setFoundPedido(null);
         setFoundItemIds([]);
         return;
@@ -549,7 +495,7 @@ export function Logistica() {
               />
               <Button
                 variant="ghost"
-                onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); setUsuarioBipando(null); }}
+                onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); }}
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-3 text-sm"
               >
                 Limpar
@@ -636,12 +582,6 @@ export function Logistica() {
                         <div className="text-sm font-medium text-white/90">{foundPedido.id_externo || foundPedido.id || '—'}</div>
                       </div>
                     </div>
-                    {usuarioBipando && (
-                      <div className="px-3 py-1 bg-white/20 rounded-lg">
-                        <div className="text-xs text-white/80">Bipando:</div>
-                        <div className="text-sm font-semibold text-white">{usuarioBipando.nome}</div>
-                      </div>
-                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="mt-3">
@@ -814,20 +754,13 @@ export function Logistica() {
                             const etiquetaData = await edgeResponse.json();
                             console.log('Etiqueta processada com sucesso:', etiquetaData);
 
-                            // Atualizar status do pedido e resp_envio
-                            const updateData: any = { 
-                              status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
-                              data_enviado: new Date().toISOString()
-                            };
-
-                            // Se houver usuário bipando, salvar no resp_envio
-                            if (usuarioBipando?.id) {
-                              updateData.resp_envio = usuarioBipando.id;
-                            }
-
+                            // Atualizar status do pedido
                             const { data, error } = await supabase
                               .from('pedidos')
-                              .update(updateData)
+                              .update({ 
+                                status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
+                                data_enviado: new Date().toISOString()
+                              })
                               .eq('id', foundPedido?.id)
                               .select('id, id_externo')
                               .single();
