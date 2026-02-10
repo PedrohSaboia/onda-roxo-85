@@ -19,7 +19,35 @@ serve(async (req) => {
     const spreadsheetPayment = resource.spreadsheet?.data?.[0]?.payment ?? null;
 
     // ==========================================================
-    // 0️⃣ VERIFICAÇÃO DE UPSELL
+    // 0️⃣ DELETAR DA LISTA DE ESPERA PIX (SE FOR PIX)
+    // ==========================================================
+    const isPix = transaction?.payment?.data?.is_pix === true;
+
+    if (isPix) {
+      const { data: listaEsperaPix, error: listaEsperaPixErro } = await supabase
+        .from("lista_espera_pix")
+        .select("*")
+        .eq("id_yampi", resource.number);
+
+      if (listaEsperaPixErro) {
+        throw listaEsperaPixErro;
+      }
+
+      // Se existir na lista de espera pix, deletar
+      if (listaEsperaPix && listaEsperaPix.length > 0) {
+        const { error: deletarPixErro } = await supabase
+          .from("lista_espera_pix")
+          .delete()
+          .eq("id_yampi", resource.number);
+
+        if (deletarPixErro) {
+          throw deletarPixErro;
+        }
+      }
+    }
+
+    // ==========================================================
+    // 1️⃣ VERIFICAÇÃO DE UPSELL
     // ==========================================================
     const pedidoUpsell = resource.is_upsell === true;
     const cpfCliente = customer?.cpf;
@@ -146,27 +174,27 @@ serve(async (req) => {
     // ==========================================================
     // 3️⃣ Remetente
     // ==========================================================
-    let { data: remetenteData, error: remetenteError } = await supabase
+    const { data: remetenteData, error: remetenteError } = await supabase
       .from("remetentes")
       .select("id, nome, cep, email, contato, cidade, estado, endereco")
-      .limit(1)
+      .eq("id", "128a7de7-d649-43e1-8ba3-2b54c3496b14")
       .single();
 
-    if (remetenteError || !remetenteData) {
-      remetenteData = {
-        nome: "Zeelux",
-        cep: "18760-390",
-        email: "zeeluxbrasil@gmail.com",
-        contato: "14997425154",
-        cidade: "Cerqueira César",
-        estado: "SP",
-      };
-    }
+    const remetente = remetenteError || !remetenteData
+      ? {
+          nome: "Zeelux",
+          cep: "18760-390",
+          email: "zeeluxbrasil@gmail.com",
+          contato: "14997425154",
+          cidade: "Cerqueira César",
+          estado: "SP",
+        }
+      : remetenteData;
 
     const origem = {
-      postal_code: remetenteData.cep.replace(/\D/g, ""),
-      contact: remetenteData.nome,
-      email: remetenteData.email,
+      postal_code: remetente.cep.replace(/\D/g, ""),
+      contact: remetente.nome,
+      email: remetente.email,
     };
 
     // ==========================================================

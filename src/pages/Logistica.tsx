@@ -33,8 +33,6 @@ export function Logistica() {
   const [loadingSaldo, setLoadingSaldo] = useState(false);
 
   // Estados para envio por pedido
-  const [senhaModalOpen, setSenhaModalOpen] = useState(false);
-  const [senhaInput, setSenhaInput] = useState('');
   const [pedidoIdModalOpen, setPedidoIdModalOpen] = useState(false);
   const [pedidoIdInput, setPedidoIdInput] = useState('');
   const [loadingPedidoManual, setLoadingPedidoManual] = useState(false);
@@ -336,23 +334,8 @@ export function Logistica() {
   };
 
   const handleEnviarPorPedido = () => {
-    setSenhaInput('');
-    setSenhaModalOpen(true);
-  };
-
-  const handleVerificarSenha = () => {
-    if (senhaInput === '210310') {
-      setSenhaModalOpen(false);
-      setSenhaInput('');
-      setPedidoIdInput('');
-      setPedidoIdModalOpen(true);
-    } else {
-      toast({ 
-        title: 'Senha incorreta', 
-        description: 'A senha digitada está incorreta', 
-        variant: 'destructive' 
-      });
-    }
+    setPedidoIdInput('');
+    setPedidoIdModalOpen(true);
   };
 
   const handleBuscarPedidoPorId = async () => {
@@ -880,39 +863,6 @@ export function Logistica() {
                 Abrir em Nova Guia
               </Button>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Senha Admin */}
-      <Dialog open={senhaModalOpen} onOpenChange={setSenhaModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>🔐 Senha de Administrador</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <input
-              type="password"
-              value={senhaInput}
-              onChange={(e) => setSenhaInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleVerificarSenha();
-                }
-              }}
-              placeholder="Digite a senha de administrador"
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-custom-600"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSenhaModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleVerificarSenha}>
-              Confirmar
-            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
