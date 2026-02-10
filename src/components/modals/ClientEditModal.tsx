@@ -158,24 +158,28 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
     if (!c) return errs;
     // nome
     errs.nome = (!c.nome || c.nome.trim().length < 3) ? 'Nome inválido' : null;
-    // documento
+    // documento (opcional, mas se preenchido deve ser válido)
     const docDigits = onlyDigits(c.documento || '');
-    if (c.tipo === 'pj') {
-      errs.documento = docDigits.length === 14 && isValidCNPJ(docDigits) ? null : 'CNPJ inválido!';
-    } else {
-      errs.documento = docDigits.length === 11 && isValidCPF(docDigits) ? null : 'CPF inválido!';
+    if (docDigits.length > 0) {
+      if (c.tipo === 'pj') {
+        errs.documento = docDigits.length === 14 && isValidCNPJ(docDigits) ? null : 'CNPJ inválido!';
+      } else {
+        errs.documento = docDigits.length === 11 && isValidCPF(docDigits) ? null : 'CPF inválido!';
+      }
     }
-    // email
-    errs.email = (c.email && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email)) ? null : 'E-mail inválido!';
-    // telefone
-    errs.telefone = (c.telefone && onlyDigits(c.telefone).length >= 10) ? null : 'Telefone inválido!';
-    // cep
-    errs.cep = (c.cep && onlyDigits(c.cep).length === 8) ? null : 'CEP inválido!';
-    // endereco/numero/bairro/cidade
-    errs.endereco = c.endereco ? null : 'Endereço obrigatório';
-    errs.numero = c.numero ? null : 'Número obrigatório';
-    errs.bairro = c.bairro ? null : 'Bairro obrigatório';
-    errs.cidade = c.cidade ? null : 'Cidade obrigatória';
+    // email (opcional, mas se preenchido deve ser válido)
+    if (c.email && c.email.trim().length > 0) {
+      errs.email = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email) ? null : 'E-mail inválido!';
+    }
+    // telefone (opcional, mas se preenchido deve ter 10+ dígitos)
+    if (c.telefone && onlyDigits(c.telefone).length > 0) {
+      errs.telefone = onlyDigits(c.telefone).length >= 10 ? null : 'Telefone inválido!';
+    }
+    // cep (opcional, mas se preenchido deve ter 8 dígitos)
+    if (c.cep && onlyDigits(c.cep).length > 0) {
+      errs.cep = onlyDigits(c.cep).length === 8 ? null : 'CEP inválido!';
+    }
+    // Todos os campos de endereço são opcionais agora
     return errs;
   };
 
@@ -233,7 +237,7 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
 
         <div className="space-y-3 overflow-y-auto pr-2 flex-1">
           <div>
-            <label className="block text-sm text-muted-foreground">Nome *</label>
+            <label className="block text-sm text-muted-foreground">Nome</label>
             <Input value={cliente?.nome || ''} onChange={(e) => updateField('nome', e.target.value)} />
             {fieldErrors['nome'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['nome']}</div>}
           </div>
@@ -246,13 +250,13 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground">Documento *</label>
+            <label className="block text-sm text-muted-foreground">Documento</label>
             <Input value={cliente?.tipo === 'pj' ? formatCNPJ(cliente?.documento || '') : formatCPF(cliente?.documento || '')} onChange={(e) => updateField('documento', onlyDigits(e.target.value))} />
             {fieldErrors['documento'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['documento']}</div>}
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground">E-mail *</label>
+            <label className="block text-sm text-muted-foreground">E-mail</label>
             <div className="flex gap-2">
               <Input value={cliente?.email || ''} onChange={(e) => updateField('email', e.target.value.trim().toLowerCase())} className="flex-1" />
               <Button type="button" variant="outline" size="sm" onClick={gerarEmailGenerico} className="shrink-0">
@@ -263,7 +267,7 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
           </div>
 
           <div>
-            <label className="block text-sm text-muted-foreground">Telefone *</label>
+            <label className="block text-sm text-muted-foreground">Telefone</label>
             <div className="flex gap-2">
               <Input value={formatPhone(cliente?.telefone || '')} onChange={(e) => updateField('telefone', onlyDigits(e.target.value))} className="flex-1" />
               <Button type="button" variant="outline" size="sm" onClick={gerarTelefoneGenerico} className="shrink-0">
@@ -273,34 +277,36 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
             {fieldErrors['telefone'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['telefone']}</div>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="block text-sm text-muted-foreground">CEP *</label>
+              <label className="block text-sm text-muted-foreground">CEP</label>
                 <Input value={formatCEP(cliente?.cep || '')} onChange={(e) => updateField('cep', onlyDigits(e.target.value))} />
                 {fieldErrors['cep'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['cep']}</div>}
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground">Cidade / UF</label>
-              <Input value={`${cliente?.cidade || ''} / ${cliente?.estado || ''}`} readOnly />
+              <label className="block text-sm text-muted-foreground">Cidade</label>
+              <Input value={cliente?.cidade || ''} onChange={(e) => updateField('cidade', e.target.value)} />
+            </div>
+            <div>
+              <label className="block text-sm text-muted-foreground">UF</label>
+              <Input value={cliente?.estado || ''} onChange={(e) => updateField('estado', e.target.value.toUpperCase())} maxLength={2} />
             </div>
           </div>
 
           <div>
-              <label className="block text-sm text-muted-foreground">Endereço *</label>
+              <label className="block text-sm text-muted-foreground">Endereço</label>
             <Input value={cliente?.endereco || ''} onChange={(e) => updateField('endereco', e.target.value)} />
             {fieldErrors['endereco'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['endereco']}</div>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm text-muted-foreground">Número *</label>
+              <label className="block text-sm text-muted-foreground">Número</label>
               <Input value={cliente?.numero || ''} onChange={(e) => updateField('numero', e.target.value)} />
-              {fieldErrors['numero'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['numero']}</div>}
             </div>
             <div>
-              <label className="block text-sm text-muted-foreground">Bairro *</label>
+              <label className="block text-sm text-muted-foreground">Bairro</label>
               <Input value={cliente?.bairro || ''} onChange={(e) => updateField('bairro', e.target.value)} />
-              {fieldErrors['bairro'] && <div className="text-sm text-red-600 mt-1">{fieldErrors['bairro']}</div>}
             </div>
           </div>
 
