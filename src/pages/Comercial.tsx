@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, Filter, Copy, Trash2, X } from 'lucide-react';
+import { Plus, Search, Filter, Copy, Trash2, X, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { FaCalendarAlt } from 'react-icons/fa';
+import { format, parseISO, startOfMonth, subMonths, isSameDay, isWithinInterval } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -18,8 +21,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel } from '@/components/ui/alert-dialog';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { HiFilter } from "react-icons/hi";
 
 
@@ -52,6 +53,8 @@ export function Comercial() {
   const urlLiberado = params.get('pedido_liberado') === 'false';
   const urlResponsavel = params.get('responsavel_id') || '';
   const urlPlataforma = params.get('plataforma_id') || '';
+  const urlDataInicio = params.get('data_inicio') || '';
+  const urlDataFim = params.get('data_fim') || '';
   
   // State using URL as source of truth
   const [searchTerm, setSearchTerm] = useState(urlSearch);
@@ -80,6 +83,17 @@ export function Comercial() {
   const [filterNotLiberado, setFilterNotLiberado] = useState(urlLiberado);
   const [filterResponsavelId, setFilterResponsavelId] = useState(urlResponsavel);
   const [filterPlataformaId, setFilterPlataformaId] = useState(urlPlataforma);
+  const [filterDataInicio, setFilterDataInicio] = useState(urlDataInicio);
+  const [filterDataFim, setFilterDataFim] = useState(urlDataFim);
+  
+  // Date picker states
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
+  const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
+  const [hoverDate, setHoverDate] = useState<Date | null>(null);
+  const [calendarMonth, setCalendarMonth] = useState<number>(() => new Date().getMonth());
+  const [calendarYear, setCalendarYear] = useState<number>(() => new Date().getFullYear());
+  
   const [usuariosList, setUsuariosList] = useState<Array<{ id: string; nome: string }>>([]);
   const [plataformasList, setPlataformasList] = useState<Array<{ id: string; nome: string }>>([]);
   const urlEnvioAdiado = params.get('envio_adiado') === 'true';
@@ -161,6 +175,8 @@ export function Comercial() {
     const newPlataforma = params.get('plataforma_id') || '';
     const newEnvioAdiado = params.get('envio_adiado') === 'true';
     const newDuplicados = params.get('duplicados') === 'true';
+    const newDataInicio = params.get('data_inicio') || '';
+    const newDataFim = params.get('data_fim') || '';
     
     setPage(newPage);
     setPageSize(newPageSize);
@@ -173,6 +189,20 @@ export function Comercial() {
     setFilterPlataformaId(newPlataforma);
     setFilterEnvioAdiado(newEnvioAdiado);
     setFilterDuplicados(newDuplicados);
+    setFilterDataInicio(newDataInicio);
+    setFilterDataFim(newDataFim);
+    
+    // Sincronizar tempStartDate e tempEndDate para o date picker
+    if (newDataInicio) {
+      setTempStartDate(new Date(newDataInicio + 'T00:00:00'));
+    } else {
+      setTempStartDate(null);
+    }
+    if (newDataFim) {
+      setTempEndDate(new Date(newDataFim + 'T00:00:00'));
+    } else {
+      setTempEndDate(null);
+    }
     
     // Sincronizar estados temporários
     setTempFilterNotLiberado(newLiberado);
@@ -269,6 +299,20 @@ export function Comercial() {
         // apply duplicados filter
         if (filterDuplicados) {
           (query as any).eq('duplicata', true);
+        }
+
+        // apply data_inicio filter
+        if (filterDataInicio) {
+          const dataInicioISO = new Date(filterDataInicio).toISOString();
+          (query as any).gte('pedido_criado_em', dataInicioISO);
+        }
+
+        // apply data_fim filter
+        if (filterDataFim) {
+          const dataFimDate = new Date(filterDataFim);
+          dataFimDate.setHours(23, 59, 59, 999);
+          const dataFimISO = dataFimDate.toISOString();
+          (query as any).lte('pedido_criado_em', dataFimISO);
         }
 
         // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
@@ -461,7 +505,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterPlataformaId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, filterDuplicados, searchTerm, selectedProdutos]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterPlataformaId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, filterDuplicados, filterDataInicio, filterDataFim, searchTerm, selectedProdutos]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -1258,6 +1302,8 @@ export function Comercial() {
     if (filterClienteFormNotSent) params.set('cliente_formulario_enviado', 'false');
     if (filterNotLiberado) params.set('pedido_liberado', 'false');
     if (filterEnvioAdiado) params.set('envio_adiado', 'true');
+    if (filterDataInicio) params.set('data_inicio', filterDataInicio);
+    if (filterDataFim) params.set('data_fim', filterDataFim);
     navigate({ pathname: location.pathname, search: params.toString() });
   };
 
@@ -1287,6 +1333,165 @@ export function Comercial() {
   };
 
   const pageSizeOptions = [10, 20, 30, 50];
+
+  // Date picker functions
+  const handleDateClick = (date: Date) => {
+    if (!tempStartDate || (tempStartDate && tempEndDate)) {
+      setTempStartDate(date);
+      setTempEndDate(null);
+    } else {
+      if (date < tempStartDate) {
+        setTempEndDate(tempStartDate);
+        setTempStartDate(date);
+      } else {
+        setTempEndDate(date);
+      }
+    }
+  };
+
+  const applyCustomDates = () => {
+    if (tempStartDate) {
+      const newDataInicio = format(tempStartDate, 'yyyy-MM-dd');
+      const newDataFim = tempEndDate ? format(tempEndDate, 'yyyy-MM-dd') : newDataInicio;
+      
+      const next = new URLSearchParams(location.search);
+      next.set('data_inicio', newDataInicio);
+      next.set('data_fim', newDataFim);
+      next.set('page', '1');
+      navigate({ pathname: location.pathname, search: next.toString() });
+    }
+    setPickerOpen(false);
+  };
+
+  const clearDateFilter = () => {
+    setTempStartDate(null);
+    setTempEndDate(null);
+    setPickerOpen(false);
+    
+    const next = new URLSearchParams(location.search);
+    next.delete('data_inicio');
+    next.delete('data_fim');
+    next.set('page', '1');
+    navigate({ pathname: location.pathname, search: next.toString() });
+  };
+
+  const handlePreset = (presetFn: () => void) => {
+    presetFn();
+  };
+
+  const navigateMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      if (calendarMonth === 0) {
+        setCalendarMonth(11);
+        setCalendarYear(calendarYear - 1);
+      } else {
+        setCalendarMonth(calendarMonth - 1);
+      }
+    } else {
+      if (calendarMonth === 11) {
+        setCalendarMonth(0);
+        setCalendarYear(calendarYear + 1);
+      } else {
+        setCalendarMonth(calendarMonth + 1);
+      }
+    }
+  };
+
+  const renderCalendar = (monthOffset: number = 0) => {
+    const today = new Date();
+    
+    const displayYear = monthOffset === 0 ? calendarYear : (calendarMonth === 11 ? calendarYear + 1 : calendarYear);
+    const displayMonth = monthOffset === 0 ? calendarMonth : (calendarMonth === 11 ? 0 : calendarMonth + 1);
+    
+    const firstDay = new Date(displayYear, displayMonth, 1);
+    const lastDay = new Date(displayYear, displayMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay();
+    
+    const days = [];
+    
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(<div key={`empty-${i}`} className="h-9" />);
+    }
+    
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(displayYear, displayMonth, day);
+      const isFirstDay = tempStartDate && isSameDay(date, tempStartDate);
+      const isLastDay = tempEndDate && isSameDay(date, tempEndDate);
+      const isSelected = isFirstDay || isLastDay;
+      const isInRange = tempStartDate && tempEndDate && 
+                       isWithinInterval(date, { start: tempStartDate, end: tempEndDate }) &&
+                       !isFirstDay && !isLastDay;
+      const isHovered = hoverDate && tempStartDate && !tempEndDate &&
+                       isWithinInterval(date, { 
+                         start: tempStartDate < hoverDate ? tempStartDate : hoverDate,
+                         end: tempStartDate < hoverDate ? hoverDate : tempStartDate
+                       });
+      const isToday = isSameDay(date, today);
+      
+      days.push(
+        <button
+          key={day}
+          onClick={() => handleDateClick(date)}
+          onMouseEnter={() => setHoverDate(date)}
+          onMouseLeave={() => setHoverDate(null)}
+          className={`
+            h-9 w-9 text-sm transition-colors flex items-center justify-center
+            ${isFirstDay && !isLastDay ? 'rounded-l-full bg-custom-600 text-white font-semibold' : ''}
+            ${isLastDay && !isFirstDay ? 'rounded-r-full bg-custom-600 text-white font-semibold' : ''}
+            ${isFirstDay && isLastDay ? 'rounded-full bg-custom-600 text-white font-semibold' : ''}
+            ${isInRange || isHovered ? 'bg-custom-600 text-white' : ''}
+            ${!isSelected && !isInRange && !isHovered ? 'rounded hover:bg-gray-100' : ''}
+            ${isToday && !isSelected ? 'border-2 rounded-full border-custom-600' : ''}
+          `}
+        >
+          {day}
+        </button>
+      );
+    }
+    
+    return (
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-3">
+          {monthOffset === 0 && (
+            <button
+              onClick={() => navigateMonth('prev')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 1 && <div className="w-7" />}
+          <div className="text-center font-semibold text-base">
+            {format(firstDay, 'MMMM yyyy', { locale: ptBR })}
+          </div>
+          {monthOffset === 1 && (
+            <button
+              onClick={() => navigateMonth('next')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 0 && <div className="w-7" />}
+        </div>
+        <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-gray-500 text-center font-medium">
+          <div>DOM</div>
+          <div>SEG</div>
+          <div>TER</div>
+          <div>QUA</div>
+          <div>QUI</div>
+          <div>SEX</div>
+          <div>SÁB</div>
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {days}
+        </div>
+      </div>
+    );
+  };
 
   // helper to get status options formatted for EditSelectModal
   const statusModalOptions = statusOptions.map(o => ({ id: o.id, nome: o.nome }));
@@ -1458,6 +1663,86 @@ export function Comercial() {
               </div>
 
               <div className="flex items-center gap-2 ">
+                {/* Botão de calendário de data */}
+                <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
+                  <PopoverTrigger asChild>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      className="flex items-center justify-center gap-2"
+                    >
+                      <FaCalendarAlt className="h-4 w-4" />
+                      <span className="text-sm">
+                        {filterDataInicio && filterDataFim 
+                          ? `${format(parseISO(filterDataInicio), 'dd/MM/yy', { locale: ptBR })} → ${format(parseISO(filterDataFim), 'dd/MM/yy', { locale: ptBR })}`
+                          : 'Filtrar por data'
+                        }
+                      </span>
+                      <ChevronDown className="h-4 w-4 opacity-50" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="end">
+                    <div className="px-4 py-3 border-b">
+                      <h3 className="font-semibold text-base">Selecionar Período</h3>
+                    </div>
+                    
+                    <div className="flex">
+                      <div className="w-48 border-r">
+                        <div className="py-2">
+                          {[
+                            { label: 'Hoje', fn: () => { const d = new Date(); const sd = format(d, 'yyyy-MM-dd'); setTempStartDate(d); setTempEndDate(d); const next = new URLSearchParams(location.search); next.set('data_inicio', sd); next.set('data_fim', sd); next.set('page', '1'); navigate({ pathname: location.pathname, search: next.toString() }); setPickerOpen(false); } },
+                            { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const sd = format(d, 'yyyy-MM-dd'); setTempStartDate(d); setTempEndDate(d); const next = new URLSearchParams(location.search); next.set('data_inicio', sd); next.set('data_fim', sd); next.set('page', '1'); navigate({ pathname: location.pathname, search: next.toString() }); setPickerOpen(false); } },
+                            { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setTempStartDate(s); setTempEndDate(e); const next = new URLSearchParams(location.search); next.set('data_inicio', sd); next.set('data_fim', ed); next.set('page', '1'); navigate({ pathname: location.pathname, search: next.toString() }); setPickerOpen(false); } },
+                            { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setTempStartDate(s); setTempEndDate(e); const next = new URLSearchParams(location.search); next.set('data_inicio', sd); next.set('data_fim', ed); next.set('page', '1'); navigate({ pathname: location.pathname, search: next.toString() }); setPickerOpen(false); } },
+                            { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setTempStartDate(s); setTempEndDate(e); const next = new URLSearchParams(location.search); next.set('data_inicio', sd); next.set('data_fim', ed); next.set('page', '1'); navigate({ pathname: location.pathname, search: next.toString() }); setPickerOpen(false); } },
+                            { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setTempStartDate(s); setTempEndDate(e); const next = new URLSearchParams(location.search); next.set('data_inicio', sd); next.set('data_fim', ed); next.set('page', '1'); navigate({ pathname: location.pathname, search: next.toString() }); setPickerOpen(false); } },
+                            { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); const sd = format(s, 'yyyy-MM-dd'); const ed = format(e, 'yyyy-MM-dd'); setTempStartDate(s); setTempEndDate(e); const next = new URLSearchParams(location.search); next.set('data_inicio', sd); next.set('data_fim', ed); next.set('page', '1'); navigate({ pathname: location.pathname, search: next.toString() }); setPickerOpen(false); } },
+                            { label: 'Limpar filtro', fn: () => { clearDateFilter(); } },
+                          ].map((preset, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => handlePreset(preset.fn)}
+                              className="w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors text-sm"
+                            >
+                              {preset.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col">
+                        <div className="flex">
+                          {renderCalendar(0)}
+                          {renderCalendar(1)}
+                        </div>
+                        
+                        <div className="flex gap-2 px-4 py-3 border-t">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="flex-1"
+                            onClick={() => {
+                              setTempStartDate(filterDataInicio ? new Date(filterDataInicio + 'T00:00:00') : null);
+                              setTempEndDate(filterDataFim ? new Date(filterDataFim + 'T00:00:00') : null);
+                              setPickerOpen(false);
+                            }}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button 
+                            size="sm" 
+                            className="flex-1 bg-custom-600 hover:bg-custom-700"
+                            onClick={applyCustomDates}
+                            disabled={!tempStartDate}
+                          >
+                            Atualizar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+                
                 <Button
                   size="sm"
                   variant={filterEtiquetaId === ETIQUETA_FILTER_ID ? 'outline' : 'ghost'}
