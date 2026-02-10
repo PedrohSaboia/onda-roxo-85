@@ -711,6 +711,39 @@ export function Logistica() {
                             }
 
                             // 2️⃣ SALDO OK - PROSSEGUIR COM A GERAÇÃO DA ETIQUETA
+                            
+                            // 2.1️⃣ VERIFICAR E SETAR REMETENTE_ID SE NECESSÁRIO
+                            let remetenteId = foundPedido?.remetente_id;
+                            
+                            if (!remetenteId) {
+                              const plataformaId = foundPedido?.plataforma_id;
+                              const plataformasEspeciais = [
+                                '0e27f292-924c-4ffc-a141-bbe00ec00428',
+                                'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f',
+                                'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4'
+                              ];
+                              
+                              // Definir remetente baseado na plataforma
+                              if (plataformasEspeciais.includes(plataformaId)) {
+                                remetenteId = '3fc6839c-e959-4dc1-a983-f61d557e50ec';
+                              } else {
+                                remetenteId = '128a7de7-d649-43e1-8ba3-2b54c3496b14';
+                              }
+                              
+                              // Atualizar o pedido com o remetente_id
+                              const { error: updateError } = await supabase
+                                .from('pedidos')
+                                .update({ remetente_id: remetenteId })
+                                .eq('id', foundPedido?.id);
+                              
+                              if (updateError) {
+                                console.error('Erro ao atualizar remetente_id:', updateError);
+                                throw new Error('Erro ao definir remetente do pedido');
+                              }
+                              
+                              console.log('Remetente setado:', remetenteId);
+                            }
+                            
                             // Chamar Edge Function para processar etiqueta
                             const edgeFunctionUrl = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/processar_etiqueta_em_envio_de_pedido';
                             const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
@@ -725,7 +758,7 @@ export function Logistica() {
                               body: JSON.stringify({
                                 pedido_id: foundPedido?.id,
                                 empresa_id: empresaId,
-                                remetente_id: foundPedido?.remetente_id,
+                                remetente_id: remetenteId,
                               }),
                             });
 
