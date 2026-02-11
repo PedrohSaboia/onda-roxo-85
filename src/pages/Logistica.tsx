@@ -267,10 +267,9 @@ export function Logistica() {
       const res1: any = await supabase
         .from('pedidos')
         .select(selectWithBipado)
-        .eq('id', row.pedido_id)
-        .single();
+        .eq('id', row.pedido_id);
 
-      pedidoRow = res1.data;
+      pedidoRow = res1.data?.[0];
       pedErr = res1.error;
 
       // if bipado column is missing, retry without it
@@ -278,9 +277,8 @@ export function Logistica() {
         const res2: any = await supabase
           .from('pedidos')
           .select(selectWithoutBipado)
-          .eq('id', row.pedido_id)
-          .single();
-        pedidoRow = res2.data;
+          .eq('id', row.pedido_id);
+        pedidoRow = res2.data?.[0];
         pedErr = res2.error;
       }
 
@@ -362,10 +360,9 @@ export function Logistica() {
       const res1: any = await supabase
         .from('pedidos')
         .select(selectWithBipado)
-        .eq('id_externo', pedidoId)
-        .single();
+        .eq('id_externo', pedidoId);
 
-      pedidoRow = res1.data;
+      pedidoRow = res1.data?.[0];
       pedErr = res1.error;
 
       // Se não encontrou por id_externo, tenta por id
@@ -373,10 +370,9 @@ export function Logistica() {
         const res2: any = await supabase
           .from('pedidos')
           .select(selectWithBipado)
-          .eq('id', pedidoId)
-          .single();
+          .eq('id', pedidoId);
 
-        pedidoRow = res2.data;
+        pedidoRow = res2.data?.[0];
         pedErr = res2.error;
       }
 
@@ -385,10 +381,9 @@ export function Logistica() {
         const res3: any = await supabase
           .from('pedidos')
           .select(selectWithoutBipado)
-          .or(`id_externo.eq.${pedidoId}`)
-          .single();
+          .or(`id_externo.eq.${pedidoId}`);
 
-        pedidoRow = res3.data;
+        pedidoRow = res3.data?.[0];
         pedErr = res3.error;
       }
 
@@ -771,15 +766,16 @@ export function Logistica() {
                             console.log('Etiqueta processada com sucesso:', etiquetaData);
 
                             // Atualizar status do pedido
-                            const { data, error } = await supabase
+                            const { data: dataArray, error } = await supabase
                               .from('pedidos')
                               .update({ 
                                 status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
                                 data_enviado: new Date().toISOString()
                               })
                               .eq('id', foundPedido?.id)
-                              .select('id, id_externo')
-                              .single();
+                              .select('id, id_externo');
+                            
+                            const data = dataArray?.[0];
 
                             if (error) throw error;
 
