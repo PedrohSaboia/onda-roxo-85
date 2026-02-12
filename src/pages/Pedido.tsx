@@ -144,6 +144,10 @@ export default function Pedido() {
   const [formasPagamentos, setFormasPagamentos] = useState<any[]>([]);
   const [savingPayment, setSavingPayment] = useState(false);
   const [revertendoStatus, setRevertendoStatus] = useState(false);
+  // Upload de etiqueta states
+  const [uploadingLabel, setUploadingLabel] = useState(false);
+  const [selectedLabelFiles, setSelectedLabelFiles] = useState<Array<{ file: File; customName: string }>>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatCurrencyBR = (n: number) => {
     if (isNaN(n) || !isFinite(n)) return '0,00';
@@ -1087,6 +1091,101 @@ export default function Pedido() {
     setEtiquetaMLModalOpen(false);
   };
 
+  const handleUploadLabel = async () => {
+    if (selectedLabelFiles.length === 0 || !pedido) {
+      toast({
+        title: 'Erro',
+        description: 'Selecione pelo menos um arquivo PDF para fazer upload',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    try {
+      setUploadingLabel(true);
+
+      const uploadedUrls: string[] = [];
+
+      // Upload de cada arquivo
+      for (const item of selectedLabelFiles) {
+        // Usar nome customizado pelo usuário
+        const fileName = `${item.customName}.pdf`;
+        const filePath = `etiquetas/${fileName}`;
+
+        // Upload para o Supabase Storage
+        const { error: uploadError } = await supabase.storage
+          .from('documentos')
+          .upload(filePath, item.file, {
+            contentType: 'application/pdf',
+            upsert: false
+          });
+
+        if (uploadError) throw uploadError;
+
+        // Obter URL pública
+        const { data: urlData } = supabase.storage
+          .from('documentos')
+          .getPublicUrl(filePath);
+
+        if (!urlData?.publicUrl) {
+          throw new Error('Não foi possível obter URL do arquivo');
+        }
+
+        uploadedUrls.push(urlData.publicUrl);
+      }
+
+      // Buscar etiquetas existentes
+      const { data: pedidoData } = await supabase
+        .from('pedidos')
+        .select('etiquetas_uploads')
+        .eq('id', pedido.id)
+        .single();
+
+      // Combinar com URLs existentes
+      let allEtiquetas: string[] = [];
+      
+      // Verificar se já existe etiquetas_uploads
+      if (pedidoData?.etiquetas_uploads && Array.isArray(pedidoData.etiquetas_uploads)) {
+        allEtiquetas = [...pedidoData.etiquetas_uploads];
+      }
+
+      // Adicionar novas URLs
+      allEtiquetas = [...allEtiquetas, ...uploadedUrls];
+
+      // Salvar no banco
+      const { error: updateError } = await supabase
+        .from('pedidos')
+        .update({ 
+          etiquetas_uploads: allEtiquetas,
+          atualizado_em: new Date().toISOString()
+        } as any)
+        .eq('id', pedido.id);
+
+      if (updateError) throw updateError;
+
+      toast({
+        title: 'Etiquetas enviadas',
+        description: `${uploadedUrls.length} etiqueta(s) foram carregadas e salvas com sucesso`
+      });
+
+      // Limpar seleção e recarregar
+      setSelectedLabelFiles([]);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      navigate(0);
+    } catch (err: any) {
+      console.error('Erro ao fazer upload das etiquetas:', err);
+      toast({
+        title: 'Erro ao enviar etiquetas',
+        description: err?.message || String(err),
+        variant: 'destructive'
+      });
+    } finally {
+      setUploadingLabel(false);
+    }
+  };
+
   const handleDeletePedido = async () => {
     if (!pedido) return;
     try {
@@ -1593,6 +1692,7 @@ export default function Pedido() {
           <TabsTrigger value="status">Status</TabsTrigger>
           <TabsTrigger value="entrega">Entrega</TabsTrigger>
           <TabsTrigger value="tempo-ganho">Tempo Ganho</TabsTrigger>
+          <TabsTrigger value="subir-etiqueta">Subir etiqueta</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo">
@@ -2216,6 +2316,256 @@ export default function Pedido() {
                     </p>
                   </div>
                 )}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="subir-etiqueta">
+          <Card>
+            <CardHeader>
+              <CardTitle>Subir etiqueta gerada</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 mb-2 block">
+                    Selecione um ou mais arquivos PDF de etiquetas
+                  </label>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length > 0) {
+                        // Validar se todos são PDFs
+                        const invalidFiles = files.filter(f => f.type !== 'application/pdf');
+                        if (invalidFiles.length > 0) {
+                          toast({
+                            title: 'Erro',
+                            description: 'Apenas arquivos PDF são permitidos',
+                            variant: 'destructive'
+                          });
+                          e.target.value = '';
+                          return;
+                        }
+                        // Gerar nome customizado para cada arquivo: nome_original-id_externo
+                        const newFiles = files.map(file => {
+                          const nameWithoutExt = file.name.replace(/\.pdf$/i, '');
+                          const customName = `${nameWithoutExt}-${pedido?.id_externo || pedido?.id.slice(0, 8)}`;
+                          return { file, customName };
+                        });
+                        // Adicionar aos arquivos existentes em vez de substituir
+                        setSelectedLabelFiles(prev => [...prev, ...newFiles]);
+                        // Limpar o input para permitir selecionar os mesmos arquivos novamente se necessário
+                        e.target.value = '';
+                      }
+                    }}
+                    className="block w-full text-sm text-gray-500
+                      file:mr-4 file:py-2 file:px-4
+                      file:rounded-md file:border-0
+                      file:text-sm file:font-semibold
+                      file:bg-custom-50 file:text-custom-700
+                      hover:file:bg-custom-100
+                      cursor-pointer"
+                    disabled={readonly || uploadingLabel}
+                  />
+                  {selectedLabelFiles.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      <p className="text-sm font-medium text-gray-700">
+                        {selectedLabelFiles.length} arquivo(s) selecionado(s):
+                      </p>
+                      <div className="max-h-60 overflow-y-auto space-y-3">
+                        {selectedLabelFiles.map((item, index) => (
+                          <div key={index} className="p-3 bg-green-50 border border-green-200 rounded-md space-y-2">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs text-green-600">
+                                  Arquivo original: {item.file.name}
+                                </p>
+                                <p className="text-xs text-green-600 mt-1">
+                                  Tamanho: {(item.file.size / 1024).toFixed(2)} KB
+                                </p>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  setSelectedLabelFiles(prev => prev.filter((_, i) => i !== index));
+                                }}
+                                className="ml-2 text-red-600 hover:text-red-800 flex-shrink-0"
+                                disabled={uploadingLabel}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                            <div>
+                              <label className="text-xs font-medium text-green-700 block mb-1">
+                                Nome do arquivo (sem extensão):
+                              </label>
+                              <input
+                                type="text"
+                                value={item.customName}
+                                onChange={(e) => {
+                                  const newFiles = [...selectedLabelFiles];
+                                  newFiles[index].customName = e.target.value;
+                                  setSelectedLabelFiles(newFiles);
+                                }}
+                                className="w-full px-2 py-1 text-sm border border-green-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
+                                placeholder="nome-do-arquivo"
+                                disabled={uploadingLabel}
+                              />
+                              <p className="text-xs text-green-600 mt-1">
+                                Será salvo como: <span className="font-mono">{item.customName}.pdf</span>
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {!readonly && (
+                  <Button
+                    onClick={handleUploadLabel}
+                    disabled={selectedLabelFiles.length === 0 || uploadingLabel}
+                    className="w-full bg-custom-700 hover:bg-custom-800 text-white"
+                  >
+                    {uploadingLabel ? (
+                      <>
+                        <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full mr-2" />
+                        Enviando {selectedLabelFiles.length} etiqueta(s)...
+                      </>
+                    ) : (
+                      `Enviar ${selectedLabelFiles.length > 0 ? selectedLabelFiles.length + ' ' : ''}Etiqueta${selectedLabelFiles.length !== 1 ? 's' : ''}`
+                    )}
+                  </Button>
+                )}
+
+                {(() => {
+                  // Obter todas as etiquetas do campo JSONB
+                  const etiquetas = pedido?.etiquetas_uploads && Array.isArray(pedido.etiquetas_uploads)
+                    ? pedido.etiquetas_uploads
+                    : [];
+
+                  if (etiquetas.length === 0) return null;
+
+                  return (
+                    <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-md">
+                      <p className="text-sm text-blue-800 mb-3 font-medium">
+                        {etiquetas.length} Etiqueta(s) cadastrada(s):
+                      </p>
+                      <div className="flex flex-wrap gap-3">
+                        {etiquetas.map((url: string, index: number) => {
+                          // Extrair nome do arquivo da URL
+                          const fileName = url.split('/').pop()?.replace('.pdf', '') || `etiqueta-${index + 1}`;
+                          
+                          return (
+                            <div
+                              key={index}
+                              className="relative flex flex-col items-center justify-center p-2 border-2 border-blue-300 bg-white rounded-lg hover:bg-gray-50 transition-colors cursor-pointer w-36 h-36"
+                              onClick={() => window.open(url, '_blank')}
+                              title={fileName}
+                            >
+                              {!readonly && (
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation();
+                                    if (!confirm(`Deseja realmente excluir esta etiqueta?`)) return;
+                                    
+                                    try {
+                                      // Extrair o caminho do arquivo da URL
+                                      // URL exemplo: https://...supabase.co/storage/v1/object/public/documentos/etiquetas/arquivo.pdf
+                                      const urlParts = url.split('/documentos/');
+                                      console.log('URL completa:', url);
+                                      console.log('URL Parts:', urlParts);
+                                      
+                                      if (urlParts.length > 1) {
+                                        let filePath = urlParts[1]; // Pega "etiquetas/arquivo.pdf"
+                                        // Decodificar URL (converter %20 para espaço, etc)
+                                        filePath = decodeURIComponent(filePath);
+                                        
+                                        console.log('Caminho do arquivo a remover:', filePath);
+                                        
+                                        // Remover do Storage
+                                        const { data: removeData, error: storageError } = await supabase.storage
+                                          .from('documentos')
+                                          .remove([filePath]);
+                                        
+                                        console.log('Resultado da remoção:', { removeData, storageError });
+                                        
+                                        if (storageError) {
+                                          console.error('Erro ao remover do storage:', storageError);
+                                          toast({
+                                            title: 'Aviso',
+                                            description: 'Erro ao remover arquivo do storage: ' + storageError.message,
+                                            variant: 'destructive'
+                                          });
+                                        } else {
+                                          console.log('Arquivo removido do storage com sucesso');
+                                        }
+                                      }
+                                      
+                                      // Remover do array de etiquetas
+                                      const newEtiquetas = etiquetas.filter((_: string, i: number) => i !== index);
+                                      
+                                      const { error } = await supabase
+                                        .from('pedidos')
+                                        .update({
+                                          etiquetas_uploads: newEtiquetas.length > 0 ? newEtiquetas : null,
+                                          atualizado_em: new Date().toISOString()
+                                        } as any)
+                                        .eq('id', pedido.id);
+                                      
+                                      if (error) throw error;
+                                      
+                                      toast({
+                                        title: 'Etiqueta removida',
+                                        description: 'A etiqueta foi removida com sucesso do banco e do storage'
+                                      });
+                                      
+                                      navigate(0);
+                                    } catch (err: any) {
+                                      console.error('Erro ao remover etiqueta:', err);
+                                      toast({
+                                        title: 'Erro',
+                                        description: 'Não foi possível remover a etiqueta',
+                                        variant: 'destructive'
+                                      });
+                                    }
+                                  }}
+                                  className="absolute top-1 right-1 text-red-600 hover:text-red-800 bg-white rounded-full p-1 shadow-sm"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                              <span className="text-3xl mb-2">📄</span>
+                              <p className="text-xs font-medium text-center line-clamp-2 px-1">
+                                {fileName}
+                              </p>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigator.clipboard.writeText(url);
+                                  toast({
+                                    title: 'Link copiado',
+                                    description: `Link copiado para área de transferência`
+                                  });
+                                }}
+                                className="mt-1 h-6 w-6 p-0"
+                              >
+                                📋
+                              </Button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </CardContent>
           </Card>

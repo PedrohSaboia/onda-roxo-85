@@ -17,7 +17,7 @@ export function AppLayout() {
     // Match /pedido/:id but not /pedido-contabilidade
     if (path === '/comercial' || path.startsWith('/pedidos') || path.startsWith('/pedido/') || path === '/novo-pedido') return 'comercial';
     if (path === '/producao') return 'producao';
-    if (path === '/logistica') return 'logistica';
+    if (path === '/logistica' || path === '/envio-por-etiqueta') return 'logistica';
     if (path === '/estoque' || path.startsWith('/estoque')) return 'estoque';
     if (path === '/contabilidade' || path.startsWith('/pedido-contabilidade')) return 'contabilidade';
     if (path === '/configuracoes') return 'configuracoes';

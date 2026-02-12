@@ -276,6 +276,7 @@ serve(async (req) => {
           valor_yampi: valorProdutos,
           valor_total: valorTotal,
           frete_melhor_envio: freteMelhorEnvio,
+          empresa_id: 1,
         },
       ])
       .select("id")
@@ -303,6 +304,7 @@ serve(async (req) => {
         complemento: shipping?.complement,
         pedido_id: pedido.id,
         formulario_enviado: true,
+        empresa_id: 1,
       },
     ]);
 

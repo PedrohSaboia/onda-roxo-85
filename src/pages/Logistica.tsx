@@ -13,6 +13,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Avatar } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { LogisticaSidebar } from '@/components/layout/LogisticaSidebar';
 
 export function Logistica() {
   const [barcode, setBarcode] = useState('');
@@ -429,8 +430,10 @@ export function Logistica() {
   };
 
  return (
-    <div className="h-full overflow-y-auto">
-    <div className="space-y-6 p-6">
+    <div className="flex h-full">
+      <LogisticaSidebar />
+      <div className="flex-1 h-full overflow-y-auto">
+        <div className="space-y-6 p-6">
       <div>
         <div className="flex items-center justify-between">
           <div>
@@ -967,7 +970,8 @@ export function Logistica() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+        </div>
+      </div>
     </div>
   );
 }

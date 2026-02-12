@@ -25,6 +25,7 @@ import Documentacao from "./pages/Documentacao";
 import { Contabilidade } from "./pages/Contabilidade";
 import { Comercial } from "./pages/Comercial";
 import { Logistica } from "./pages/Logistica";
+import { EnvioPorEtiqueta } from "./pages/EnvioPorEtiqueta";
 import { Estoque } from "./pages/Estoque";
 import { Dashboard } from "./pages/Dashboard";
 import { Design } from "./pages/Design";
@@ -73,6 +74,7 @@ const App = () => {
               <Route path="comercial" element={<Comercial />} />
               <Route path="pedido/:id" element={<Pedido />} />
               <Route path="logistica" element={<Logistica />} />
+              <Route path="envio-por-etiqueta" element={<EnvioPorEtiqueta />} />
               <Route path="estoque" element={<Estoque />} />
               <Route path="estoque/sku-plataformas" element={<SkuPlataformas />} />
               <Route path="design" element={<Design />} />
