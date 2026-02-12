@@ -564,9 +564,42 @@ export function Logistica() {
                 </CardHeader>
                 <CardContent className="mt-3">
                   <div className="space-y-3">
-                    {(foundPedido.itens_pedido || []).map((it: any) => (
-                      <div key={it.id} className={`border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
-                        <div className="flex items-center gap-3">
+                    {(() => {
+                      const items = foundPedido.itens_pedido || [];
+                      
+                      // Agrupar itens por produto_id ou variacao_id
+                      const grupos: Record<string, { nome: string; quantidade: number; itens: any[] }> = {};
+                      
+                      items.forEach((it: any) => {
+                        const chave = it.variacao_id || it.produto_id || 'sem-id';
+                        const nome = it.variacao?.nome || it.produto?.nome || 'Produto sem nome';
+                        
+                        if (!grupos[chave]) {
+                          grupos[chave] = { nome, quantidade: 0, itens: [] };
+                        }
+                        
+                        grupos[chave].quantidade += 1;
+                        grupos[chave].itens.push(it);
+                      });
+                      
+                      // Renderizar itens agrupados
+                      return items.map((it: any, index: number) => {
+                        const chave = it.variacao_id || it.produto_id || 'sem-id';
+                        const grupo = grupos[chave];
+                        const isPrimeiroDoGrupo = grupo.itens[0].id === it.id;
+                        const mostrarBadge = grupo.quantidade > 1 && isPrimeiroDoGrupo;
+                        
+                        return (
+                          <div key={it.id}>
+                            {mostrarBadge && (
+                              <div className="mb-2 flex items-center gap-2">
+                                <Badge variant="secondary" className="text-sm">
+                                  {grupo.nome} - {grupo.quantidade}x
+                                </Badge>
+                              </div>
+                            )}
+                            <div className={`border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
+                              <div className="flex items-center gap-3">
                           {it.produto?.img_url || it.variacao?.img_url ? (
                             <img src={it.variacao?.img_url || it.produto?.img_url} className="w-12 h-12 rounded-full border-2 border-gray-200" />
                           ) : (
@@ -637,7 +670,10 @@ export function Logistica() {
                           )}
                         </div>
                       </div>
-                    ))}
+                    </div>
+                        );
+                      });
+                    })()}
                   </div>
                 </CardContent>
                 {allItemsBipado && (
