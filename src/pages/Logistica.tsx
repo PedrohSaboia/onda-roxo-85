@@ -76,23 +76,6 @@ export function Logistica() {
     }
   };
 
-  useEffect(() => {
-    // focus on mount
-    setTimeout(() => barcodeRef.current?.focus(), 50);
-    // buscar saldo ao carregar a página
-    fetchSaldoMelhorEnvio();
-  }, []);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      // call RPC to find best matching item for this barcode
-      handleScan(barcode.trim());
-    }
-  };
-
-  
-
   const { toast } = useToast();
   const [loadingScan, setLoadingScan] = useState(false);
   const [foundPedido, setFoundPedido] = useState<any | null>(null);
@@ -100,6 +83,9 @@ export function Logistica() {
   const [itemInputs, setItemInputs] = useState<Record<string, string>>({});
   const itemRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [itemStatus, setItemStatus] = useState<Record<string, 'idle' | 'success' | 'error'>>({});
+  
+  // Estado para dados agrupados da view (usado na seção de bipagem de itens)
+  const [gruposAgrupados, setGruposAgrupados] = useState<Record<string, { nome_completo: string; quantidade_total: number }>>({});
 
   // logística view items (cards)
   type LogItem = { produto_id: string | null; variacao_id: string | null; quantidade_total: number; produto?: any; variacao?: any };
@@ -147,9 +133,50 @@ export function Logistica() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    // focus on mount
+    setTimeout(() => barcodeRef.current?.focus(), 50);
+    // buscar saldo ao carregar a página
+    fetchSaldoMelhorEnvio();
+  }, []);
+
+  // Buscar dados agrupados da view quando foundPedido muda
+  useEffect(() => {
+    if (foundPedido?.id) {
+      supabase
+        .from('itens_pedido_agrupados')
+        .select('*')
+        .eq('pedido_id', foundPedido.id)
+        .then(({ data, error }) => {
+          if (!error && data) {
+            console.log('📊 Dados da view itens_pedido_agrupados:', data);
+            const grupos: Record<string, { nome_completo: string; quantidade_total: number }> = {};
+            data.forEach((item: any) => {
+              grupos[item.item_referencia_id] = {
+                nome_completo: item.nome_completo,
+                quantidade_total: item.quantidade_total
+              };
+            });
+            console.log('📦 Grupos processados:', grupos);
+            setGruposAgrupados(grupos);
+          }
+        });
+    } else {
+      setGruposAgrupados({});
+    }
+  }, [foundPedido?.id]);
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      // call RPC to find best matching item for this barcode
+      handleScan(barcode.trim());
+    }
+  };
+
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
-  const allItemsBipado = items.length > 0 && items.every((it: any) => (foundItemIds || []).includes(it.id) || it.bipado === true);
+  const allItemsBipado = items.length > 0 && items.every((it: any) => (foundItemIds || []).includes(it.id));
   
   // Verifica se deve mostrar o botão da etiqueta ML
   // Prioridade: shipping_id deve ter valor (não null, não vazio)
@@ -256,34 +283,14 @@ export function Logistica() {
       const row: any = Array.isArray(data) ? data[0] : data;
 
       // fetch pedido details (responsável, plataforma, itens)
-      // Try including `bipado` column; if the DB doesn't have that column yet
-      // (SQLSTATE 42703) retry without it so the UI still works.
-      let pedidoRow: any = null;
-      let pedErr: any = null;
-
-  const selectWithBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras,bipado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
-  const selectWithoutBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
-
-      // first attempt including bipado
-      const res1: any = await supabase
+      const { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(selectWithBipado)
-        .eq('id', row.pedido_id);
-
-      pedidoRow = res1.data?.[0];
-      pedErr = res1.error;
-
-      // if bipado column is missing, retry without it
-      if (pedErr && (pedErr?.code === '42703' || String(pedErr?.message || '').includes('bipado'))) {
-        const res2: any = await supabase
-          .from('pedidos')
-          .select(selectWithoutBipado)
-          .eq('id', row.pedido_id);
-        pedidoRow = res2.data?.[0];
-        pedErr = res2.error;
-      }
+        .select(`id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
+        .eq('id', row.pedido_id)
+        .single();
 
       if (pedErr) throw pedErr;
+      const pedidoRow = pedidoData;
 
       console.log('Pedido encontrado:', pedidoRow);
 
@@ -296,7 +303,7 @@ export function Logistica() {
 
         // decide next focus using the merged ids
         const itemsForFocus: any[] = pedidoRow?.itens_pedido || [];
-        const next = itemsForFocus.find((it: any) => !merged.includes(it.id) && !(it.bipado === true));
+        const next = itemsForFocus.find((it: any) => !merged.includes(it.id));
         if (next) {
           const start = Date.now();
           const tryFocus = () => {
@@ -350,66 +357,49 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectWithBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras,bipado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
-      const selectWithoutBipado = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
-      // Tentar buscar por ID ou ID externo
-      let pedidoRow: any = null;
-      let pedErr: any = null;
-
-      // Primeira tentativa: buscar por id_externo
-      const res1: any = await supabase
+      // Tentar buscar por id_externo primeiro
+      let { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(selectWithBipado)
-        .eq('id_externo', pedidoId);
-
-      pedidoRow = res1.data?.[0];
-      pedErr = res1.error;
+        .select(selectQuery)
+        .eq('id_externo', pedidoId)
+        .maybeSingle();
 
       // Se não encontrou por id_externo, tenta por id
-      if (pedErr || !pedidoRow) {
-        const res2: any = await supabase
+      if (!pedidoData) {
+        const res = await supabase
           .from('pedidos')
-          .select(selectWithBipado)
-          .eq('id', pedidoId);
-
-        pedidoRow = res2.data?.[0];
-        pedErr = res2.error;
-      }
-
-      // Se ainda der erro de coluna bipado, tenta sem bipado
-      if (pedErr && (pedErr?.code === '42703' || String(pedErr?.message || '').includes('bipado'))) {
-        const res3: any = await supabase
-          .from('pedidos')
-          .select(selectWithoutBipado)
-          .or(`id_externo.eq.${pedidoId}`);
-
-        pedidoRow = res3.data?.[0];
-        pedErr = res3.error;
+          .select(selectQuery)
+          .eq('id', pedidoId)
+          .maybeSingle();
+        
+        pedidoData = res.data;
+        pedErr = res.error;
       }
 
       if (pedErr) throw pedErr;
 
-      if (!pedidoRow) {
+      if (!pedidoData) {
         throw new Error('Pedido não encontrado');
       }
 
-      console.log('Pedido encontrado manualmente:', pedidoRow);
+      console.log('Pedido encontrado manualmente:', pedidoData);
 
-      setFoundPedido(pedidoRow);
+      setFoundPedido(pedidoData);
       setFoundItemIds([]);
       setPedidoIdModalOpen(false);
       setPedidoIdInput('');
 
       toast({ 
         title: 'Pedido carregado', 
-        description: `Pedido ${pedidoRow.id_externo || pedidoRow.id} carregado com sucesso` 
+        description: `Pedido ${pedidoData.id_externo || pedidoData.id} carregado com sucesso` 
       });
 
       // Focar no primeiro item
       setTimeout(() => {
-        const items = pedidoRow?.itens_pedido || [];
-        const first = items.find((it: any) => !it.bipado);
+        const items = pedidoData?.itens_pedido || [];
+        const first = items[0];
         if (first && itemRefs.current[first.id]) {
           itemRefs.current[first.id]?.focus();
         } else {
@@ -566,41 +556,41 @@ export function Logistica() {
                   </div>
                 </CardHeader>
                 <CardContent className="mt-3">
+                  {/* Badges dos grupos (antes da lista de itens) */}
+                  {(() => {
+                    const items = foundPedido.itens_pedido || [];
+                    const gruposExibidos = new Set<string>();
+                    const badges = [];
+                    
+                    for (const it of items) {
+                      const item_referencia_id = it.variacao_id || it.produto_id;
+                      const grupoInfo = gruposAgrupados[item_referencia_id];
+                      
+                      if (grupoInfo && !gruposExibidos.has(item_referencia_id)) {
+                        gruposExibidos.add(item_referencia_id);
+                        badges.push(
+                          <Badge key={item_referencia_id} variant="secondary" className="text-sm font-medium px-3 py-1">
+                            {grupoInfo.nome_completo} - {grupoInfo.quantidade_total}x
+                          </Badge>
+                        );
+                      }
+                    }
+                    
+                    return badges.length > 0 ? (
+                      <div className="mb-4 flex flex-wrap items-center gap-2">
+                        {badges}
+                      </div>
+                    ) : null;
+                  })()}
+                  
                   <div className="space-y-3">
                     {(() => {
                       const items = foundPedido.itens_pedido || [];
                       
-                      // Agrupar itens por produto_id ou variacao_id
-                      const grupos: Record<string, { nome: string; quantidade: number; itens: any[] }> = {};
-                      
-                      items.forEach((it: any) => {
-                        const chave = it.variacao_id || it.produto_id || 'sem-id';
-                        const nome = it.variacao?.nome || it.produto?.nome || 'Produto sem nome';
-                        
-                        if (!grupos[chave]) {
-                          grupos[chave] = { nome, quantidade: 0, itens: [] };
-                        }
-                        
-                        grupos[chave].quantidade += 1;
-                        grupos[chave].itens.push(it);
-                      });
-                      
-                      // Renderizar itens agrupados
-                      return items.map((it: any, index: number) => {
-                        const chave = it.variacao_id || it.produto_id || 'sem-id';
-                        const grupo = grupos[chave];
-                        const isPrimeiroDoGrupo = grupo.itens[0].id === it.id;
-                        const mostrarBadge = grupo.quantidade > 1 && isPrimeiroDoGrupo;
-                        
+                      // Renderizar apenas os itens (sem badges)
+                      return items.map((it: any) => {
                         return (
                           <div key={it.id}>
-                            {mostrarBadge && (
-                              <div className="mb-2 flex items-center gap-2">
-                                <Badge variant="secondary" className="text-sm">
-                                  {grupo.nome} - {grupo.quantidade}x
-                                </Badge>
-                              </div>
-                            )}
                             <div className={`border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
                               <div className="flex items-center gap-3">
                           {it.produto?.img_url || it.variacao?.img_url ? (
