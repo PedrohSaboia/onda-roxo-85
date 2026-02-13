@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { /* header provided by AppLayout */ } from '@/components/layout/AppHeader';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
-import { Check, X, Pencil, SquarePlus, AlertCircle, Users } from 'lucide-react';
+import { Check, X, Pencil, SquarePlus, AlertCircle, Users, Search } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 type LeadRow = {
@@ -60,9 +60,10 @@ export default function Leads() {
   const [paymentValues, setPaymentValues] = useState<Record<string, string>>({});
   const [showCartaoDropdown, setShowCartaoDropdown] = useState(false);
   const cartaoDropdownRef = useRef<HTMLDivElement>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'pix' | 'carrinho'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pix' | 'carrinho' | 'typebot'>('all');
   const [pixCount, setPixCount] = useState<number>(0);
   const [carrinhoCount, setCarrinhoCount] = useState<number>(0);
+  const [typebotCount, setTypebotCount] = useState<number>(0);
 
   // formata input para moeda BR (ex: 1.234,56) enquanto o usuário digita
   const formatCurrencyInput = (value: string) => {
@@ -150,6 +151,8 @@ export default function Leads() {
           query = query.eq('tipo_de_lead_id', 1).eq('status_lead_id', 1);
         } else if (activeFilter === 'carrinho') {
           query = query.eq('tipo_de_lead_id', 2).eq('status_lead_id', 1);
+        } else if (activeFilter === 'typebot') {
+          query = query.eq('tipo_de_lead_id', 3).eq('status_lead_id', 1);
         }
 
         // Apply search filter in database query
@@ -225,9 +228,20 @@ export default function Leads() {
         
         if (carrinhoError) throw carrinhoError;
 
+        // Count Typebot leads (tipo_de_lead_id = 3, status_lead_id = 1, vendido = false or null)
+        const { count: typebotTotal, error: typebotError } = await (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 3)
+          .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false');
+        
+        if (typebotError) throw typebotError;
+
         if (!mounted) return;
         setPixCount(pixTotal || 0);
         setCarrinhoCount(carrinhoTotal || 0);
+        setTypebotCount(typebotTotal || 0);
       } catch (err: any) {
         console.error('Erro ao carregar contagens:', err);
       }
@@ -254,7 +268,7 @@ export default function Leads() {
       }
       
       // Reload counts to update badges in real-time
-      const [pixResp, carrinhoResp] = await Promise.all([
+      const [pixResp, carrinhoResp, typebotResp] = await Promise.all([
         (supabase as any)
           .from('leads')
           .select('*', { count: 'exact', head: true })
@@ -266,11 +280,18 @@ export default function Leads() {
           .select('*', { count: 'exact', head: true })
           .eq('tipo_de_lead_id', 2)
           .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false'),
+        (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 3)
+          .eq('status_lead_id', 1)
           .or('vendido.is.null,vendido.eq.false')
       ]);
       
       setPixCount(pixResp.count || 0);
       setCarrinhoCount(carrinhoResp.count || 0);
+      setTypebotCount(typebotResp.count || 0);
       
       toast({ title: 'Sucesso', description: 'Status atualizado' });
     } catch (err: any) {
@@ -364,53 +385,78 @@ export default function Leads() {
 
       <div className="flex-1 overflow-y-auto p-6">
         <div>
-            <div className="flex items-center justify-between mb-4">
-              <h1 className="text-2xl font-bold">Lista de Leads</h1>
-              <div className="flex items-center gap-4">
-                {/* Filter buttons with counts */}
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant={activeFilter === 'all' ? 'default' : 'outline'}
-                    onClick={() => setActiveFilter('all')}
-                    className="relative"
-                  >
-                    Todos
-                  </Button>
-                  <Button
-                    variant={activeFilter === 'pix' ? 'default' : 'outline'}
-                    onClick={() => setActiveFilter('pix')}
-                    className="relative"
-                  >
-                    Pix
-                    {pixCount > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {pixCount}
-                      </span>
-                    )}
-                  </Button>
-                  <Button
-                    variant={activeFilter === 'carrinho' ? 'default' : 'outline'}
-                    onClick={() => setActiveFilter('carrinho')}
-                    className="relative"
-                  >
-                    Carrinho Ab.
-                    {carrinhoCount > 0 && (
-                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                        {carrinhoCount}
-                      </span>
-                    )}
-                  </Button>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Input placeholder="Buscar lead" value={search} onChange={(e) => setSearch(e.target.value)} />
-                  <Button onClick={clearSearch} variant="secondary">Limpar</Button>
-                </div>
-              </div>
-            </div>
-
             <Card>
-              <CardHeader>
-                <CardTitle>Leads</CardTitle>
+              <CardHeader className="space-y-4">
+                <CardTitle>Lista de Leads</CardTitle>
+                
+                {/* Filter buttons and search in same row */}
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground mr-2">Filtrar por:</span>
+                    <Button
+                      variant={activeFilter === 'all' ? 'default' : 'outline'}
+                      onClick={() => setActiveFilter('all')}
+                      size="sm"
+                      className="relative"
+                    >
+                      Todos
+                    </Button>
+                    <Button
+                      variant={activeFilter === 'pix' ? 'default' : 'outline'}
+                      onClick={() => setActiveFilter('pix')}
+                      size="sm"
+                      className="relative"
+                    >
+                      Pix
+                      {pixCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                          {pixCount}
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      variant={activeFilter === 'carrinho' ? 'default' : 'outline'}
+                      onClick={() => setActiveFilter('carrinho')}
+                      size="sm"
+                      className="relative"
+                    >
+                      Carrinho Ab.
+                      {carrinhoCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                          {carrinhoCount}
+                        </span>
+                      )}
+                    </Button>
+                    <Button
+                      variant={activeFilter === 'typebot' ? 'default' : 'outline'}
+                      onClick={() => setActiveFilter('typebot')}
+                      size="sm"
+                      className="relative"
+                    >
+                      Typebot
+                      {typebotCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                          {typebotCount}
+                        </span>
+                      )}
+                    </Button>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input 
+                        placeholder="Buscar lead..." 
+                        value={search} 
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="w-80 pl-9"
+                      />
+                    </div>
+                    {search && (
+                      <Button onClick={clearSearch} variant="ghost" size="sm">Limpar</Button>
+                    )}
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 <Table>
@@ -435,7 +481,7 @@ export default function Leads() {
                             <div>
                               <p className="text-lg font-medium">Nenhum lead encontrado</p>
                               <p className="text-sm">
-                                {search ? 'Tente ajustar sua busca' : activeFilter === 'pix' ? 'Não há leads Pix pendentes' : activeFilter === 'carrinho' ? 'Não há leads de Carrinho Abandonado pendentes' : 'Não há leads cadastrados'}
+                                {search ? 'Tente ajustar sua busca' : activeFilter === 'pix' ? 'Não há leads Pix pendentes' : activeFilter === 'carrinho' ? 'Não há leads de Carrinho Abandonado pendentes' : activeFilter === 'typebot' ? 'Não há leads Typebot pendentes' : 'Não há leads cadastrados'}
                               </p>
                             </div>
                           </div>
