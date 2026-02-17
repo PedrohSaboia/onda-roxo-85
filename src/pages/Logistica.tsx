@@ -794,12 +794,29 @@ export function Logistica() {
                             const etiquetaData = await edgeResponse.json();
                             console.log('Etiqueta processada com sucesso:', etiquetaData);
 
-                            // Atualizar status do pedido
+                            // Verificar se houve erro ao processar a etiqueta
+                            if (etiquetaData?.etiqueta_error) {
+                              // Exibir notificação de erro em vermelho
+                              toast({
+                                title: '❌ Erro ao gerar etiqueta',
+                                description: etiquetaData.etiqueta_error,
+                                variant: 'destructive',
+                                duration: 10000,
+                              });
+                              
+                              console.error('Erro ao processar etiqueta:', etiquetaData.etiqueta_error);
+                              
+                              // NÃO limpar o pedido - deixar aberto para correção
+                              return;
+                            }
+
+                            // Atualizar status do pedido SOMENTE se a etiqueta foi gerada com sucesso
                             const { data: dataArray, error } = await supabase
                               .from('pedidos')
                               .update({ 
                                 status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
-                                data_enviado: new Date().toISOString()
+                                data_enviado: new Date().toISOString(),
+                                etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f'
                               })
                               .eq('id', foundPedido?.id)
                               .select('id, id_externo');
