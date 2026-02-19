@@ -37,6 +37,10 @@ export function Logistica() {
   const [pedidoIdModalOpen, setPedidoIdModalOpen] = useState(false);
   const [pedidoIdInput, setPedidoIdInput] = useState('');
   const [loadingPedidoManual, setLoadingPedidoManual] = useState(false);
+  
+  // Estados para pedido já enviado
+  const [pedidoJaEnviadoModalOpen, setPedidoJaEnviadoModalOpen] = useState(false);
+  const [pedidoJaEnviado, setPedidoJaEnviado] = useState<any | null>(null);
 
   // Buscar saldo do Melhor Envio
   const fetchSaldoMelhorEnvio = async () => {
@@ -357,7 +361,7 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,shipping_id,remetente_id,status_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       // Tentar buscar por id_externo primeiro
       let { data: pedidoData, error: pedErr } = await supabase
@@ -385,6 +389,14 @@ export function Logistica() {
       }
 
       console.log('Pedido encontrado manualmente:', pedidoData);
+
+      // Verificar se o pedido já foi enviado
+      if (pedidoData.status_id === 'fa6b38ba-1d67-4bc3-821e-ab089d641a25') {
+        setPedidoJaEnviado(pedidoData);
+        setPedidoIdModalOpen(false);
+        setPedidoJaEnviadoModalOpen(true);
+        return;
+      }
 
       setFoundPedido(pedidoData);
       setFoundItemIds([]);
@@ -417,6 +429,28 @@ export function Logistica() {
     } finally {
       setLoadingPedidoManual(false);
     }
+  };
+
+  const handleConfirmarPedidoJaEnviado = () => {
+    if (!pedidoJaEnviado) return;
+
+    // Carregar o pedido e marcar todos os itens como já bipados
+    setFoundPedido(pedidoJaEnviado);
+    const todosIds = (pedidoJaEnviado.itens_pedido || []).map((item: any) => item.id);
+    setFoundItemIds(todosIds);
+    
+    // Fechar modais e limpar estados
+    setPedidoJaEnviadoModalOpen(false);
+    setPedidoJaEnviado(null);
+    setPedidoIdInput('');
+
+    toast({ 
+      title: 'Pedido carregado', 
+      description: `Pedido ${pedidoJaEnviado.id_externo || pedidoJaEnviado.id} pronto para regerar etiqueta` 
+    });
+
+    // Focar no input principal já que não precisa bipar
+    setTimeout(() => barcodeRef.current?.focus(), 100);
   };
 
  return (
@@ -973,6 +1007,38 @@ export function Logistica() {
             </Button>
             <Button onClick={handleBuscarPedidoPorId} disabled={loadingPedidoManual}>
               {loadingPedidoManual ? 'Buscando...' : 'Buscar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Pedido Já Enviado */}
+      <Dialog open={pedidoJaEnviadoModalOpen} onOpenChange={setPedidoJaEnviadoModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>⚠️ Pedido Já Enviado</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-center text-muted-foreground mb-4">
+              Este pedido já foi enviado anteriormente.
+            </p>
+            <p className="text-center font-medium">
+              Deseja gerar a etiqueta novamente?
+            </p>
+          </div>
+          <DialogFooter className="flex justify-center">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setPedidoJaEnviadoModalOpen(false);
+                setPedidoJaEnviado(null);
+                setPedidoIdModalOpen(true);
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmarPedidoJaEnviado}>
+              Confirmar
             </Button>
           </DialogFooter>
         </DialogContent>
