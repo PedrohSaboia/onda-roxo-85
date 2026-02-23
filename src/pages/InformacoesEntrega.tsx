@@ -183,12 +183,50 @@ export default function InformacoesEntrega() {
     }
     try {
       setBuscandoCep(true);
-      const resp = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`);
-      const data = await resp.json();
-      if (data.erro) {
-        toast({ title: 'Erro', description: 'CEP não encontrado.', variant: 'destructive' });
+      const url = `https://viacep.com.br/ws/${cepLimpo}/json/`;
+      console.log('[ViaCEP] Iniciando busca. URL:', url);
+      console.log('[ViaCEP] CEP limpo:', cepLimpo, '| Tamanho:', cepLimpo.length);
+
+      const resp = await fetch(url);
+      console.log('[ViaCEP] Response status:', resp.status, resp.statusText);
+      console.log('[ViaCEP] Response ok:', resp.ok);
+      console.log('[ViaCEP] Response headers:', Object.fromEntries(resp.headers.entries()));
+
+      const rawText = await resp.text();
+      console.log('[ViaCEP] Response raw text:', rawText);
+
+      let data: any;
+      try {
+        data = JSON.parse(rawText);
+        console.log('[ViaCEP] JSON parsed com sucesso:', data);
+      } catch (parseErr) {
+        console.error('[ViaCEP] Erro ao parsear JSON:', parseErr);
+        console.error('[ViaCEP] Texto recebido (primeiros 500 chars):', rawText.slice(0, 500));
+        toast({ title: 'Erro', description: 'Resposta inválida do ViaCEP (não é JSON)', variant: 'destructive' });
         return;
       }
+
+      if (!data || typeof data !== 'object') {
+        console.error('[ViaCEP] Resposta não é um objeto válido. Tipo:', typeof data, '| Valor:', data);
+        toast({ title: 'Erro', description: 'Resposta inesperada do ViaCEP', variant: 'destructive' });
+        return;
+      }
+
+      if (data.erro) {
+        console.warn('[ViaCEP] API retornou erro. Campo "erro":', data.erro, '— continuando com campos vazios para preenchimento manual');
+        // CEP não encontrado: limpa campos e permite preenchimento manual
+        updateField('endereco', '');
+        updateField('bairro', '');
+        updateField('cidade', '');
+        updateField('estado', '');
+        setCepBuscado(true);
+        setStep(2);
+        toast({ title: 'Atenção', description: 'CEP não encontrado. Preencha o endereço manualmente.', variant: 'default' });
+        return;
+      }
+
+      console.log('[ViaCEP] Dados extraídos - logradouro:', data.logradouro, '| bairro:', data.bairro, '| localidade:', data.localidade, '| uf:', data.uf, '| complemento:', data.complemento);
+
       updateField('endereco', data.logradouro || '');
       updateField('bairro', data.bairro || '');
       updateField('cidade', data.localidade || '');
@@ -198,17 +236,23 @@ export default function InformacoesEntrega() {
       setCepBuscado(true);
       
       if (data.logradouro && data.bairro) {
+        console.log('[ViaCEP] Endereço preenchido automaticamente com sucesso');
         toast({ title: 'Sucesso', description: 'Endereço preenchido automaticamente' });
       } else {
+        console.warn('[ViaCEP] CEP encontrado mas campos incompletos. logradouro:', data.logradouro, '| bairro:', data.bairro);
         toast({ title: 'Atenção', description: 'CEP encontrado. Preencha os campos manualmente.', variant: 'default' });
       }
       // advance to step 2 so the user can fill number/complement and save
       setStep(2);
-    } catch (err) {
-      console.error(err);
-      toast({ title: 'Erro', description: 'Erro ao buscar CEP', variant: 'destructive' });
+      console.log('[ViaCEP] Busca finalizada com sucesso. Step avançado para 2.');
+    } catch (err: any) {
+      console.error('[ViaCEP] Exceção na busca do CEP:', err);
+      console.error('[ViaCEP] Erro name:', err?.name, '| message:', err?.message);
+      console.error('[ViaCEP] Stack trace:', err?.stack);
+      toast({ title: 'Erro', description: `Erro ao buscar CEP: ${err?.message || String(err)}`, variant: 'destructive' });
     } finally {
       setBuscandoCep(false);
+      console.log('[ViaCEP] setBuscandoCep(false) executado');
     }
   };
 
@@ -366,8 +410,18 @@ export default function InformacoesEntrega() {
             {/* Show fields after CEP is searched, regardless of what data was returned */}
             {cepBuscado ? (
               <div>
-                <label className="block text-sm font-medium text-gray-700">Cidade / UF</label>
-                <input className="w-full p-3 border rounded-md mb-3" value={`${cliente.cidade || ''} / ${cliente.estado || ''}`} readOnly />
+                <div className="flex flex-col sm:flex-row gap-3 mb-3">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700">Cidade *</label>
+                    <input className={`w-full p-3 border rounded-md ${!cliente.cidade ? 'border-red-600' : ''}`} value={cliente.cidade || ''} onChange={(e) => updateField('cidade', e.target.value)} />
+                    {!cliente.cidade && <div className="text-sm text-red-600 mt-1">Cidade obrigatória</div>}
+                  </div>
+                  <div className="w-full sm:w-24">
+                    <label className="block text-sm font-medium text-gray-700">UF *</label>
+                    <input className={`w-full p-3 border rounded-md ${!cliente.estado ? 'border-red-600' : ''}`} maxLength={2} value={cliente.estado || ''} onChange={(e) => updateField('estado', e.target.value.toUpperCase())} />
+                    {!cliente.estado && <div className="text-sm text-red-600 mt-1">UF obrigatória</div>}
+                  </div>
+                </div>
 
                 <label className="block text-sm font-medium text-gray-700">Endereço *</label>
                 <input className="w-full p-3 border rounded-md mb-3" value={cliente.endereco || ''} onChange={(e) => updateField('endereco', e.target.value)} />
