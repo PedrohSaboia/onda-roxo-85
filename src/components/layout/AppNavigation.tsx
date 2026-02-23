@@ -1,4 +1,4 @@
-import { Home, Package, Palette, Cog, Truck, BarChart3, Users, Settings, Calculator } from 'lucide-react';
+import { Home, Package, Palette, Cog, Truck, BarChart3, Users, Settings, Calculator, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 interface NavigationItem {

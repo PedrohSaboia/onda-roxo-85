@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
-import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard, AlertCircle } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard, AlertCircle, History } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -16,6 +16,204 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Search, Download, Calendar, User, FileText, Package, RefreshCw } from 'lucide-react';
+import { buscarHistoricoMovimentacoes, type HistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Skeleton } from '@/components/ui/skeleton';
+import { CardDescription } from '@/components/ui/card';
+
+// Componente de Histórico
+function HistoricoTab() {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [movimentacoes, setMovimentacoes] = useState<HistoricoMovimentacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filteredMovimentacoes, setFilteredMovimentacoes] = useState<HistoricoMovimentacao[]>([]);
+  const { toast } = useToast();
+
+  const carregarMovimentacoes = async () => {
+    setLoading(true);
+    try {
+      const { data, error } = await buscarHistoricoMovimentacoes({ limit: 100 });
+      
+      if (error) {
+        toast({
+          title: "Erro ao carregar movimentações",
+          description: "Não foi possível carregar o histórico de movimentações",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setMovimentacoes(data || []);
+      setFilteredMovimentacoes(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar movimentações:", error);
+      toast({
+        title: "Erro ao carregar movimentações",
+        description: "Ocorreu um erro inesperado",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarMovimentacoes();
+  }, []);
+
+  useEffect(() => {
+    if (!searchTerm) {
+      setFilteredMovimentacoes(movimentacoes);
+      return;
+    }
+
+    const term = searchTerm.toLowerCase();
+    const filtered = movimentacoes.filter((mov) => {
+      return (
+        mov.alteracao?.toLowerCase().includes(term) ||
+        mov.usuario?.nome?.toLowerCase().includes(term) ||
+        mov.usuario?.email?.toLowerCase().includes(term) ||
+        mov.pedido?.id_externo?.toLowerCase().includes(term)
+      );
+    });
+
+    setFilteredMovimentacoes(filtered);
+  }, [searchTerm, movimentacoes]);
+
+  const exportarCSV = () => {
+    const headers = ['Data/Hora', 'Usuário', 'Pedido', 'Alteração'];
+    const rows = filteredMovimentacoes.map(mov => [
+      format(new Date(mov.created_at), 'dd/MM/yyyy HH:mm:ss'),
+      mov.usuario?.nome || 'Automático do Banco de Dados',
+      mov.pedido?.id_externo || '-',
+      mov.alteracao || '-'
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `historico_movimentacoes_${format(new Date(), 'yyyy-MM-dd_HHmmss')}.csv`;
+    link.click();
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Histórico de Movimentações</CardTitle>
+              <CardDescription>Visualize e acompanhe todas as movimentações de pedidos do sistema</CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={carregarMovimentacoes}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Atualizar
+              </Button>
+              <Button variant="outline" size="sm" onClick={exportarCSV} disabled={filteredMovimentacoes.length === 0}>
+                <Download className="h-4 w-4 mr-2" />
+                Exportar CSV
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="flex gap-2 mb-4">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar movimentações..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+              />
+            </div>
+          </div>
+          {searchTerm && (
+            <p className="text-sm text-muted-foreground mb-4">
+              {filteredMovimentacoes.length} resultado(s) encontrado(s)
+            </p>
+          )}
+          
+          {loading ? (
+            <div className="space-y-2">
+              {[...Array(5)].map((_, i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : filteredMovimentacoes.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p className="font-medium">Nenhuma movimentação encontrada</p>
+              <p className="text-sm mt-2">
+                As movimentações aparecerão aqui conforme forem registradas
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[180px]">
+                      <Calendar className="h-4 w-4 inline mr-1" />
+                      Data/Hora
+                    </TableHead>
+                    <TableHead>
+                      <User className="h-4 w-4 inline mr-1" />
+                      Usuário
+                    </TableHead>
+                    <TableHead>
+                      <FileText className="h-4 w-4 inline mr-1" />
+                      Pedido
+                    </TableHead>
+                    <TableHead>Alteração</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredMovimentacoes.map((mov) => (
+                    <TableRow key={mov.id}>
+                      <TableCell className="font-mono text-sm">
+                        {format(new Date(mov.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={mov.usuario?.img_url} />
+                            <AvatarFallback className="bg-custom-100 text-custom-700 text-xs">
+                              {mov.usuario?.nome?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'BD'}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">{mov.usuario?.nome || 'Automático do Banco de Dados'}</span>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        {mov.pedido?.id_externo ? (
+                          <Badge variant="outline">{mov.pedido.id_externo}</Badge>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-md">
+                        <span className="text-sm">{mov.alteracao}</span>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export function Configuracoes() {
   const [darkMode, setDarkMode] = useState(() => {
@@ -415,6 +613,8 @@ export function Configuracoes() {
       if (stored) {
         const parsed = JSON.parse(stored) as Setor[];
         
+        let needsSave = false;
+        
         // Migração: garantir que contabilidade existe
         const hasContabilidade = parsed.some(s => s.id === 'contabilidade');
         if (!hasContabilidade) {
@@ -427,15 +627,36 @@ export function Configuracoes() {
               rota: '/contabilidade',
               ordem: logisticaIndex + 1
             });
-            // Reordenar todos após a inserção
-            parsed.forEach((s, idx) => {
-              s.ordem = idx;
-            });
-            // Salvar a versão migrada
-            localStorage.setItem('setores', JSON.stringify(parsed));
-            setSetores(parsed);
-            return;
+            needsSave = true;
           }
+        }
+        
+        // Migração: garantir que historico-movimentacoes existe
+        const hasHistorico = parsed.some(s => s.id === 'historico-movimentacoes');
+        if (!hasHistorico) {
+          // Adicionar histórico antes de configurações
+          const configIndex = parsed.findIndex(s => s.id === 'configuracoes');
+          if (configIndex !== -1) {
+            parsed.splice(configIndex, 0, {
+              id: 'historico-movimentacoes',
+              nome: 'Histórico de Movimentações',
+              rota: '/historico-movimentacoes',
+              ordem: configIndex
+            });
+            needsSave = true;
+          }
+        }
+        
+        if (needsSave) {
+          // Reordenar todos após as inserções
+          parsed.forEach((s, idx) => {
+            s.ordem = idx;
+          });
+          // Salvar a versão migrada
+          localStorage.setItem('setores', JSON.stringify(parsed));
+          setSetores(parsed);
+          window.dispatchEvent(new Event('setores-updated'));
+          return;
         }
         
         setSetores(parsed.sort((a, b) => a.ordem - b.ordem));
@@ -444,11 +665,12 @@ export function Configuracoes() {
         const defaultSetores: Setor[] = [
           { id: 'home', nome: 'Home', rota: '/', ordem: 0 },
           { id: 'comercial', nome: 'Comercial', rota: '/comercial', ordem: 1 },
-          { id: 'producao', nome: 'Produ\u00e7\u00e3o', rota: '/producao', ordem: 2 },
-          { id: 'logistica', nome: 'Log\u00edstica', rota: '/logistica', ordem: 3 },
+          { id: 'producao', nome: 'Produção', rota: '/producao', ordem: 2 },
+          { id: 'logistica', nome: 'Logística', rota: '/logistica', ordem: 3 },
           { id: 'estoque', nome: 'Estoque', rota: '/estoque', ordem: 4 },
           { id: 'contabilidade', nome: 'Contabilidade', rota: '/contabilidade', ordem: 5 },
-          { id: 'configuracoes', nome: 'Configura\u00e7\u00f5es', rota: '/configuracoes', ordem: 5 },
+          { id: 'historico-movimentacoes', nome: 'Histórico de Movimentações', rota: '/historico-movimentacoes', ordem: 6 },
+          { id: 'configuracoes', nome: 'Configurações', rota: '/configuracoes', ordem: 7 },
         ];
         setSetores(defaultSetores);
         localStorage.setItem('setores', JSON.stringify(defaultSetores));
@@ -796,7 +1018,7 @@ export function Configuracoes() {
       </div>
 
       <Tabs defaultValue="usuarios" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="usuarios">
             <Users className="h-4 w-4 mr-2" />
             Usuários
@@ -813,6 +1035,10 @@ export function Configuracoes() {
           <TabsTrigger value="formas-pagamento">
             <CreditCard className="h-4 w-4 mr-2" />
             Formas de Pagamentos
+          </TabsTrigger>
+          <TabsTrigger value="historico">
+            <History className="h-4 w-4 mr-2" />
+            Histórico
           </TabsTrigger>
           <TabsTrigger value="preferencias">
             <Palette className="h-4 w-4 mr-2" />
@@ -2153,6 +2379,10 @@ export function Configuracoes() {
           </Dialog>
           </>
           )}
+        </TabsContent>
+
+        <TabsContent value="historico">
+          <HistoricoTab />
         </TabsContent>
 
         <TabsContent value="preferencias">

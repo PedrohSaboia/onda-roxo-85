@@ -11,6 +11,7 @@ import { /* header provided by AppLayout */ } from '@/components/layout/AppHeade
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import { Check, X, Pencil, SquarePlus, AlertCircle, Users, Search } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 type LeadRow = {
   id: string;
@@ -888,6 +889,9 @@ export default function Leads() {
                             }
 
                             toast({ title: 'Pedido criado', description: `Pedido criado para ${activeLead.nome}` });
+                            if (pedidoId) {
+                              await registrarHistoricoMovimentacao(pedidoId, `Pedido criado a partir do lead: ${activeLead.nome || 'N/A'}`);
+                            }
                             setAddOpen(false);
                             setActiveLead(null);
 

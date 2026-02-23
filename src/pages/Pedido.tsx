@@ -4,7 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Trash, Copy, Edit, CalendarIcon, Pencil } from 'lucide-react';
+import { Trash, Copy, Edit, CalendarIcon, Pencil, History, Search, Download, Calendar as CalendarDays, User, FileText, Package, RefreshCw, UserCircle } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import EmbalagensManager from '@/components/shipping/EmbalagensManager';
@@ -21,6 +21,10 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
+import { buscarHistoricoMovimentacoes, type HistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 
 function formatAddress(cliente: any) {
   if (!cliente) return '-';
@@ -34,7 +38,196 @@ function formatAddress(cliente: any) {
   if (cityParts.length) parts.push(cityParts.join(' / '));
   if (cliente.cep) parts.push(`CEP: ${cliente.cep}`);
   return parts.join(' • ');
-} 
+}
+
+// Componente de Histórico do Pedido
+function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [movimentacoes, setMovimentacoes] = useState<HistoricoMovimentacao[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filteredMovimentacoes, setFilteredMovimentacoes] = useState<HistoricoMovimentacao[]>([]);
+  const { toast } = useToast();
+
+  const carregarMovimentacoes = async () => {
+    if (!pedidoId) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await buscarHistoricoMovimentacoes({ pedidoId: pedidoId });
+      
+      if (error) {
+        toast({
+          title: "Erro ao carregar histórico",
+          description: "Não foi possível carregar o histórico do pedido",
+          variant: "destructive"
+        });
+        return;
+      }
+
+      setMovimentacoes(data || []);
+      setFilteredMovimentacoes(data || []);
+    } catch (error) {
+      console.error("Erro ao carregar histórico:", error);
+      toast({
+        title: "Erro ao carregar histórico",
+        description: "Ocorreu um erro inesperado",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    carregarMovimentacoes();
+  }, [pedidoId]);
+
+  useEffect(() => {
+    if (!searchTerm) {
+      setFilteredMovimentacoes(movimentacoes);
+      return;
+    }
+
+    const term = searchTerm.toLowerCase();
+    const filtered = movimentacoes.filter((mov) => {
+      return (
+        mov.alteracao?.toLowerCase().includes(term) ||
+        mov.usuario?.nome?.toLowerCase().includes(term) ||
+        mov.usuario?.email?.toLowerCase().includes(term)
+      );
+    });
+
+    setFilteredMovimentacoes(filtered);
+  }, [searchTerm, movimentacoes]);
+
+  const exportarCSV = () => {
+    const headers = ['Data/Hora', 'Usuário', 'Alteração'];
+    const rows = filteredMovimentacoes.map(mov => [
+      format(new Date(mov.created_at), 'dd/MM/yyyy HH:mm:ss'),
+      mov.usuario?.nome || 'Automático do Banco de Dados',
+      mov.alteracao || '-'
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `historico_pedido_${pedidoId}_${format(new Date(), 'yyyy-MM-dd_HHmmss')}.csv`;
+    link.click();
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Histórico do Pedido</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Todas as movimentações registradas para este pedido
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={carregarMovimentacoes}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Atualizar
+            </Button>
+            <Button variant="outline" size="sm" onClick={exportarCSV} disabled={filteredMovimentacoes.length === 0}>
+              <Download className="h-4 w-4 mr-2" />
+              Exportar CSV
+            </Button>
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="flex gap-2 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar no histórico..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+        </div>
+        {searchTerm && (
+          <p className="text-sm text-muted-foreground mb-4">
+            {filteredMovimentacoes.length} resultado(s) encontrado(s)
+          </p>
+        )}
+        
+        {loading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <Skeleton key={i} className="h-16 w-full" />
+            ))}
+          </div>
+        ) : filteredMovimentacoes.length === 0 ? (
+          <div className="text-center py-12 text-muted-foreground">
+            <Package className="h-12 w-12 mx-auto mb-4 opacity-50" />
+            <p className="font-medium">Nenhuma movimentação registrada</p>
+            <p className="text-sm mt-2">
+              O histórico aparecerá aqui conforme ações forem realizadas
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[180px]">
+                    <CalendarDays className="h-4 w-4 inline mr-1" />
+                    Data/Hora
+                  </TableHead>
+                  <TableHead>
+                    <User className="h-4 w-4 inline mr-1" />
+                    Usuário
+                  </TableHead>
+                  <TableHead>Alteração</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredMovimentacoes.map((mov) => (
+                  <TableRow key={mov.id}>
+                    <TableCell className="font-mono text-sm">
+                      {format(new Date(mov.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        {mov.usuario ? (
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={mov.usuario.img_url || undefined} />
+                            <AvatarFallback className="bg-primary/10 text-primary">
+                              {mov.usuario.nome?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                            </AvatarFallback>
+                          </Avatar>
+                        ) : (
+                          <Avatar className="h-8 w-8">
+                            <AvatarFallback className="bg-muted">
+                              <UserCircle className="h-4 w-4 text-muted-foreground" />
+                            </AvatarFallback>
+                          </Avatar>
+                        )}
+                        <span className="font-medium text-sm">{mov.usuario?.nome || 'Automático do Banco de Dados'}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm">{mov.alteracao}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 export default function Pedido() {
   const { id } = useParams();
@@ -196,6 +389,7 @@ export default function Pedido() {
           
           if (error) throw error;
           
+          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (up-sell resolvido)');
           toast({ title: 'Pedido liberado automaticamente', description: 'Produto de up-sell foi resolvido' });
           return;
         }
@@ -241,6 +435,7 @@ export default function Pedido() {
           
           if (error) throw error;
           
+          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (todos up-sell resolvidos)');
           toast({ title: 'Pedido liberado automaticamente', description: 'Todos os produtos de up-sell foram resolvidos' });
         }
       }
@@ -531,7 +726,7 @@ export default function Pedido() {
         const [{ data: pedidoData, error: pedidoError }, { data: plataformasData, error: plataformasError }, { data: statusesData, error: statusesError }, { data: usuariosData, error: usuariosError }, { data: etiquetasData, error: etiquetasError }] = await Promise.all([
           supabase
             .from('pedidos')
-            .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, status_up_sell, produto:produtos(id,nome,sku,img_url,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,img_url,valor)), lista_pagamentos(formas_pagamentos_id, valor, formas_pagamentos(id, nome, img_url))`)
+            .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, status_up_sell, pintado, produto:produtos(id,nome,sku,img_url,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,img_url,valor)), lista_pagamentos(formas_pagamentos_id, valor, formas_pagamentos(id, nome, img_url))`)
             .eq('id', id)
             .single(),
           supabase.from('plataformas').select('*').order('nome'),
@@ -584,6 +779,7 @@ export default function Pedido() {
             produto_id: produtoData?.id || null,
             variacao_id: variacaoData?.id || null,
             status_up_sell: it.status_up_sell || null,
+            pintado: it.pintado || false,
           };
         });
         
@@ -745,6 +941,7 @@ export default function Pedido() {
 
       if (error) throw error;
 
+      await registrarHistoricoMovimentacao(pedido.id, 'Pedido salvo (status, responsável, observações, link etiqueta)');
       toast({ title: 'Pedido atualizado', description: 'Alterações salvas com sucesso' });
       // refresh
       navigate(0);
@@ -766,6 +963,7 @@ export default function Pedido() {
         .eq('id', id);
 
       if (error) throw error;
+      await registrarHistoricoMovimentacao(id, 'Link da etiqueta salvo');
       toast({ title: 'Link salvo', description: 'Link da etiqueta salvo com sucesso' });
       // refresh to show updated value if needed
       navigate(0);
@@ -902,6 +1100,7 @@ export default function Pedido() {
       
       if (error) throw error;
 
+      await registrarHistoricoMovimentacao(id, `Frete selecionado: ${cotacao?.transportadora || 'N/A'} - ${cotacao?.modalidade || ''} - R$ ${cotacao?.preco || '0'}`);
       toast({ title: 'Sucesso', description: 'Frete selecionado e salvo no pedido' });
       setCotacaoModal(false);
       
@@ -988,6 +1187,7 @@ export default function Pedido() {
 
       if (updateError) throw updateError;
 
+      await registrarHistoricoMovimentacao(pedido.id, 'Etiqueta comprada pelo Melhor Envio - Enviado para Logística');
       toast({ 
         title: 'Sucesso', 
         description: 'Etiqueta processada e pedido atualizado com sucesso' 
@@ -1163,6 +1363,7 @@ export default function Pedido() {
 
       if (updateError) throw updateError;
 
+      await registrarHistoricoMovimentacao(pedido.id, `Upload de ${uploadedUrls.length} etiqueta(s)`);
       toast({
         title: 'Etiquetas enviadas',
         description: `${uploadedUrls.length} etiqueta(s) foram carregadas e salvas com sucesso`
@@ -1189,6 +1390,8 @@ export default function Pedido() {
   const handleDeletePedido = async () => {
     if (!pedido) return;
     try {
+      // Registrar histórico ANTES de deletar
+      await registrarHistoricoMovimentacao(pedido.id, `Pedido excluído (id_externo: ${pedido.id_externo || 'N/A'})`);
       // delete itens_pedido first
       const { error: delItemsErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', pedido.id);
       if (delItemsErr) throw delItemsErr;
@@ -1289,6 +1492,7 @@ export default function Pedido() {
                   
                   if (error) throw error;
                   
+                  await registrarHistoricoMovimentacao(pedido.id, 'Envio revertido - Status voltou para Logística');
                   toast({ 
                     title: 'Status revertido', 
                     description: 'Pedido voltou para Logística' 
@@ -1356,6 +1560,7 @@ export default function Pedido() {
                     .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() } as any)
                     .eq('id', pedido.id);
                   if (error) throw error;
+                  await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado manualmente');
                   // update local state so button disappears
                   setPedido((p: any) => ({ ...p, pedido_liberado: true }));
                   toast({ title: 'Pedido liberado', description: 'Pedido liberado com sucesso' });
@@ -1476,6 +1681,7 @@ export default function Pedido() {
                                       if (deleteError) throw deleteError;
                                     }
 
+                                    await registrarHistoricoMovimentacao(pedido.id, `Forma de pagamento ${e.target.checked ? 'adicionada' : 'removida'}: ${forma.nome}`);
                                     toast({
                                       title: 'Forma de pagamento atualizada',
                                       description: `${forma.nome} ${e.target.checked ? 'adicionado' : 'removido'}`
@@ -1693,6 +1899,7 @@ export default function Pedido() {
           <TabsTrigger value="entrega">Entrega</TabsTrigger>
           <TabsTrigger value="tempo-ganho">Tempo Ganho</TabsTrigger>
           <TabsTrigger value="subir-etiqueta">Subir etiqueta</TabsTrigger>
+          <TabsTrigger value="historico">Histórico</TabsTrigger>
         </TabsList>
 
         <TabsContent value="resumo">
@@ -1726,40 +1933,39 @@ export default function Pedido() {
                 </TableHeader>
                 <TableBody>
                   {pedido?.itens?.length ? (() => {
-                    // group items by produto id + variacao id + preco_unitario to combine equal items
-                    // BUT DO NOT group items with up_cell=true (they must remain separate for individual up-sell)
-                    const grouped: Record<string, any> = {};
-                    const ungrouped: any[] = [];
+                    // Mostrar cada item individualmente da tabela itens_pedido (sem agrupamento)
+                    const items = pedido.itens || [];
                     
-                    (pedido.itens || []).forEach((it: any) => {
-                      // If product has up_cell, don't group it
-                      if (it.produto?.up_cell) {
-                        ungrouped.push({ ...it, quantidade: Number(it.quantidade || 1), _sourceIds: [it.id] });
-                        return;
-                      }
-                      
-                      const prodId = it.produto?.id || it.produto_id || '';
-                      const varId = it.variacao?.id || it.variacao_id || '';
-                      const price = String(it.preco_unitario ?? it.preco ?? 0);
-                      const key = `${prodId}::${varId}::${price}`;
-                      if (!grouped[key]) {
-                        grouped[key] = { ...it, quantidade: Number(it.quantidade || 0), _sourceIds: [it.id] };
-                      } else {
-                        grouped[key].quantidade = Number(grouped[key].quantidade || 0) + Number(it.quantidade || 0);
-                        grouped[key]._sourceIds.push(it.id);
-                      }
-                    });
+                    console.log('ITENS INDIVIDUAIS (sem agrupamento):', items.map((it: any) => ({
+                      id: it.id,
+                      nome: it.produto?.nome,
+                      variacao: it.variacao?.nome,
+                      pintado: it.pintado,
+                      pintado_type: typeof it.pintado,
+                      produto_id: it.produto?.id || it.produto_id
+                    })));
                     
-                    const groupedArray = [...Object.values(grouped), ...ungrouped];
-                    return groupedArray.map((item: any) => (
-                    <TableRow key={item._sourceIds?.[0] || item.id}>
+                    return items.map((item: any) => (
+                    <TableRow key={item.id}>
                       <TableCell>
-                        <div className="flex items-center gap-3">
+                        <div className="relative flex items-center gap-3">
+                          {item.pintado === true && (
+                            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-end pr-24">
+                              <Badge 
+                                variant="default"
+                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-3 py-0.5"
+                              >
+                                PINTADO
+                              </Badge>
+                            </div>
+                          )}
                           {item.produto?.img_url || item.variacao?.img_url ? (
                             <img src={item.variacao?.img_url || item.produto?.img_url} alt={item.produto?.nome || item.variacao?.nome} className="w-10 h-10 rounded object-cover" />
                           ) : null}
                           <div>
-                            <div className="font-medium">{item.produto?.nome || 'Produto'}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{item.produto?.nome || 'Produto'}</span>
+                            </div>
                             {item.variacao?.nome && (
                               <div className="text-sm text-muted-foreground">{item.variacao.nome}</div>
                             )}
@@ -1826,7 +2032,7 @@ export default function Pedido() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; const canDelete = hasPermissao ? hasPermissao(26) : (permissoes ?? []).includes(26); if (!canDelete) { toast({ title: 'Você não tem permissão para isso', variant: 'destructive' }); return; } /* target first source id for removal modal */ const toRemove = { ...item, id: (item._sourceIds && item._sourceIds[0]) || item.id }; setProductToRemove(toRemove); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
+                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; const canDelete = hasPermissao ? hasPermissao(26) : (permissoes ?? []).includes(26); if (!canDelete) { toast({ title: 'Você não tem permissão para isso', variant: 'destructive' }); return; } setProductToRemove(item); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
                             <Trash className="h-4 w-4" />
                           </Button>
                         </div>
@@ -1939,6 +2145,10 @@ export default function Pedido() {
                               .update({ urgente: next, atualizado_em: new Date().toISOString() } as any)
                               .eq('id', pedido.id);
                             if (error) throw error;
+                            await registrarHistoricoMovimentacao(
+                              pedido.id,
+                              next ? 'Pedido marcado como urgente' : 'Pedido removido do urgente'
+                            );
                             setPedido((p: any) => p ? ({ ...p, urgente: next }) : p);
                             toast({ title: 'Atualizado', description: `Urgente ${next ? 'ativado' : 'desativado'}` });
                           } catch (err: any) {
@@ -2103,6 +2313,7 @@ export default function Pedido() {
                             .eq('id', id);
 
                           if (error) throw error;
+                          await registrarHistoricoMovimentacao(id, 'Etiqueta Melhor Envio cancelada');
                           toast({ title: 'Sucesso', description: 'Etiqueta cancelada' });
                           navigate(0);
                         } catch (err) {
@@ -2197,6 +2408,7 @@ export default function Pedido() {
                           .eq('id', id);
                         
                         if (error) throw error;
+                        await registrarHistoricoMovimentacao(id, 'Tempo ganho removido do pedido');
                         
                         toast({
                           title: "Sucesso",
@@ -2283,6 +2495,10 @@ export default function Pedido() {
                           .eq('id', id);
                         
                         if (error) throw error;
+                        await registrarHistoricoMovimentacao(
+                          id,
+                          `Tempo ganho definido para: ${format(tempoGanho, "dd/MM/yyyy", { locale: ptBR })}`
+                        );
                         
                         toast({
                           title: "Sucesso",
@@ -2520,6 +2736,7 @@ export default function Pedido() {
                                       
                                       if (error) throw error;
                                       
+                                      await registrarHistoricoMovimentacao(pedido.id, 'Etiqueta removida do pedido');
                                       toast({
                                         title: 'Etiqueta removida',
                                         description: 'A etiqueta foi removida com sucesso do banco e do storage'
@@ -2569,6 +2786,10 @@ export default function Pedido() {
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+        
+        <TabsContent value="historico">
+          <HistoricoTabPedido pedidoId={id} />
         </TabsContent>
       </Tabs>
 
@@ -2670,6 +2891,25 @@ export default function Pedido() {
 
                   const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
                   if (updErr) throw updErr;
+
+                  // Registrar no histórico de movimentações
+                  try {
+                    let nomeProduto = productToRemove?.produto?.nome || productToRemove?.nome_produto || 'Produto';
+                    
+                    // Adicionar variação se existir
+                    if (productToRemove?.variacao?.nome) {
+                      nomeProduto = `${nomeProduto} - ${productToRemove.variacao.nome}`;
+                    }
+                    
+                    const precoItem = Number(productToRemove?.preco_unitario || 0).toFixed(2);
+                    const valorRemovido = providedValue.toFixed(2);
+                    
+                    const mensagem = `Produto removido: ${nomeProduto} | Preço: R$ ${precoItem} | Valor subtraído do pedido: R$ ${valorRemovido}`;
+                    
+                    await registrarHistoricoMovimentacao(pedido.id, mensagem);
+                  } catch (histErr) {
+                    console.error('Erro ao registrar remoção no histórico:', histErr);
+                  }
 
                   // update local state
                   setPedido((p: any) => p ? ({ ...p, itens: (p.itens || []).filter((i: any) => i.id !== productToRemove.id), valor_total: newTotal }) : p);
@@ -3083,6 +3323,10 @@ export default function Pedido() {
                         // Buscar dimensões do produto ou variação
                         let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
                         
+                        // Verificar se é o produto específico (livraria)
+                        const finalProdutoId = it.produtoId || produtoId;
+                        const pintado = finalProdutoId === '1ff7aa43-d30b-4061-b8da-bfdee912dbb5';
+                        
                         try {
                           // Se tem variação, buscar da variação primeiro
                           if (variacaoId) {
@@ -3107,7 +3351,7 @@ export default function Pedido() {
                             const { data: produtoData } = await supabase
                               .from('produtos')
                               .select('altura, largura, comprimento, peso')
-                              .eq('id', it.produtoId || produtoId)
+                              .eq('id', finalProdutoId)
                               .maybeSingle();
                             
                             if (produtoData) {
@@ -3135,6 +3379,7 @@ export default function Pedido() {
                             largura: dimensoes.largura,
                             comprimento: dimensoes.comprimento,
                             peso: dimensoes.peso,
+                            pintado: pintado,
                             criado_em: new Date().toISOString(),
                             empresa_id: empresaId || null
                           };
@@ -3151,6 +3396,39 @@ export default function Pedido() {
                       if (inserts.length) {
                         const { error: insErr } = await supabase.from('itens_pedido').insert(inserts as any);
                         if (insErr) throw insErr;
+                        
+                        // Registrar cada produto adicionado no histórico
+                        for (const item of modalCart) {
+                          try {
+                            const [produtoId, variacaoId] = String(item.id).split(':');
+                            let nomeProduto = item.nome || 'Produto';
+                            
+                            // Se tem variação, buscar o nome da variação
+                            if (variacaoId) {
+                              const { data: variacaoData } = await supabase
+                                .from('variacoes_produto')
+                                .select('nome')
+                                .eq('id', variacaoId)
+                                .maybeSingle();
+                              
+                              if (variacaoData?.nome) {
+                                nomeProduto = `${nomeProduto} - ${variacaoData.nome}`;
+                              }
+                            }
+                            
+                            const quantidade = Number(item.quantidade || 1);
+                            const preco = Number(item.preco || 0);
+                            const total = (quantidade * preco).toFixed(2);
+                            
+                            const mensagem = quantidade > 1 
+                              ? `Produto adicionado: ${nomeProduto} | Qtd: ${quantidade} | Preço unitário: R$ ${preco.toFixed(2)} | Total: R$ ${total}`
+                              : `Produto adicionado: ${nomeProduto} | Preço: R$ ${preco.toFixed(2)}`;
+                            
+                            await registrarHistoricoMovimentacao(pedido.id, mensagem);
+                          } catch (err) {
+                            console.error('Erro ao registrar produto no histórico:', err);
+                          }
+                        }
                         
                         // Incrementar contagem dos produtos adicionados
                         const productCounts: Record<string, number> = {};
@@ -3189,6 +3467,12 @@ export default function Pedido() {
                       const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
                       if (updErr) throw updErr;
 
+                      // Registrar no histórico de movimentações
+                      await registrarHistoricoMovimentacao(
+                        pedido.id,
+                        `Produtos/pagamentos adicionados - Valor alterado de R$ ${currentTotal.toFixed(2)} para R$ ${newTotal.toFixed(2)}`
+                      );
+
                       // Insert payment methods into lista_pagamentos
                       const pagamentosInserts: any[] = [];
                       selectedPaymentIds.forEach(paymentId => {
@@ -3206,6 +3490,8 @@ export default function Pedido() {
                         if (pagErr) {
                           console.error('Erro ao inserir formas de pagamento:', pagErr);
                           toast({ title: 'Aviso', description: 'Itens adicionados mas houve erro ao registrar as formas de pagamento.', variant: 'destructive' });
+                        } else {
+                          await registrarHistoricoMovimentacao(pedido.id, `Formas de pagamento adicionadas via wizard: ${pagamentosInserts.length} forma(s)`);
                         }
                       }
 
@@ -3260,6 +3546,35 @@ export default function Pedido() {
             const { error } = await supabase.from('pedidos').update(updateData).eq('id', pedido.id);
             if (error) throw error;
 
+            // Registrar no histórico de movimentações
+            let mensagemHistorico = '';
+            if (editFieldKey === 'status') {
+              const statusAnterior = pedido?.status?.nome || 'Status removido';
+              const statusNovo = statuses.find(s => s.id === selectedId)?.nome || 'Status removido';
+              if (statusAnterior !== statusNovo) {
+                mensagemHistorico = `Status alterado: ${statusAnterior} → ${statusNovo}`;
+              }
+            } else if (editFieldKey === 'plataforma') {
+              const plataformaAnterior = pedido?.plataforma?.nome || 'Plataforma removida';
+              const plataformaNova = plataformas.find(p => p.id === selectedId)?.nome || 'Plataforma removida';
+              if (plataformaAnterior !== plataformaNova) {
+                mensagemHistorico = `Plataforma alterada: ${plataformaAnterior} → ${plataformaNova}`;
+              }
+            } else if (editFieldKey === 'responsavel') {
+              const responsavelNome = usuarios.find(u => u.id === selectedId)?.nome || 'Responsável removido';
+              mensagemHistorico = `Responsável alterado para: ${responsavelNome}`;
+            } else if (editFieldKey === 'etiqueta') {
+              const etiquetaAnterior = pedido?.etiqueta?.nome || 'Etiqueta removida';
+              const etiquetaNova = etiquetas.find(e => e.id === selectedId)?.nome || 'Etiqueta removida';
+              if (etiquetaAnterior !== etiquetaNova) {
+                mensagemHistorico = `Status da etiqueta alterado: ${etiquetaAnterior} → ${etiquetaNova}`;
+              }
+            }
+            
+            if (mensagemHistorico) {
+              await registrarHistoricoMovimentacao(pedido.id, mensagemHistorico);
+            }
+
             toast({ title: 'Atualizado', description: 'Campo atualizado com sucesso' });
             setEditFieldOpen(false);
             navigate(0);
@@ -3271,7 +3586,7 @@ export default function Pedido() {
       />
 
   {/* Client edit modal (pencil icon) */}
-  <ClientEditModal open={clientEditOpen} onOpenChange={(open) => { if (!readonly) setClientEditOpen(open); }} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} onSaved={() => navigate(0)} />
+  <ClientEditModal open={clientEditOpen} onOpenChange={(open) => { if (!readonly) setClientEditOpen(open); }} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} pedidoId={pedido?.id || null} onSaved={() => navigate(0)} />
 
       {/* Modal de cotações */}
       <CotacaoFreteModal
@@ -3446,6 +3761,8 @@ export default function Pedido() {
                   }
 
                   console.log('Todas as atualizações concluídas!');
+                  const valorAnterior = pedido?.valor_total || 0;
+                  await registrarHistoricoMovimentacao(pedido?.id, `Valor total editado: R$ ${Number(valorAnterior).toFixed(2)} → R$ ${novoValor.toFixed(2)}`);
                   toast({ 
                     title: 'Sucesso', 
                     description: 'Valor total e formas de pagamento atualizados com sucesso' 
@@ -3717,6 +4034,21 @@ export default function Pedido() {
                     empresa_id: empresaId || null,
                   });
                   
+                  // Registrar no histórico
+                  try {
+                    const nomeProduto = itemToKeep.variacao?.nome 
+                      ? `${itemToKeep.produto?.nome} - ${itemToKeep.variacao.nome}`
+                      : itemToKeep.produto?.nome || 'Produto';
+                    
+                    await registrarHistoricoMovimentacao(
+                      pedido?.id,
+                      `Produto mantido sem up-sell: ${nomeProduto}`,
+                      user?.id
+                    );
+                  } catch (histErr) {
+                    console.error('Erro ao registrar histórico:', histErr);
+                  }
+                  
                   toast({
                     title: 'Produto mantido',
                     description: 'O produto original foi mantido no pedido',
@@ -3986,6 +4318,26 @@ export default function Pedido() {
                           empresa_id: empresaId || null,
                         });
                         
+                        // Registrar no histórico
+                        try {
+                          const produtoOriginal = upSellSourceItem.variacao?.nome
+                            ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
+                            : upSellSourceItem.produto?.nome || 'Produto';
+                          
+                          const variacaoNome = selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome;
+                          const produtoNovo = variacaoNome
+                            ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
+                            : selectedUpSellProduct.nome;
+                          
+                          await registrarHistoricoMovimentacao(
+                            pedido?.id,
+                            `Aumento grátis: ${produtoOriginal} → ${produtoNovo}`,
+                            user?.id
+                          );
+                        } catch (histErr) {
+                          console.error('Erro ao registrar histórico:', histErr);
+                        }
+                        
                         toast({
                           title: 'Aumento grátis realizado!',
                           description: 'Produto substituído sem alteração de valor',
@@ -4128,6 +4480,28 @@ export default function Pedido() {
                           empresa_id: empresaId || null,
                         });
                         
+                        // Registrar no histórico
+                        try {
+                          const produtoOriginal = upSellSourceItem.variacao?.nome
+                            ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
+                            : upSellSourceItem.produto?.nome || 'Produto';
+                          
+                          const variacaoNome = selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome;
+                          const produtoNovo = variacaoNome
+                            ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
+                            : selectedUpSellProduct.nome;
+                          
+                          const valorAdicional = parseCurrencyBR(upSellValueStr);
+                          
+                          await registrarHistoricoMovimentacao(
+                            pedido?.id,
+                            `Up-sell realizado: ${produtoOriginal} → ${produtoNovo} | Valor adicional: R$ ${valorAdicional.toFixed(2).replace('.', ',')}`,
+                            user?.id
+                          );
+                        } catch (histErr) {
+                          console.error('Erro ao registrar histórico:', histErr);
+                        }
+                        
                         toast({
                           title: 'Up-sell realizado com sucesso!',
                           description: `Produto substituído e valor atualizado`,
@@ -4267,6 +4641,29 @@ export default function Pedido() {
                           .eq('id', pedido.id);
                         
                         if (pedidoError) throw pedidoError;
+                        
+                        // Registrar no histórico
+                        try {
+                          const produtoOriginal = upSellSourceItem.variacao?.nome
+                            ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
+                            : upSellSourceItem.produto?.nome || 'Produto';
+                          
+                          const variacaoNome = selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome;
+                          const produtoNovo = variacaoNome
+                            ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
+                            : selectedUpSellProduct.nome;
+                          
+                          const valorAdicional = parseCurrencyBR(upSellValueStr);
+                          const tipoUpSell = statusUpSellMap[parseInt(upSellStatus)] || 'Up-sell';
+                          
+                          await registrarHistoricoMovimentacao(
+                            pedido?.id,
+                            `${tipoUpSell}: ${produtoOriginal} → ${produtoNovo} | Valor adicional: R$ ${valorAdicional.toFixed(2).replace('.', ',')}`,
+                            user?.id
+                          );
+                        } catch (histErr) {
+                          console.error('Erro ao registrar histórico:', histErr);
+                        }
                         
                         toast({
                           title: 'Up-sell realizado com sucesso!',

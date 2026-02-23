@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Pedido } from '@/types';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -387,6 +388,7 @@ export function PedidosEnviados() {
 
       if (updateError) throw updateError;
 
+      await registrarHistoricoMovimentacao(pedidoId, 'Pedido marcado como retornado');
       toast({ 
         title: 'Pedido marcado como retornado', 
         description: 'O pedido foi registrado como retornado com sucesso' 
@@ -466,6 +468,12 @@ export function PedidosEnviados() {
         const { error: markErr } = await supabase.from('pedidos').update({ foi_duplicado: true, atualizado_em: new Date().toISOString() } as any).eq('id', pedidoId);
         if (markErr) console.error('Erro ao marcar pedido original como duplicado:', markErr);
         else {
+          // Registrar no histórico de movimentações
+          await registrarHistoricoMovimentacao(
+            pedidoId,
+            'Pedido duplicado - marcado como original'
+          );
+          
           // update local state to reflect original foiDuplicado
           setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, foiDuplicado: true } : p));
         }
@@ -576,6 +584,7 @@ export function PedidosEnviados() {
 
       toast({ title: 'Duplicado', description: 'Pedido duplicado com sucesso' });
 
+      await registrarHistoricoMovimentacao(newPedidoId, `Pedido duplicado a partir do pedido enviado (original: ${pedidoId})`);
       // Navigate to the new order page
       navigate(`/pedido/${newPedidoId}`);
     } catch (err: any) {

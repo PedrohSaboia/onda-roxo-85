@@ -11,6 +11,7 @@ import { Pedido } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Copy, Check, Search } from 'lucide-react';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 export function Producao() {
   const [pedidos, setPedidos] = useState<Pedido[]>(mockPedidos);
@@ -255,7 +256,9 @@ export function Producao() {
 
         const movedPedido = previousPedidos.find(p => p.id === pedidoId);
         const novoStatus = statusList.find((s: any) => s.id === newStatusId);
+        const statusAnterior = previousPedidos.find(p => p.id === pedidoId)?.status;
 
+        await registrarHistoricoMovimentacao(pedidoId, `Status alterado via Kanban: ${statusAnterior?.nome || 'N/A'} → ${novoStatus?.nome || 'N/A'}`);
         toast({
           title: "Status atualizado",
           description: `Pedido ${movedPedido?.idExterno || updated?.id_externo} movido para ${novoStatus?.nome}`,

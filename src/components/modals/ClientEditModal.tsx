@@ -4,12 +4,14 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   clienteId: string | null | undefined;
-  onSaved?: () => void;
+  pedidoId?: string | null;
+  onSaved?: (result?: { changedFields: string[] }) => void;
 };
 
 const onlyDigits = (s = '') => (s || '').toString().replace(/\D/g, '');
@@ -68,11 +70,12 @@ const isValidCNPJ = (v = '') => {
 };
 
 
-export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved }: Props) {
+export default function ClientEditModal({ open, onOpenChange, clienteId, pedidoId, onSaved }: Props) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [cliente, setCliente] = useState<any | null>(null);
+  const [clienteOriginal, setClienteOriginal] = useState<any | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string | null>>({});
 
   useEffect(() => {
@@ -85,7 +88,7 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
         const { data, error } = await supabase.from('clientes').select('*').eq('id', clienteId).single();
         if (error) throw error;
         if (!mounted) return;
-        setCliente({
+        const mappedCliente = {
           id: data.id,
           nome: data.nome || '',
           tipo: (data as any)?.cnpj ? 'pj' : 'pf',
@@ -100,7 +103,9 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
           bairro: data.bairro || '',
           cidade: data.cidade || '',
           estado: data.estado || '',
-        });
+        };
+        setCliente(mappedCliente);
+        setClienteOriginal(mappedCliente);
       } catch (err) {
         console.error(err);
         toast({ title: 'Erro', description: 'Não foi possível carregar o cliente', variant: 'destructive' });
@@ -187,6 +192,34 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
     setFieldErrors(validateAll(cliente));
   }, [cliente]);
 
+  const getChangedFields = (current: any, original: any) => {
+    if (!current || !original) return [] as string[];
+    const normalize = (value: any) => String(value ?? '').trim();
+    const formatValue = (value: any) => {
+      const v = normalize(value);
+      return v.length > 0 ? v : '(vazio)';
+    };
+    const fieldsMap: Array<{ key: string; label: string }> = [
+      { key: 'nome', label: 'nome' },
+      { key: 'documento', label: 'documento' },
+      { key: 'tipo', label: 'tipo de pessoa' },
+      { key: 'email', label: 'email' },
+      { key: 'telefone', label: 'telefone' },
+      { key: 'cep', label: 'CEP' },
+      { key: 'endereco', label: 'endereço' },
+      { key: 'numero', label: 'número' },
+      { key: 'complemento', label: 'complemento' },
+      { key: 'bairro', label: 'bairro' },
+      { key: 'cidade', label: 'cidade' },
+      { key: 'estado', label: 'estado' },
+      { key: 'observacao', label: 'observação' },
+    ];
+
+    return fieldsMap
+      .filter(({ key }) => normalize(current[key]) !== normalize(original[key]))
+      .map(({ key, label }) => `${label}: ${formatValue(original[key])} → ${formatValue(current[key])}`);
+  };
+
   const handleSalvar = async () => {
     if (!cliente) return;
     // run validation
@@ -217,9 +250,18 @@ export default function ClientEditModal({ open, onOpenChange, clienteId, onSaved
       };
       const { error } = await supabase.from('clientes').update(payload).eq('id', cliente.id);
       if (error) throw error;
+
+      const changedFields = getChangedFields(cliente, clienteOriginal);
+      if (pedidoId && changedFields.length > 0) {
+        await registrarHistoricoMovimentacao(
+          pedidoId,
+          `Dados do cliente alterados | ${changedFields.join(' | ')}`
+        );
+      }
+
       toast({ title: 'Sucesso', description: 'Dados salvos com sucesso' });
       onOpenChange(false);
-      if (onSaved) onSaved();
+      if (onSaved) onSaved({ changedFields });
     } catch (err) {
       console.error(err);
       toast({ title: 'Erro', description: 'Não foi possível salvar os dados', variant: 'destructive' });

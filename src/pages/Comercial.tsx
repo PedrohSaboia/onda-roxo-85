@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { Pedido } from '@/types';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 import EditSelectModal from '@/components/modals/EditSelectModal';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -130,6 +131,15 @@ export function Comercial() {
   const deleteSelectedPedidos = async () => {
     try {
       const idsArray = Array.from(selectedPedidosIds);
+      
+      // Registrar no histórico antes de deletar
+      for (const pedidoId of idsArray) {
+        await registrarHistoricoMovimentacao(
+          pedidoId,
+          'Pedido excluído'
+        );
+      }
+      
       const { error } = await supabase
         .from('pedidos')
         .delete()
@@ -869,6 +879,13 @@ export function Comercial() {
 
         const { error: updateErr } = await supabase.from('pedidos').update({ id_melhor_envio: melhorEnvioId || null, carrinho_me: true, atualizado_em: new Date().toISOString() } as any).eq('id', pedidoId);
         if (updateErr) throw updateErr;
+        
+        // Registrar no histórico de movimentações
+        await registrarHistoricoMovimentacao(
+          pedidoId,
+          'Frete enviado ao carrinho do Melhor Envio'
+        );
+        
         toast({ title: 'Sucesso', description: 'Frete enviado ao carrinho do Melhor Envio' });
       } else {
         // calculate frete, pick cheapest and send it
@@ -954,6 +971,13 @@ export function Comercial() {
 
         const { error: updateErr } = await supabase.from('pedidos').update({ id_melhor_envio: melhorEnvioId || null, carrinho_me: true, frete_melhor_envio: { transportadora: maisBarato.transportadora, modalidade: maisBarato.modalidade, prazo: maisBarato.prazo, preco: maisBarato.preco, service_id: maisBarato.service_id, raw_response: maisBarato.raw_response }, atualizado_em: new Date().toISOString() } as any).eq('id', pedidoId);
         if (updateErr) throw updateErr;
+        
+        // Registrar no histórico de movimentações
+        await registrarHistoricoMovimentacao(
+          pedidoId,
+          `Frete calculado e enviado ao carrinho - ${maisBarato.transportadora} (R$ ${maisBarato.preco.toFixed(2)})`
+        );
+        
         toast({ title: 'Sucesso', description: 'Frete calculado e enviado ao carrinho do Melhor Envio' });
       }
 
@@ -1011,6 +1035,7 @@ export function Comercial() {
                 // não interrompe o fluxo principal — só avisa o usuário
                 toast({ title: 'Aviso', description: 'Etiqueta processada, mas não foi possível atualizar o pedido no servidor.', variant: 'destructive' });
               } else {
+                await registrarHistoricoMovimentacao(pedidoId, 'Etiqueta processada no Melhor Envio');
                 // Atualiza o estado local imediatamente para remover o pedido do filtro "Etiqueta Pendente"
                 setPedidos(prev => {
                   // se o filtro de etiqueta pendente estiver ativo, remova o pedido da lista
@@ -1098,6 +1123,21 @@ export function Comercial() {
         const { error: markErr } = await supabase.from('pedidos').update({ foi_duplicado: true, atualizado_em: new Date().toISOString() } as any).eq('id', pedidoId);
         if (markErr) console.error('Erro ao marcar pedido original como duplicado:', markErr);
         else {
+          // Registrar no histórico de movimentações
+          await registrarHistoricoMovimentacao(
+            pedidoId,
+            'Pedido duplicado - marcado como original'
+          );
+
+          const idExternoOriginal = (pedidoRow as any).id_externo || '(vazio)';
+          const idExternoNovo = newPedidoPayload.id_externo || '(vazio)';
+          if (idExternoOriginal !== idExternoNovo) {
+            await registrarHistoricoMovimentacao(
+              pedidoId,
+              `ID externo alterado na duplicação: ${idExternoOriginal} → ${idExternoNovo}`
+            );
+          }
+          
           // update local state to reflect original foiDuplicado
           setPedidos(prev => prev.map(p => p.id === pedidoId ? { ...p, foiDuplicado: true } : p));
         }
@@ -1953,6 +1993,10 @@ export function Comercial() {
 
                         try {
                           const idsArray = Array.from(selectedPedidosIds);
+                          // Registrar histórico antes de deletar
+                          for (const pid of idsArray) {
+                            await registrarHistoricoMovimentacao(pid, 'Pedido excluído em massa');
+                          }
                           const { error } = await supabase
                             .from('pedidos')
                             .delete()
@@ -2549,9 +2593,17 @@ export function Comercial() {
                   const { error } = await supabase.from('pedidos').update(updateData).eq('id', statusEditPedidoId);
                   if (error) throw error;
 
+                  // Registrar no histórico de movimentações
+                  const selectedStatus = statusOptions.find(s => s.id === selectedId);
+                  const statusNome = selectedStatus?.nome || 'Status removido';
+                  await registrarHistoricoMovimentacao(
+                    statusEditPedidoId,
+                    `Status alterado para: ${statusNome}`
+                  );
+
                   // update local state: replace statusId and status object (if we have details)
-                  const selectedStatus = statusOptions.find(s => s.id === selectedId) || null;
-                  setPedidos(prev => prev.map(p => p.id === statusEditPedidoId ? { ...p, statusId: selectedId || '', status: selectedStatus ? { id: selectedStatus.id, nome: selectedStatus.nome, corHex: selectedStatus.cor_hex, ordem: selectedStatus.ordem ?? 0, criadoEm: '', atualizadoEm: '' } : p.status } : p));
+                  const statusObj = statusOptions.find(s => s.id === selectedId) || null;
+                  setPedidos(prev => prev.map(p => p.id === statusEditPedidoId ? { ...p, statusId: selectedId || '', status: statusObj ? { id: statusObj.id, nome: statusObj.nome, corHex: statusObj.cor_hex, ordem: statusObj.ordem ?? 0, criadoEm: '', atualizadoEm: '' } : p.status } : p));
 
                   toast({ title: 'Atualizado', description: 'Status atualizado com sucesso' });
                   setStatusEditOpen(false);
@@ -2578,8 +2630,15 @@ export function Comercial() {
                   const { error } = await supabase.from('pedidos').update(updateData).eq('id', etiquetaEditPedidoId);
                   if (error) throw error;
 
+                  // Registrar no histórico de movimentações
+                  const selectedEtiqueta = etiquetaOptions.find(e => e.id === selectedId);
+                  const etiquetaNome = selectedEtiqueta?.nome || 'Etiqueta removida';
+                  await registrarHistoricoMovimentacao(
+                    etiquetaEditPedidoId,
+                    `Etiqueta de envio alterada para: ${etiquetaNome}`
+                  );
+
                   // update local state: replace etiquetaEnvioId and etiqueta object
-                  const selectedEtiqueta = etiquetaOptions.find(t => t.id === selectedId) || null;
                   const normalizeEtiqueta = (nome?: string) => {
                     if (!nome) return 'NAO_LIBERADO' as const;
                     const key = nome.toUpperCase();
@@ -2625,15 +2684,23 @@ export function Comercial() {
                   const { error } = await supabase.from('pedidos').update(updateData).eq('id', plataformaEditPedidoId);
                   if (error) throw error;
 
+                  // Registrar no histórico de movimentações
+                  const selectedPlataforma = plataformaOptions.find(p => p.id === selectedId);
+                  const plataformaNome = selectedPlataforma?.nome || 'Plataforma removida';
+                  await registrarHistoricoMovimentacao(
+                    plataformaEditPedidoId,
+                    `Plataforma alterada para: ${plataformaNome}`
+                  );
+
                   // update local state: replace plataformaId and plataforma object
-                  const selectedPlataforma = plataformaOptions.find(p => p.id === selectedId) || null;
+                  const selectedPlataformaObj = plataformaOptions.find(p => p.id === selectedId) || null;
                   setPedidos(prev => prev.map(p => {
                     if (p.id === plataformaEditPedidoId) {
-                      const newPlataforma = selectedPlataforma ? {
-                        id: selectedPlataforma.id,
-                        nome: selectedPlataforma.nome,
-                        cor: selectedPlataforma.cor,
-                        imagemUrl: selectedPlataforma.img_url || undefined,
+                      const newPlataforma = selectedPlataformaObj ? {
+                        id: selectedPlataformaObj.id,
+                        nome: selectedPlataformaObj.nome,
+                        cor: selectedPlataformaObj.cor,
+                        imagemUrl: selectedPlataformaObj.img_url || undefined,
                         criadoEm: '',
                         atualizadoEm: ''
                       } : p.plataforma;
@@ -2671,16 +2738,24 @@ export function Comercial() {
                   const { error } = await supabase.from('pedidos').update(updateData).eq('id', responsavelEditPedidoId);
                   if (error) throw error;
 
+                  // Registrar no histórico de movimentações
+                  const selectedResponsavel = responsavelOptions.find(u => u.id === selectedId);
+                  const responsavelNome = selectedResponsavel?.nome || 'Responsável removido';
+                  await registrarHistoricoMovimentacao(
+                    responsavelEditPedidoId,
+                    `Responsável alterado para: ${responsavelNome}`
+                  );
+
                   // update local state: replace responsavelId and responsavel object
-                  const selectedResponsavel = responsavelOptions.find(u => u.id === selectedId) || null;
+                  const selectedResponsavelObj = responsavelOptions.find(u => u.id === selectedId) || null;
                   setPedidos(prev => prev.map(p => {
                     if (p.id === responsavelEditPedidoId) {
-                      const newResponsavel = selectedResponsavel ? {
-                        id: selectedResponsavel.id,
-                        nome: selectedResponsavel.nome,
+                      const newResponsavel = selectedResponsavelObj ? {
+                        id: selectedResponsavelObj.id,
+                        nome: selectedResponsavelObj.nome,
                         email: '',
                         papel: 'operador' as const,
-                        avatar: selectedResponsavel.img_url || undefined,
+                        avatar: selectedResponsavelObj.img_url || undefined,
                         ativo: true,
                         criadoEm: '',
                         atualizadoEm: ''
