@@ -177,7 +177,7 @@ serve(async (req) => {
     const { data: remetenteData, error: remetenteError } = await supabase
       .from("remetentes")
       .select("id, nome, cep, email, contato, cidade, estado, endereco")
-      .limit(1)
+      .eq("id", "128a7de7-d649-43e1-8ba3-2b54c3496b14")
       .single();
 
     const remetente = remetenteError || !remetenteData

@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+#MarkDown
+PROMPT_REPLICAR_POPUP_PERMISSOES.md
+
+#ArquivosNormais
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
