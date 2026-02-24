@@ -35,7 +35,9 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
         
         if (stored) {
           const parsed = JSON.parse(stored);
+          
           items = parsed
+            .filter((s: any) => s.id !== 'historico-movimentacoes')
             .sort((a: any, b: any) => a.ordem - b.ordem)
             .map((s: any) => ({ id: s.id, label: s.nome }));
         } else {

@@ -21,6 +21,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 function formatAddress(cliente: any) {
   if (!cliente) return '-';
@@ -168,6 +169,7 @@ export default function PedidoContabilidade() {
           
           if (error) throw error;
           
+          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (up-sell resolvido)');
           toast({ title: 'Pedido liberado automaticamente', description: 'Produto de up-sell foi resolvido' });
           return;
         }
@@ -213,6 +215,7 @@ export default function PedidoContabilidade() {
           
           if (error) throw error;
           
+          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (todos up-sell resolvidos)');
           toast({ title: 'Pedido liberado automaticamente', description: 'Todos os produtos de up-sell foram resolvidos' });
         }
       }
@@ -583,6 +586,7 @@ export default function PedidoContabilidade() {
 
       if (error) throw error;
 
+      await registrarHistoricoMovimentacao(pedido.id, 'Pedido salvo (status, responsável, observações, link etiqueta)');
       toast({ title: 'Pedido atualizado', description: 'Alterações salvas com sucesso' });
       // refresh
       navigate(0);
@@ -604,6 +608,7 @@ export default function PedidoContabilidade() {
         .eq('id', id);
 
       if (error) throw error;
+      await registrarHistoricoMovimentacao(id, 'Link da etiqueta salvo');
       toast({ title: 'Link salvo', description: 'Link da etiqueta salvo com sucesso' });
       // refresh to show updated value if needed
       navigate(0);
@@ -740,6 +745,7 @@ export default function PedidoContabilidade() {
       
       if (error) throw error;
 
+      await registrarHistoricoMovimentacao(id, `Frete selecionado: ${cotacao?.transportadora || 'N/A'} - ${cotacao?.modalidade || ''} - R$ ${cotacao?.preco || '0'}`);
       toast({ title: 'Sucesso', description: 'Frete selecionado e salvo no pedido' });
       setCotacaoModal(false);
       
@@ -819,6 +825,7 @@ export default function PedidoContabilidade() {
 
       if (updateError) throw updateError;
 
+      await registrarHistoricoMovimentacao(pedido.id, 'Etiqueta comprada pelo Melhor Envio - Enviado para Logística');
       toast({ 
         title: 'Sucesso', 
         description: 'Etiqueta processada e pedido atualizado com sucesso' 
@@ -925,6 +932,7 @@ export default function PedidoContabilidade() {
   const handleDeletePedido = async () => {
     if (!pedido) return;
     try {
+      await registrarHistoricoMovimentacao(pedido.id, `Pedido excluído (id_externo: ${pedido.id_externo || 'N/A'})`);
       // delete itens_pedido first
       const { error: delItemsErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', pedido.id);
       if (delItemsErr) throw delItemsErr;
@@ -1588,6 +1596,7 @@ export default function PedidoContabilidade() {
                     .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() } as any)
                     .eq('id', pedido.id);
                   if (error) throw error;
+                  await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado manualmente');
                   // update local state so button disappears
                   setPedido((p: any) => ({ ...p, pedido_liberado: true }));
                   toast({ title: 'Pedido liberado', description: 'Pedido liberado com sucesso' });
@@ -2002,6 +2011,12 @@ export default function PedidoContabilidade() {
                   const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
                   if (updErr) throw updErr;
 
+                  // Registrar no histórico de movimentações
+                  await registrarHistoricoMovimentacao(
+                    pedido.id,
+                    `Item removido: ${productToRemove.nome_produto || 'Produto'} - Valor alterado de R$ ${currentTotal.toFixed(2)} para R$ ${newTotal.toFixed(2)}`
+                  );
+
                   // update local state
                   setPedido((p: any) => p ? ({ ...p, itens: (p.itens || []).filter((i: any) => i.id !== productToRemove.id), valor_total: newTotal }) : p);
                   toast({ title: 'Item removido', description: 'Item removido e valor do pedido atualizado' });
@@ -2260,6 +2275,10 @@ export default function PedidoContabilidade() {
                         // Buscar dimensões do produto ou variação
                         let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
                         
+                        // Verificar se é o produto específico (livraria)
+                        const finalProdutoId = it.produtoId || produtoId;
+                        const pintado = finalProdutoId === '1ff7aa43-d30b-4061-b8da-bfdee912dbb5';
+                        
                         try {
                           // Se tem variação, buscar da variação primeiro
                           if (variacaoId) {
@@ -2284,7 +2303,7 @@ export default function PedidoContabilidade() {
                             const { data: produtoData } = await supabase
                               .from('produtos')
                               .select('altura, largura, comprimento, peso')
-                              .eq('id', it.produtoId || produtoId)
+                              .eq('id', finalProdutoId)
                               .maybeSingle();
                             
                             if (produtoData) {
@@ -2312,6 +2331,7 @@ export default function PedidoContabilidade() {
                             largura: dimensoes.largura,
                             comprimento: dimensoes.comprimento,
                             peso: dimensoes.peso,
+                            pintado: pintado,
                             criado_em: new Date().toISOString(),
                             empresa_id: empresaId || null
                           };
@@ -2359,6 +2379,12 @@ export default function PedidoContabilidade() {
                       const newTotal = Number((currentTotal + providedValue).toFixed(2));
                       const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
                       if (updErr) throw updErr;
+
+                      // Registrar no histórico de movimentações
+                      await registrarHistoricoMovimentacao(
+                        pedido.id,
+                        `Produtos adicionados - Valor alterado de R$ ${currentTotal.toFixed(2)} para R$ ${newTotal.toFixed(2)}`
+                      );
 
                       toast({ title: 'Itens adicionados', description: 'Produtos adicionados e valor atualizado no pedido' });
                       setWizardOpen(false);
@@ -2411,6 +2437,26 @@ export default function PedidoContabilidade() {
             const { error } = await supabase.from('pedidos').update(updateData).eq('id', pedido.id);
             if (error) throw error;
 
+            // Registrar no histórico de movimentações
+            let mensagemHistorico = '';
+            if (editFieldKey === 'status') {
+              const statusNome = statuses.find(s => s.id === selectedId)?.nome || 'Status removido';
+              mensagemHistorico = `Status alterado para: ${statusNome}`;
+            } else if (editFieldKey === 'plataforma') {
+              const plataformaNome = plataformas.find(p => p.id === selectedId)?.nome || 'Plataforma removida';
+              mensagemHistorico = `Plataforma alterada para: ${plataformaNome}`;
+            } else if (editFieldKey === 'responsavel') {
+              const responsavelNome = usuarios.find(u => u.id === selectedId)?.nome || 'Responsável removido';
+              mensagemHistorico = `Responsável alterado para: ${responsavelNome}`;
+            } else if (editFieldKey === 'etiqueta') {
+              const etiquetaNome = etiquetas.find(e => e.id === selectedId)?.nome || 'Etiqueta removida';
+              mensagemHistorico = `Etiqueta de envio alterada para: ${etiquetaNome}`;
+            }
+            
+            if (mensagemHistorico) {
+              await registrarHistoricoMovimentacao(pedido.id, mensagemHistorico);
+            }
+
             toast({ title: 'Atualizado', description: 'Campo atualizado com sucesso' });
             setEditFieldOpen(false);
             navigate(0);
@@ -2422,7 +2468,7 @@ export default function PedidoContabilidade() {
       />
 
   {/* Client edit modal (pencil icon) */}
-  <ClientEditModal open={clientEditOpen} onOpenChange={(open) => { if (!readonly) setClientEditOpen(open); }} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} onSaved={() => navigate(0)} />
+  <ClientEditModal open={clientEditOpen} onOpenChange={(open) => { if (!readonly) setClientEditOpen(open); }} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} pedidoId={pedido?.id || null} onSaved={() => navigate(0)} />
 
       {/* Modal de cotações */}
       <CotacaoFreteModal
@@ -2480,6 +2526,8 @@ export default function PedidoContabilidade() {
 
                   if (error) throw error;
 
+                  const valorAnterior = pedido?.valor_total || 0;
+                  await registrarHistoricoMovimentacao(pedido?.id, `Valor total editado: R$ ${Number(valorAnterior).toFixed(2)} → R$ ${novoValor.toFixed(2)}`);
                   toast({ 
                     title: 'Sucesso', 
                     description: 'Valor total atualizado com sucesso' 
@@ -2756,6 +2804,7 @@ export default function PedidoContabilidade() {
                     description: 'O produto original foi mantido no pedido',
                   });
                   
+                  await registrarHistoricoMovimentacao(pedido?.id, `Up-sell: manteve produto original - ${itemToKeep.produto?.nome || 'N/A'}`);
                   // Check if all up_cell products are now resolved and auto-liberate
                   await checkAndAutoLiberatePedido(itemId);
                   
@@ -3025,6 +3074,7 @@ export default function PedidoContabilidade() {
                           description: 'Produto substituído sem alteração de valor',
                         });
                         
+                        await registrarHistoricoMovimentacao(pedido?.id, `Up-sell: aumento grátis - ${upSellSourceItem?.produto?.nome || 'N/A'} → ${selectedUpSellProduct.nome || 'N/A'}`);
                         // Check if all up_cell products are now resolved and auto-liberate
                         await checkAndAutoLiberatePedido(itemId);
                         
@@ -3167,6 +3217,7 @@ export default function PedidoContabilidade() {
                           description: `Produto substituído e valor atualizado`,
                         });
                         
+                        await registrarHistoricoMovimentacao(pedido?.id, `Up-sell realizado: ${upSellSourceItem?.produto?.nome || 'N/A'} → ${selectedUpSellProduct.nome || 'N/A'} (+R$ ${parseCurrencyBR(upSellValueStr).toFixed(2)})`);
                         // Check if all up_cell products are now resolved and auto-liberate
                         await checkAndAutoLiberatePedido(itemId);
                         
@@ -3302,6 +3353,7 @@ export default function PedidoContabilidade() {
                         
                         if (pedidoError) throw pedidoError;
                         
+                        await registrarHistoricoMovimentacao(pedido?.id, `Up-sell genérico realizado: ${upSellSourceItem?.produto?.nome || 'N/A'} → ${selectedUpSellProduct.nome || 'N/A'} (+R$ ${parseCurrencyBR(upSellValueStr).toFixed(2)})`);
                         toast({
                           title: 'Up-sell realizado com sucesso!',
                           description: `Produto substituído e valor atualizado`,

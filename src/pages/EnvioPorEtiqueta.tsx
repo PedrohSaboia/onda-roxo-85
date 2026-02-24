@@ -11,6 +11,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { LogisticaSidebar } from '@/components/layout/LogisticaSidebar';
 import { FileText, Search, RefreshCw, ExternalLink, Eye, Copy, Calendar, CheckCircle, XCircle } from 'lucide-react';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 interface Pedido {
   id: string;
@@ -542,6 +543,7 @@ export function EnvioPorEtiqueta() {
 
                         if (error) throw error;
 
+                        await registrarHistoricoMovimentacao(selectedPedido.id, 'Pedido definido como enviado via Envio por Etiqueta');
                         toast({
                           title: 'Pedido definido como enviado',
                           description: 'O pedido foi marcado como enviado com sucesso'

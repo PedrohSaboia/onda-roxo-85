@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Table, TableBody, TableCell, TableRow } from '@/components/ui/table';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 export default function NovoPedido() {
   const navigate = useNavigate();
@@ -266,6 +267,41 @@ export default function NovoPedido() {
 
       const pedidoId = (pedidoData as any).id;
 
+      // Registrar no histórico de movimentações
+      try {
+        // Buscar nome da plataforma selecionada
+        const plataformaSelecionada = plataformas.find(p => p.id === plataforma);
+        const nomePlataforma = plataformaSelecionada?.nome || 'Desconhecida';
+        
+        // Buscar nomes das formas de pagamento selecionadas
+        let formasPagamentoTexto = '';
+        
+        // Verificar se usa o sistema novo (selectedPaymentIds)
+        if (selectedPaymentIds.length > 0) {
+          const nomesPagamentos = selectedPaymentIds
+            .map(id => formasPagamentos.find(fp => fp.id === id)?.nome)
+            .filter(Boolean);
+          formasPagamentoTexto = nomesPagamentos.length > 0 
+            ? ` | Pagamento: ${nomesPagamentos.join(' + ')}` 
+            : '';
+        } 
+        // Caso contrário, usar o campo formaPagamento (sistema antigo)
+        else if (formaPagamento) {
+          // Capitalizar primeira letra
+          const pagamentoCapitalizado = formaPagamento.charAt(0).toUpperCase() + formaPagamento.slice(1);
+          formasPagamentoTexto = ` | Pagamento: ${pagamentoCapitalizado}`;
+        }
+        
+        await registrarHistoricoMovimentacao(
+          pedidoId,
+          `Pedido criado via ${nomePlataforma}${formasPagamentoTexto}`,
+          user?.id
+        );
+      } catch (histErr) {
+        console.error('Erro ao registrar histórico:', histErr);
+        // Não bloquear a criação do pedido se falhar o registro do histórico
+      }
+
       // Insert payment methods into lista_pagamentos for each selected forma de pagamento
       if (selectedPaymentIds.length > 0) {
         try {
@@ -314,6 +350,10 @@ export default function NovoPedido() {
         // Buscar dimensões do produto ou variação
         let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
         
+        // Verificar se é o produto específico (livraria)
+        const finalProdutoId = it.produtoId || produtoId;
+        const pintado = finalProdutoId === '1ff7aa43-d30b-4061-b8da-bfdee912dbb5';
+        
         try {
           // Se tem variação, buscar da variação primeiro
           if (variacaoId) {
@@ -338,7 +378,7 @@ export default function NovoPedido() {
             const { data: produtoData } = await supabase
               .from('produtos')
               .select('altura, largura, comprimento, peso')
-              .eq('id', it.produtoId || produtoId)
+              .eq('id', finalProdutoId)
               .maybeSingle();
             
             if (produtoData) {
@@ -366,6 +406,7 @@ export default function NovoPedido() {
             largura: dimensoes.largura,
             comprimento: dimensoes.comprimento,
             peso: dimensoes.peso,
+            pintado: pintado,
             criado_em: new Date().toISOString(),
             empresa_id: empresaId || null
           });
@@ -374,6 +415,40 @@ export default function NovoPedido() {
 
       const { error: itensError } = await supabase.from('itens_pedido').insert(itens as any);
       if (itensError) throw itensError;
+
+      // Registrar cada item no histórico
+      try {
+        for (const item of cart) {
+          const [produtoId, variacaoId] = String(item.id).split(':');
+          let nomeProduto = item.nome || 'Produto';
+          
+          // Se tem variação, buscar o nome da variação
+          if (variacaoId) {
+            const { data: variacaoData } = await supabase
+              .from('variacoes_produto')
+              .select('nome')
+              .eq('id', variacaoId)
+              .maybeSingle();
+            
+            if (variacaoData?.nome) {
+              nomeProduto = `${nomeProduto} - ${variacaoData.nome}`;
+            }
+          }
+          
+          const quantidade = Number(item.quantidade || 1);
+          const preco = Number(item.preco || 0);
+          const total = (quantidade * preco).toFixed(2);
+          
+          const mensagem = quantidade > 1 
+            ? `Produto adicionado: ${nomeProduto} | Qtd: ${quantidade} | Preço unitário: R$ ${preco.toFixed(2)} | Total: R$ ${total}`
+            : `Produto adicionado: ${nomeProduto} | Preço: R$ ${preco.toFixed(2)}`;
+          
+          await registrarHistoricoMovimentacao(pedidoId, mensagem, user?.id);
+        }
+      } catch (histErr) {
+        console.error('Erro ao registrar itens no histórico:', histErr);
+        // Não bloquear a criação do pedido se falhar o registro do histórico
+      }
 
       // Incrementar contagem dos produtos adicionados
       const productCounts: Record<string, number> = {};

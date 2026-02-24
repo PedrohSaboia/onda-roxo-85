@@ -14,6 +14,7 @@ import { Avatar } from '@/components/ui/avatar';
 import { useAuth } from '@/hooks/useAuth';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { LogisticaSidebar } from '@/components/layout/LogisticaSidebar';
+import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 export function Logistica() {
   const [barcode, setBarcode] = useState('');
@@ -41,6 +42,9 @@ export function Logistica() {
   // Estados para pedido já enviado
   const [pedidoJaEnviadoModalOpen, setPedidoJaEnviadoModalOpen] = useState(false);
   const [pedidoJaEnviado, setPedidoJaEnviado] = useState<any | null>(null);
+
+  // User ID para histórico
+  const [userId, setUserId] = useState<string | null>(null);
 
   // Buscar saldo do Melhor Envio
   const fetchSaldoMelhorEnvio = async () => {
@@ -144,10 +148,21 @@ export function Logistica() {
     fetchSaldoMelhorEnvio();
   }, []);
 
+  // Buscar userId da sessão
+  useEffect(() => {
+    const fetchUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        setUserId(session.user.id);
+      }
+    };
+    fetchUser();
+  }, []);
+
   // Buscar dados agrupados da view quando foundPedido muda
   useEffect(() => {
     if (foundPedido?.id) {
-      supabase
+      (supabase as any)
         .from('itens_pedido_agrupados')
         .select('*')
         .eq('pedido_id', foundPedido.id)
@@ -239,6 +254,15 @@ export function Logistica() {
       setEtiquetaMLModalOpen(true);
 
       toast({ title: 'Sucesso', description: 'Etiqueta gerada! Visualize e imprima.' });
+      
+      // Registrar no histórico
+      if (foundPedido?.id && userId) {
+        await registrarHistoricoMovimentacao(
+          foundPedido.id,
+          `Etiqueta Mercado Livre gerada via logística (ID Externo: ${foundPedido.id_externo})`,
+          userId
+        );
+      }
     } catch (error: any) {
       console.error('Erro ao processar a etiqueta:', error);
       toast({ 
@@ -289,16 +313,36 @@ export function Logistica() {
       // fetch pedido details (responsável, plataforma, itens)
       const { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(`id,id_externo,plataforma_id,shipping_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
+        .select(`id,id_externo,plataforma_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
         .eq('id', row.pedido_id)
         .single();
 
       if (pedErr) throw pedErr;
-      const pedidoRow = pedidoData;
+      const pedidoRow = pedidoData as any;
 
       console.log('Pedido encontrado:', pedidoRow);
+      console.log('Itens do pedido:', pedidoRow?.itens_pedido?.map((it: any) => ({ 
+        id: it.id, 
+        nome: it.produto?.nome || it.variacao?.nome, 
+        pintado: it.pintado,
+        tipo_pintado: typeof it.pintado 
+      })));
 
       setFoundPedido(pedidoRow);
+      
+      // Registrar no histórico que um item foi bipado
+      if (pedidoRow?.id && userId) {
+        const itemBipado = pedidoRow.itens_pedido?.find((it: any) => it.id === row.item_pedido_id);
+        const descricao = itemBipado 
+          ? `Item bipado via código de barras: ${itemBipado.produto?.nome || itemBipado.variacao?.nome || 'Item'} (${code})`
+          : `Item bipado via código de barras: ${code}`;
+        await registrarHistoricoMovimentacao(
+          pedidoRow.id,
+          descricao,
+          userId
+        );
+      }
+      
       // merge the newly found id into existing state and focus next missing item based on the merged list
       setFoundItemIds((prev) => {
         const merged = Array.from(new Set([...(prev || []), row.item_pedido_id]));
@@ -361,7 +405,7 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,shipping_id,remetente_id,status_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,shipping_id,remetente_id,status_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       // Tentar buscar por id_externo primeiro
       let { data: pedidoData, error: pedErr } = await supabase
@@ -388,29 +432,46 @@ export function Logistica() {
         throw new Error('Pedido não encontrado');
       }
 
-      console.log('Pedido encontrado manualmente:', pedidoData);
+      const pedidoRow2 = pedidoData as any;
+
+      console.log('Pedido encontrado manualmente:', pedidoRow2);
+      console.log('Itens do pedido manual:', pedidoRow2?.itens_pedido?.map((it: any) => ({ 
+        id: it.id, 
+        nome: it.produto?.nome || it.variacao?.nome, 
+        pintado: it.pintado,
+        tipo_pintado: typeof it.pintado 
+      })));
 
       // Verificar se o pedido já foi enviado
-      if (pedidoData.status_id === 'fa6b38ba-1d67-4bc3-821e-ab089d641a25') {
-        setPedidoJaEnviado(pedidoData);
+      if (pedidoRow2.status_id === 'fa6b38ba-1d67-4bc3-821e-ab089d641a25') {
+        setPedidoJaEnviado(pedidoRow2);
         setPedidoIdModalOpen(false);
         setPedidoJaEnviadoModalOpen(true);
         return;
       }
 
-      setFoundPedido(pedidoData);
+      setFoundPedido(pedidoRow2);
       setFoundItemIds([]);
       setPedidoIdModalOpen(false);
       setPedidoIdInput('');
 
       toast({ 
         title: 'Pedido carregado', 
-        description: `Pedido ${pedidoData.id_externo || pedidoData.id} carregado com sucesso` 
+        description: `Pedido ${pedidoRow2.id_externo || pedidoRow2.id} carregado com sucesso` 
       });
+
+      // Registrar no histórico
+      if (pedidoRow2?.id && userId) {
+        await registrarHistoricoMovimentacao(
+          pedidoRow2.id,
+          `Pedido carregado manualmente via logística (ID/ID Externo: ${pedidoIdInput})`,
+          userId
+        );
+      }
 
       // Focar no primeiro item
       setTimeout(() => {
-        const items = pedidoData?.itens_pedido || [];
+        const items = pedidoRow2?.itens_pedido || [];
         const first = items[0];
         if (first && itemRefs.current[first.id]) {
           itemRefs.current[first.id]?.focus();
@@ -620,12 +681,27 @@ export function Logistica() {
                   <div className="space-y-3">
                     {(() => {
                       const items = foundPedido.itens_pedido || [];
+                      console.log('Logística - Items with pintado:', items.map(it => ({ 
+                        nome: it.produto?.nome, 
+                        pintado: it.pintado,
+                        item: it 
+                      })));
                       
                       // Renderizar apenas os itens (sem badges)
                       return items.map((it: any) => {
                         return (
                           <div key={it.id}>
-                            <div className={`border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
+                            <div className={`relative border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
+                              {it.pintado === true && (
+                                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                                  <Badge 
+                                    variant="default"
+                                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-4 py-1"
+                                  >
+                                     PINTADO
+                                  </Badge>
+                                </div>
+                              )}
                               <div className="flex items-center gap-3">
                           {it.produto?.img_url || it.variacao?.img_url ? (
                             <img src={it.variacao?.img_url || it.produto?.img_url} className="w-12 h-12 rounded-full border-2 border-gray-200" />
@@ -635,7 +711,9 @@ export function Logistica() {
                             </div>
                           )}
                           <div>
-                            <div className="font-medium">{it.produto?.nome || it.variacao?.nome}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{it.produto?.nome || it.variacao?.nome}</span>
+                            </div>
                             {it.variacao?.nome ? (
                               <div className="text-sm text-muted-foreground">{it.variacao.nome}</div>
                             ) : null}
@@ -791,7 +869,7 @@ export function Logistica() {
                               // Atualizar o pedido com o remetente_id
                               const { error: updateError } = await supabase
                                 .from('pedidos')
-                                .update({ remetente_id: remetenteId })
+                                .update({ remetente_id: remetenteId } as any)
                                 .eq('id', foundPedido?.id);
                               
                               if (updateError) {
@@ -800,6 +878,16 @@ export function Logistica() {
                               }
                               
                               console.log('Remetente setado:', remetenteId);
+                              
+                              // Registrar no histórico
+                              if (foundPedido?.id && userId) {
+                                const plataformaNome = plataformasEspeciais.includes(foundPedido?.plataforma_id) ? 'especial' : 'padrão';
+                                await registrarHistoricoMovimentacao(
+                                  foundPedido.id,
+                                  `Remetente definido automaticamente via logística (plataforma ${plataformaNome})`,
+                                  userId
+                                );
+                              }
                             }
                             
                             // Chamar Edge Function para processar etiqueta
@@ -844,6 +932,15 @@ export function Logistica() {
                               return;
                             }
 
+                            // Registrar no histórico que a etiqueta Melhor Envio foi gerada
+                            if (foundPedido?.id && userId) {
+                              await registrarHistoricoMovimentacao(
+                                foundPedido.id,
+                                `Etiqueta Melhor Envio gerada via logística (ID Externo: ${foundPedido.id_externo || foundPedido.id})`,
+                                userId
+                              );
+                            }
+
                             // Atualizar status do pedido SOMENTE se a etiqueta foi gerada com sucesso
                             const { data: dataArray, error } = await supabase
                               .from('pedidos')
@@ -881,6 +978,15 @@ export function Logistica() {
                               description: 'Etiqueta processada e status atualizado com sucesso', 
                               variant: 'default' 
                             });
+
+                            // Registrar no histórico
+                            if (data?.id && userId) {
+                              await registrarHistoricoMovimentacao(
+                                data.id,
+                                `Pedido enviado via logística - Etiqueta gerada e status atualizado para "Enviado" (${data.id_externo || data.id})`,
+                                userId
+                              );
+                            }
 
                             // Limpar estado e resetar
                             setFoundPedido(null);

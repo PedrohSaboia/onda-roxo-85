@@ -87,6 +87,10 @@ serve(async (req) => {
             .eq("sku", sku)
             .maybeSingle();
 
+          // Verificar se é o produto específico (livraria)
+          const finalProdutoId = variacao?.produto_id ?? produto?.id;
+          const pintado = finalProdutoId === '1ff7aa43-d30b-4061-b8da-bfdee912dbb5';
+
           const inserts = [];
           for (let i = 0; i < qnt; i++) {
             inserts.push({
@@ -99,6 +103,7 @@ serve(async (req) => {
                 variacao?.codigo_barras_v ??
                 produto?.codigo_barras ??
                 null,
+              pintado: pintado,
             });
           }
 
@@ -328,6 +333,10 @@ serve(async (req) => {
         .eq("sku", sku)
         .maybeSingle();
 
+      // Verificar se é o produto específico (livraria)
+      const finalProdutoId = variacao?.produto_id ?? produto?.id;
+      const pintado = finalProdutoId === '1ff7aa43-d30b-4061-b8da-bfdee912dbb5';
+
       const inserts = [];
       for (let i = 0; i < qnt; i++) {
         inserts.push({
@@ -338,6 +347,7 @@ serve(async (req) => {
           preco_unitario: precoUnit,
           codigo_barras:
             variacao?.codigo_barras_v ?? produto?.codigo_barras ?? null,
+          pintado: pintado,
         });
       }
 
