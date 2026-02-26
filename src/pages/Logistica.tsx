@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Truck, CheckCircle, Clock, XCircle, RefreshCw } from 'lucide-react';
+import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import { FaBoxesStacked } from 'react-icons/fa6';
+import { HiFilter } from 'react-icons/hi';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -17,6 +19,13 @@ import { LogisticaSidebar } from '@/components/layout/LogisticaSidebar';
 import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 export function Logistica() {
+  const MERCADO_LIVRE_PLATAFORMA_ID = '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec';
+  const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
+  const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
+  const ITEM_PRIORITARIO_ML_ID = 'ab8a89a1-aa95-4a98-99c2-eaa3de670462';
+
+  type ProdutoFiltro = { id: string; nome: string; tipo: 'produto' | 'variacao'; variacaoNome?: string };
+
   const [barcode, setBarcode] = useState('');
   const barcodeRef = useRef<HTMLInputElement | null>(null);
   const { user, empresaId } = useAuth();
@@ -100,14 +109,167 @@ export function Logistica() {
   const [logItems, setLogItems] = useState<LogItem[]>([]);
   const [loadingLogItems, setLoadingLogItems] = useState(false);
   const [logItemsError, setLogItemsError] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const [plataformasList, setPlataformasList] = useState<Array<{ id: string; nome: string }>>([]);
+  const [filterPlataformaId, setFilterPlataformaId] = useState('');
+  const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState('');
+  const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
+  const [produtoSearchTerm, setProdutoSearchTerm] = useState('');
+  const [filterProdutos, setFilterProdutos] = useState<ProdutoFiltro[]>([]);
+  const [tempFilterProdutos, setTempFilterProdutos] = useState<ProdutoFiltro[]>([]);
+  const [showVariacoesModal, setShowVariacoesModal] = useState(false);
+  const [variacoesList, setVariacoesList] = useState<Array<{ id: string; nome: string; produtoId: string; produtoNome: string }>>([]);
+  const [selectedProdutoParaVariacao, setSelectedProdutoParaVariacao] = useState<{ id: string; nome: string } | null>(null);
+  const [modoListaPorPlataforma, setModoListaPorPlataforma] = useState(false);
+  const [pedidosFiltrados, setPedidosFiltrados] = useState<any[]>([]);
+  const [loadingPedidosFiltrados, setLoadingPedidosFiltrados] = useState(false);
+  const [pedidoAtualIndex, setPedidoAtualIndex] = useState(0);
+  const filterDropdownRef = useRef<HTMLDivElement>(null);
+
+  const pedidoTemItemPrioritario = (pedido: any) => {
+    const itens = pedido?.itens_pedido || [];
+    return itens.some((item: any) =>
+      item?.id === ITEM_PRIORITARIO_ML_ID ||
+      item?.produto_id === ITEM_PRIORITARIO_ML_ID ||
+      item?.variacao_id === ITEM_PRIORITARIO_ML_ID
+    );
+  };
+
+  const filterProdutosKey = filterProdutos.map((p) => `${p.tipo}:${p.id}`).sort().join('|');
+
+  const buscarProdutos = async (termo: string) => {
+    if (!termo || termo.length < 2) {
+      setProdutosList([]);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('produtos')
+        .select('id, nome, sku, variacoes_produto(id)')
+        .ilike('nome', `%${termo}%`)
+        .limit(20);
+
+      if (error) throw error;
+
+      const produtos = (data || []).map((p: any) => ({
+        id: p.id,
+        nome: p.nome,
+        sku: p.sku || '',
+        temVariacoes: (p.variacoes_produto && p.variacoes_produto.length > 0),
+      }));
+
+      setProdutosList(produtos);
+    } catch (err) {
+      console.error('Erro ao buscar produtos:', err);
+      toast({ title: 'Erro', description: 'Não foi possível buscar produtos', variant: 'destructive' });
+    }
+  };
+
+  const carregarVariacoes = async (produtoId: string, produtoNome: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('variacoes_produto')
+        .select('id, nome')
+        .eq('produto_id', produtoId)
+        .order('ordem');
+
+      if (error) throw error;
+
+      const variacoes = (data || []).map((v: any) => ({
+        id: v.id,
+        nome: v.nome,
+        produtoId,
+        produtoNome,
+      }));
+
+      setVariacoesList(variacoes);
+      setSelectedProdutoParaVariacao({ id: produtoId, nome: produtoNome });
+      setShowVariacoesModal(true);
+    } catch (err) {
+      console.error('Erro ao carregar variações:', err);
+      toast({ title: 'Erro', description: 'Não foi possível carregar variações', variant: 'destructive' });
+    }
+  };
+
+  const selecionarProduto = async (produto: { id: string; nome: string; temVariacoes: boolean }) => {
+    if (produto.temVariacoes) {
+      await carregarVariacoes(produto.id, produto.nome);
+      return;
+    }
+
+    if (!tempFilterProdutos.find((p) => p.id === produto.id && p.tipo === 'produto')) {
+      setTempFilterProdutos((prev) => [...prev, { id: produto.id, nome: produto.nome, tipo: 'produto' }]);
+    }
+    setProdutoSearchTerm('');
+    setProdutosList([]);
+  };
+
+  const selecionarVariacao = (variacao: { id: string; nome: string; produtoId: string; produtoNome: string }) => {
+    if (!tempFilterProdutos.find((p) => p.id === variacao.id && p.tipo === 'variacao')) {
+      setTempFilterProdutos((prev) => [
+        ...prev,
+        {
+          id: variacao.id,
+          nome: variacao.produtoNome,
+          tipo: 'variacao',
+          variacaoNome: variacao.nome,
+        },
+      ]);
+    }
+    setShowVariacoesModal(false);
+    setProdutoSearchTerm('');
+    setProdutosList([]);
+  };
+
+  const removerProdutoFiltro = (id: string, tipo: 'produto' | 'variacao') => {
+    setTempFilterProdutos((prev) => prev.filter((p) => !(p.id === id && p.tipo === tipo)));
+  };
 
   const fetchLogItems = async () => {
     setLoadingLogItems(true);
     setLogItemsError(null);
     try {
-  const { data, error } = await (supabase as any).from('vw_itens_logistica').select('produto_id, variacao_id, quantidade_total');
-      if (error) throw error;
-      const rows = (data ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }>;
+      let rows: Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }> = [];
+
+      if (filterPlataformaId) {
+        const { data: pedidosData, error: pedidosError } = await (supabase as any)
+          .from('pedidos')
+          .select('id, status_id, plataforma_id, itens_pedido(produto_id, variacao_id, quantidade)')
+          .eq('plataforma_id', filterPlataformaId)
+          .eq('status_id', LOGISTICA_STATUS_ID);
+
+        if (pedidosError) throw pedidosError;
+
+        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number }>();
+        const pedidos = (pedidosData ?? []) as Array<any>;
+
+        for (const pedido of pedidos) {
+          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null }>;
+          for (const item of itens) {
+            const key = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
+            const quantidade = Number(item.quantidade ?? 0);
+            const existing = aggregate.get(key);
+            if (existing) {
+              existing.quantidade_total += quantidade;
+            } else {
+              aggregate.set(key, {
+                produto_id: item.produto_id ?? null,
+                variacao_id: item.variacao_id ?? null,
+                quantidade_total: quantidade,
+              });
+            }
+          }
+        }
+
+        rows = Array.from(aggregate.values());
+      } else {
+        const { data, error } = await (supabase as any)
+          .from('vw_itens_logistica')
+          .select('produto_id, variacao_id, quantidade_total');
+        if (error) throw error;
+        rows = (data ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }>;
+      }
 
       // collect ids
       const produtoIds = Array.from(new Set(rows.map(r => r.produto_id).filter(Boolean))) as string[];
@@ -125,8 +287,29 @@ export function Logistica() {
       const prodMap = new Map<string, any>((prodRes?.data ?? []).map((p: any) => [p.id, p]));
       const varMap = new Map<string, any>((varRes?.data ?? []).map((v: any) => [v.id, v]));
 
-      const enriched = rows.map(r => ({ ...r, produto: r.produto_id ? prodMap.get(r.produto_id) : undefined, variacao: r.variacao_id ? varMap.get(r.variacao_id) : undefined }));
-      setLogItems(enriched);
+      const enriched = rows.map(r => ({
+        ...r,
+        produto: r.produto_id ? prodMap.get(r.produto_id) : undefined,
+        variacao: r.variacao_id ? varMap.get(r.variacao_id) : undefined,
+      }));
+
+      if (filterProdutos.length > 0) {
+        const produtoIds = new Set(filterProdutos.filter((p) => p.tipo === 'produto').map((p) => p.id));
+        const variacaoIds = new Set(filterProdutos.filter((p) => p.tipo === 'variacao').map((p) => p.id));
+
+        const filtradosPorProduto = enriched.filter((item: any) => {
+          const variacaoProdutoId = item.variacao?.produto_id;
+          return (
+            (item.produto_id && produtoIds.has(item.produto_id)) ||
+            (variacaoProdutoId && produtoIds.has(variacaoProdutoId)) ||
+            (item.variacao_id && variacaoIds.has(item.variacao_id))
+          );
+        });
+
+        setLogItems(filtradosPorProduto);
+      } else {
+        setLogItems(enriched);
+      }
     } catch (err) {
       console.error('Erro ao buscar itens de logística:', err);
       setLogItemsError(String(err));
@@ -136,10 +319,217 @@ export function Logistica() {
     }
   };
 
+  const fetchPedidosPorPlataforma = async (plataformaId: string) => {
+    setLoadingPedidosFiltrados(true);
+    try {
+      const selectQuery = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+
+      let pedidoIdsFiltroProduto: string[] | null = null;
+      if (filterProdutos.length > 0) {
+        const produtoIds = filterProdutos.filter((p) => p.tipo === 'produto').map((p) => p.id);
+        const variacaoIds = filterProdutos.filter((p) => p.tipo === 'variacao').map((p) => p.id);
+
+        let itemsQuery: any = (supabase as any).from('itens_pedido').select('pedido_id');
+
+        if (produtoIds.length > 0 && variacaoIds.length > 0) {
+          itemsQuery = itemsQuery.or(`produto_id.in.(${produtoIds.join(',')}),variacao_id.in.(${variacaoIds.join(',')})`);
+        } else if (produtoIds.length > 0) {
+          itemsQuery = itemsQuery.in('produto_id', produtoIds);
+        } else if (variacaoIds.length > 0) {
+          itemsQuery = itemsQuery.in('variacao_id', variacaoIds);
+        }
+
+        const { data: itemsData, error: itemsError } = await itemsQuery;
+        if (itemsError) throw itemsError;
+
+        pedidoIdsFiltroProduto = [...new Set((itemsData || []).map((item: any) => item.pedido_id))] as string[];
+
+        if (pedidoIdsFiltroProduto.length === 0) {
+          setPedidosFiltrados([]);
+          setPedidoAtualIndex(0);
+          setFoundPedido(null);
+          return;
+        }
+      }
+
+      let query: any = (supabase as any)
+        .from('pedidos')
+        .select(selectQuery)
+        .eq('plataforma_id', plataformaId)
+        .eq('status_id', LOGISTICA_STATUS_ID);
+
+      if (pedidoIdsFiltroProduto && pedidoIdsFiltroProduto.length > 0) {
+        query = query.in('id', pedidoIdsFiltroProduto);
+      }
+
+      if (empresaId) {
+        query = query.eq('empresa_id', empresaId);
+      }
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const pedidos = (data || []) as any[];
+      const priorizados = [...pedidos].sort((a, b) => {
+        const aTemItemPrioritarioML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(a);
+        const bTemItemPrioritarioML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(b);
+
+        if (aTemItemPrioritarioML !== bTemItemPrioritarioML) return aTemItemPrioritarioML ? -1 : 1;
+
+        const aTemShippingML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(a?.shipping_id || '').trim();
+        const bTemShippingML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(b?.shipping_id || '').trim();
+
+        if (aTemShippingML !== bTemShippingML) return aTemShippingML ? -1 : 1;
+
+        const aUrgente = !!a?.urgente;
+        const bUrgente = !!b?.urgente;
+        if (aUrgente !== bUrgente) return aUrgente ? -1 : 1;
+
+        const aTime = new Date(a?.criado_em || 0).getTime();
+        const bTime = new Date(b?.criado_em || 0).getTime();
+        return aTime - bTime;
+      });
+
+      setPedidosFiltrados(priorizados);
+      setPedidoAtualIndex(0);
+      setFoundItemIds([]);
+      setItemInputs({});
+      setItemStatus({});
+      setFoundPedido(priorizados[0] || null);
+    } catch (err) {
+      console.error('Erro ao buscar pedidos por plataforma:', err);
+      setPedidosFiltrados([]);
+      setPedidoAtualIndex(0);
+      setFoundPedido(null);
+    } finally {
+      setLoadingPedidosFiltrados(false);
+    }
+  };
+
+  const handleMudarPedidoPaginacao = (nextIndex: number) => {
+    if (nextIndex < 0 || nextIndex >= pedidosFiltrados.length) return;
+    setPedidoAtualIndex(nextIndex);
+    setFoundPedido(pedidosFiltrados[nextIndex]);
+    setFoundItemIds([]);
+    setItemInputs({});
+    setItemStatus({});
+    setTimeout(() => barcodeRef.current?.focus(), 50);
+  };
+
+  const avancarParaProximoPedidoAposConclusao = (pedidoConcluidoId?: string) => {
+    if (!modoListaPorPlataforma) {
+      setFoundPedido(null);
+      setFoundItemIds([]);
+      setItemInputs({});
+      setItemStatus({});
+      setTimeout(() => barcodeRef.current?.focus(), 0);
+      return;
+    }
+
+    setPedidosFiltrados((prev) => {
+      const listaAtual = Array.isArray(prev) ? prev : [];
+      const indexAtual = listaAtual.findIndex((p: any) => p.id === foundPedido?.id);
+      const listaSemConcluido = pedidoConcluidoId
+        ? listaAtual.filter((p: any) => p.id !== pedidoConcluidoId)
+        : listaAtual;
+
+      if (listaSemConcluido.length === 0) {
+        setPedidoAtualIndex(0);
+        setFoundPedido(null);
+        setFoundItemIds([]);
+        setItemInputs({});
+        setItemStatus({});
+        setTimeout(() => barcodeRef.current?.focus(), 0);
+        return [];
+      }
+
+      const proximoIndex = indexAtual < 0
+        ? 0
+        : Math.min(indexAtual, listaSemConcluido.length - 1);
+
+      setPedidoAtualIndex(proximoIndex);
+      setFoundPedido(listaSemConcluido[proximoIndex]);
+      setFoundItemIds([]);
+      setItemInputs({});
+      setItemStatus({});
+      setTimeout(() => barcodeRef.current?.focus(), 50);
+
+      return listaSemConcluido;
+    });
+  };
+
   useEffect(() => {
     fetchLogItems();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [filterPlataformaId, filterProdutosKey]);
+
+  useEffect(() => {
+    if (!filterPlataformaId) {
+      if (modoListaPorPlataforma) {
+        setFoundPedido(null);
+        setFoundItemIds([]);
+        setItemInputs({});
+        setItemStatus({});
+      }
+      setModoListaPorPlataforma(false);
+      setPedidosFiltrados([]);
+      setPedidoAtualIndex(0);
+      return;
+    }
+
+    setModoListaPorPlataforma(true);
+    fetchPedidosPorPlataforma(filterPlataformaId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterPlataformaId, empresaId, filterProdutosKey]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadPlataformas = async () => {
+      try {
+        let query = supabase
+          .from('plataformas')
+          .select('id, nome, empresa_id')
+          .order('nome');
+
+        if (empresaId) {
+          query = query.or(`empresa_id.eq.${empresaId},empresa_id.is.null`);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+        if (!mounted) return;
+
+        const plataformasOrdenadas = (data || []).map((p: any) => ({ id: p.id, nome: p.nome }));
+        setPlataformasList(plataformasOrdenadas);
+      } catch (err) {
+        console.error('Erro ao carregar plataformas:', err);
+        if (!mounted) return;
+        setPlataformasList([]);
+      }
+    };
+
+    loadPlataformas();
+
+    return () => {
+      mounted = false;
+    };
+  }, [empresaId]);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+        setShowFilters(false);
+      }
+    };
+
+    if (showFilters) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showFilters]);
 
   useEffect(() => {
     // focus on mount
@@ -196,11 +586,12 @@ export function Logistica() {
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
   const allItemsBipado = items.length > 0 && items.every((it: any) => (foundItemIds || []).includes(it.id));
+  const filteredLogItems = logItems;
   
   // Verifica se deve mostrar o botão da etiqueta ML
   // Prioridade: shipping_id deve ter valor (não null, não vazio)
   // Secundário: deve ser da plataforma Mercado Livre
-  const shouldShowMLButton = foundPedido?.plataforma_id === '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec' 
+  const shouldShowMLButton = foundPedido?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID 
                             && foundPedido?.shipping_id 
                             && String(foundPedido.shipping_id).trim() !== '';
 
@@ -254,6 +645,9 @@ export function Logistica() {
       setEtiquetaMLModalOpen(true);
 
       toast({ title: 'Sucesso', description: 'Etiqueta gerada! Visualize e imprima.' });
+
+      // Manter filtros/paginação e avançar para o próximo pedido (quando aplicável)
+      avancarParaProximoPedidoAposConclusao(foundPedido?.id);
       
       // Registrar no histórico
       if (foundPedido?.id && userId) {
@@ -313,7 +707,7 @@ export function Logistica() {
       // fetch pedido details (responsável, plataforma, itens)
       const { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(`id,id_externo,plataforma_id,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
+        .select(`id,id_externo,plataforma_id,urgente,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
         .eq('id', row.pedido_id)
         .single();
 
@@ -405,7 +799,7 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,shipping_id,remetente_id,status_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       // Tentar buscar por id_externo primeiro
       let { data: pedidoData, error: pedErr } = await supabase
@@ -543,6 +937,77 @@ export function Logistica() {
 
         <div className="mt-6">
           <div className="flex items-center gap-4">
+            <div className="relative" ref={filterDropdownRef}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTempFilterPlataformaId(filterPlataformaId);
+                  setTempFilterProdutos(filterProdutos);
+                  setProdutoSearchTerm('');
+                  setProdutosList([]);
+                  setShowFilters((s) => !s);
+                }}
+              >
+                <HiFilter className="h-5 w-5" />
+              </Button>
+
+              {showFilters && (
+                <div className="absolute left-0 top-full mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-medium">Filtros</div>
+                    <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setShowFilters(false)}>
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="mb-3">
+                    <label htmlFor="filter-plataforma-logistica" className="text-sm block mb-1">Filtrar por plataforma</label>
+                    <select
+                      id="filter-plataforma-logistica"
+                      value={tempFilterPlataformaId}
+                      onChange={(e) => setTempFilterPlataformaId(e.target.value)}
+                      className="w-full border rounded px-2 py-1 text-sm"
+                    >
+                      <option value="">Todas</option>
+                      {plataformasList.map((plataforma) => (
+                        <option key={plataforma.id} value={plataforma.id}>{plataforma.nome}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setProdutoSearchTerm('');
+                        setProdutosList([]);
+                        setTempFilterPlataformaId('');
+                        setFilterPlataformaId('');
+                        setTempFilterProdutos([]);
+                        setFilterProdutos([]);
+                      }}
+                    >
+                      Limpar
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => {
+                        setProdutoSearchTerm('');
+                        setProdutosList([]);
+                        setFilterPlataformaId(tempFilterPlataformaId);
+                        setFilterProdutos(tempFilterProdutos);
+                        setShowFilters(false);
+                      }}
+                    >
+                      Aplicar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="relative flex-1">
               <input
                 ref={barcodeRef}
@@ -550,6 +1015,8 @@ export function Logistica() {
                 onChange={(e) => setBarcode(e.target.value)}
                 onKeyDown={handleKeyDown}
                 onBlur={() => setTimeout(() => {
+                  if (showFilters) return;
+                  if (filterDropdownRef.current?.contains(document.activeElement)) return;
                   // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
                   const items = foundPedido?.itens_pedido || [];
                   const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
@@ -570,8 +1037,8 @@ export function Logistica() {
           </div>
         </div>
 
-        {/* Cards: itens a enviar (view vw_itens_logistica) - only show when no pedido is active */}
-        {!foundPedido && (
+        {/* Cards: itens a enviar (view vw_itens_logistica) - show only when no pedido is active and no filtro por plataforma */}
+        {!foundPedido && !modoListaPorPlataforma && (
           <div className="mt-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>ITENS A ENVIAR</h3>
@@ -590,11 +1057,11 @@ export function Logistica() {
               <div className="text-sm text-muted-foreground">Carregando itens de logística...</div>
             ) : logItemsError ? (
               <div className="text-sm text-destructive">Erro: {logItemsError}</div>
-            ) : logItems.length === 0 ? (
+            ) : filteredLogItems.length === 0 ? (
               <div className="text-sm text-muted-foreground">Nenhum item pendente para logística.</div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {logItems.map((it) => (
+              {filteredLogItems.map((it) => (
                 <Card key={`${it.produto_id ?? 'p'}-${it.variacao_id ?? 'v'}`} className="h-28">
                   <CardContent className="flex items-center p-4 gap-3 h-full">
                     <div className="flex items-center h-full">
@@ -624,6 +1091,15 @@ export function Logistica() {
           </div>
         )}
 
+        {/* Estado vazio/carregando do modo de pedidos por plataforma */}
+        {!foundPedido && modoListaPorPlataforma && (
+          <div className="mt-4 text-sm text-muted-foreground">
+            {loadingPedidosFiltrados
+              ? 'Carregando pedidos da plataforma...'
+              : 'Nenhum pedido pendente encontrado para esta plataforma.'}
+          </div>
+        )}
+
           {/* If a pedido was found, show a single pedido card with its items */}
           {foundPedido && (
             <div className="mt-6">
@@ -645,9 +1121,56 @@ export function Logistica() {
                         {foundPedido.plataformas?.img_url && (
                           <img src={foundPedido.plataformas.img_url} alt={foundPedido.plataformas.nome} className="w-8 h-8 rounded" />
                         )}
-                        <div className="text-sm font-medium text-white/90">{foundPedido.id_externo || foundPedido.id || '—'}</div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <div className="text-sm font-medium text-white/90">{foundPedido.id_externo || foundPedido.id || '—'}</div>
+                            {(foundPedido?.urgente === true || String(foundPedido?.urgente).toLowerCase() === 'true' || pedidoTemItemPrioritario(foundPedido)) && (
+                              <Badge className="bg-red-600 text-white border-red-600 h-5 px-2 text-[10px]">
+                                URGENTE
+                              </Badge>
+                            )}
+                          </div>
+                          {modoListaPorPlataforma && foundPedido?.criado_em && (
+                            <div className="text-sm text-white/80">
+                              {new Intl.DateTimeFormat('pt-BR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit',
+                              }).format(new Date(foundPedido.criado_em))}
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {modoListaPorPlataforma && pedidosFiltrados.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-white hover:bg-white/20 disabled:opacity-40"
+                          disabled={pedidoAtualIndex <= 0}
+                          onClick={() => handleMudarPedidoPaginacao(pedidoAtualIndex - 1)}
+                        >
+                          <ChevronLeft className="h-5 w-5" />
+                        </Button>
+                        <div className="text-base font-semibold text-white">
+                          {pedidoAtualIndex + 1} de {pedidosFiltrados.length}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-white hover:bg-white/20 disabled:opacity-40"
+                          disabled={pedidoAtualIndex >= pedidosFiltrados.length - 1}
+                          onClick={() => handleMudarPedidoPaginacao(pedidoAtualIndex + 1)}
+                        >
+                          <ChevronRight className="h-5 w-5" />
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </CardHeader>
                 <CardContent className="mt-3">
@@ -988,11 +1511,8 @@ export function Logistica() {
                               );
                             }
 
-                            // Limpar estado e resetar
-                            setFoundPedido(null);
-                            setFoundItemIds([]);
-                            setItemInputs({});
-                            setItemStatus({});
+                            // Manter filtros/paginação e avançar para o próximo pedido (quando aplicável)
+                            avancarParaProximoPedidoAposConclusao(foundPedido?.id);
 
                             // Atualizar cards de logística
                             try {
@@ -1001,8 +1521,6 @@ export function Logistica() {
                               // ignore — fetchLogItems logs its own errors
                             }
 
-                            // Focar no input principal
-                            setTimeout(() => barcodeRef.current?.focus(), 0);
                           } catch (err: any) {
                             console.error('Erro ao processar pedido:', err);
                             toast({ 
@@ -1145,6 +1663,40 @@ export function Logistica() {
             </Button>
             <Button onClick={handleConfirmarPedidoJaEnviado}>
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Selecionar Variação do Produto */}
+      <Dialog open={showVariacoesModal} onOpenChange={setShowVariacoesModal}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Escolha uma variação</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-80 overflow-y-auto space-y-2 py-2">
+            {selectedProdutoParaVariacao && (
+              <div className="text-sm text-muted-foreground mb-2">
+                Produto: {selectedProdutoParaVariacao.nome}
+              </div>
+            )}
+            {variacoesList.map((variacao) => (
+              <button
+                key={variacao.id}
+                type="button"
+                className="w-full text-left px-3 py-2 border rounded hover:bg-muted"
+                onClick={() => selecionarVariacao(variacao)}
+              >
+                {variacao.nome}
+              </button>
+            ))}
+            {variacoesList.length === 0 && (
+              <div className="text-sm text-muted-foreground">Nenhuma variação encontrada.</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowVariacoesModal(false)}>
+              Cancelar
             </Button>
           </DialogFooter>
         </DialogContent>

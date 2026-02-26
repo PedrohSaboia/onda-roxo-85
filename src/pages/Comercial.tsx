@@ -56,6 +56,7 @@ export function Comercial() {
   const urlPlataforma = params.get('plataforma_id') || '';
   const urlDataInicio = params.get('data_inicio') || '';
   const urlDataFim = params.get('data_fim') || '';
+  const urlStatus = params.get('status_id') || '';
   
   // State using URL as source of truth
   const [searchTerm, setSearchTerm] = useState(urlSearch);
@@ -84,6 +85,7 @@ export function Comercial() {
   const [filterNotLiberado, setFilterNotLiberado] = useState(urlLiberado);
   const [filterResponsavelId, setFilterResponsavelId] = useState(urlResponsavel);
   const [filterPlataformaId, setFilterPlataformaId] = useState(urlPlataforma);
+  const [filterStatusId, setFilterStatusId] = useState(urlStatus);
   const [filterDataInicio, setFilterDataInicio] = useState(urlDataInicio);
   const [filterDataFim, setFilterDataFim] = useState(urlDataFim);
   
@@ -109,6 +111,7 @@ export function Comercial() {
   const [tempFilterClienteFormNotSent, setTempFilterClienteFormNotSent] = useState(urlClienteForm);
   const [tempFilterResponsavelId, setTempFilterResponsavelId] = useState(urlResponsavel);
   const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState(urlPlataforma);
+  const [tempFilterStatusId, setTempFilterStatusId] = useState(urlStatus);
   const [tempFilterDuplicados, setTempFilterDuplicados] = useState(urlDuplicados);
   
   // Estados para filtro de produtos
@@ -121,6 +124,10 @@ export function Comercial() {
   
   // Ref para o dropdown de filtros
   const filterDropdownRef = useRef<HTMLDivElement>(null);
+
+  // status list for filter dropdown
+  const [filterStatusList, setFilterStatusList] = useState<Array<{ id: string; nome: string; cor_hex?: string; ordem?: number }>>([]);
+  const [loadingFilterStatusList, setLoadingFilterStatusList] = useState(false);
   
   // Estados para seleção de pedidos
   const [selectedPedidosIds, setSelectedPedidosIds] = useState<Set<string>>(new Set());
@@ -187,6 +194,7 @@ export function Comercial() {
     const newDuplicados = params.get('duplicados') === 'true';
     const newDataInicio = params.get('data_inicio') || '';
     const newDataFim = params.get('data_fim') || '';
+    const newStatus = params.get('status_id') || '';
     
     setPage(newPage);
     setPageSize(newPageSize);
@@ -201,6 +209,7 @@ export function Comercial() {
     setFilterDuplicados(newDuplicados);
     setFilterDataInicio(newDataInicio);
     setFilterDataFim(newDataFim);
+    setFilterStatusId(newStatus);
     
     // Sincronizar tempStartDate e tempEndDate para o date picker
     if (newDataInicio) {
@@ -219,6 +228,7 @@ export function Comercial() {
     setTempFilterClienteFormNotSent(newClienteForm);
     setTempFilterResponsavelId(newResponsavel);
     setTempFilterPlataformaId(newPlataforma);
+    setTempFilterStatusId(newStatus);
     setTempFilterDuplicados(newDuplicados);
   }, [location.search]);
 
@@ -299,6 +309,11 @@ export function Comercial() {
         // apply plataforma_id filter when requested
         if (filterPlataformaId) {
           (query as any).eq('plataforma_id', filterPlataformaId);
+        }
+
+        // apply status_id filter when requested
+        if (filterStatusId) {
+          (query as any).eq('status_id', filterStatusId);
         }
 
         // apply cliente formulario not sent filter (formulario_enviado = false)
@@ -515,7 +530,7 @@ export function Comercial() {
     fetchPedidos();
 
     return () => { mounted = false };
-  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterPlataformaId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, filterDuplicados, filterDataInicio, filterDataFim, searchTerm, selectedProdutos]);
+  }, [page, pageSize, view, filterNotLiberado, filterEtiquetaId, filterResponsavelId, filterPlataformaId, filterStatusId, filterEnvioAdiado, filterEnvioAdiadoDate, filterClienteFormNotSent, filterDuplicados, filterDataInicio, filterDataFim, searchTerm, selectedProdutos]);
 
   // load list of usuarios for filter dropdown
   useEffect(() => {
@@ -531,6 +546,26 @@ export function Comercial() {
       }
     };
     loadUsuarios();
+    return () => { mounted = false };
+  }, []);
+
+  // load list of status for filter dropdown
+  useEffect(() => {
+    let mounted = true;
+    const loadStatusList = async () => {
+      setLoadingFilterStatusList(true);
+      try {
+        const { data, error } = await supabase.from('status').select('id, nome, cor_hex, ordem').order('ordem');
+        if (error) throw error;
+        if (!mounted) return;
+        setFilterStatusList(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar status:', err);
+      } finally {
+        setLoadingFilterStatusList(false);
+      }
+    };
+    loadStatusList();
     return () => { mounted = false };
   }, []);
 
@@ -1341,6 +1376,7 @@ export function Comercial() {
     if (filterEtiquetaId) params.set('etiqueta_envio_id', filterEtiquetaId);
     if (filterClienteFormNotSent) params.set('cliente_formulario_enviado', 'false');
     if (filterNotLiberado) params.set('pedido_liberado', 'false');
+    if (filterStatusId) params.set('status_id', filterStatusId);
     if (filterEnvioAdiado) params.set('envio_adiado', 'true');
     if (filterDataInicio) params.set('data_inicio', filterDataInicio);
     if (filterDataFim) params.set('data_fim', filterDataFim);
@@ -1580,6 +1616,7 @@ export function Comercial() {
                   setTempFilterClienteFormNotSent(filterClienteFormNotSent);
                   setTempFilterResponsavelId(filterResponsavelId);
                   setTempFilterPlataformaId(filterPlataformaId);
+                  setTempFilterStatusId(filterStatusId);
                   setTempFilterDuplicados(filterDuplicados);
                   setShowFilters(s => !s);
                 }}>
@@ -1591,6 +1628,20 @@ export function Comercial() {
                     <div className="flex items-center justify-between mb-2">
                       <div className="text-sm font-medium">Filtros</div>
                       <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setShowFilters(false)}><X className="h-4 w-4" /></button>
+                    </div>
+                    <div className="mb-3">
+                      <label htmlFor="filter-status" className="text-sm block mb-1">Filtrar por status</label>
+                      <select
+                        id="filter-status"
+                        value={tempFilterStatusId}
+                        onChange={(e) => setTempFilterStatusId(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">Todos</option>
+                        {filterStatusList.map(s => (
+                          <option key={s.id} value={s.id}>{s.nome}</option>
+                        ))}
+                      </select>
                     </div>
                     <div className="flex items-center gap-2 mb-3">
                       <input id="filter-not-liberado" type="checkbox" checked={tempFilterNotLiberado} onChange={(e) => setTempFilterNotLiberado(e.target.checked)} />
@@ -1670,6 +1721,7 @@ export function Comercial() {
                         setTempFilterClienteFormNotSent(false);
                         setTempFilterResponsavelId('');
                         setTempFilterPlataformaId('');
+                        setTempFilterStatusId('');
                         setTempFilterDuplicados(false);
                         setSelectedProdutos([]);
                         setProdutoSearchTerm('');
@@ -1682,6 +1734,7 @@ export function Comercial() {
                         if (tempFilterClienteFormNotSent) next.set('cliente_formulario_enviado', 'false'); else next.delete('cliente_formulario_enviado');
                         if (tempFilterResponsavelId) next.set('responsavel_id', tempFilterResponsavelId); else next.delete('responsavel_id');
                         if (tempFilterPlataformaId) next.set('plataforma_id', tempFilterPlataformaId); else next.delete('plataforma_id');
+                        if (tempFilterStatusId) next.set('status_id', tempFilterStatusId); else next.delete('status_id');
                         if (tempFilterDuplicados) next.set('duplicados', 'true'); else next.delete('duplicados');
                         // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
