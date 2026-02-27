@@ -191,6 +191,7 @@ export function Comercial() {
     const newResponsavel = params.get('responsavel_id') || '';
     const newPlataforma = params.get('plataforma_id') || '';
     const newEnvioAdiado = params.get('envio_adiado') === 'true';
+    const newEnvioAdiadoDate = params.get('envio_adiado_date') || '';
     const newDuplicados = params.get('duplicados') === 'true';
     const newDataInicio = params.get('data_inicio') || '';
     const newDataFim = params.get('data_fim') || '';
@@ -206,6 +207,7 @@ export function Comercial() {
     setFilterResponsavelId(newResponsavel);
     setFilterPlataformaId(newPlataforma);
     setFilterEnvioAdiado(newEnvioAdiado);
+    setFilterEnvioAdiadoDate(newEnvioAdiadoDate ? new Date(newEnvioAdiadoDate + 'T00:00:00') : undefined);
     setFilterDuplicados(newDuplicados);
     setFilterDataInicio(newDataInicio);
     setFilterDataFim(newDataFim);
@@ -1868,6 +1870,7 @@ export function Comercial() {
                       setFilterEnvioAdiado(false);
                       setFilterEnvioAdiadoDate(undefined);
                       next.delete('envio_adiado');
+                      next.delete('envio_adiado_date');
                     } else {
                       setFilterEnvioAdiado(true);
                       next.set('envio_adiado', 'true');
@@ -1897,6 +1900,13 @@ export function Comercial() {
                         mode="single"
                         selected={filterEnvioAdiadoDate}
                         onSelect={(date) => {
+                          // persist selection into URL so it survives navigation
+                          const next = new URLSearchParams(location.search);
+                          next.set('envio_adiado', 'true');
+                          // store as yyyy-MM-dd
+                          const dateStr = format(date, 'yyyy-MM-dd');
+                          next.set('envio_adiado_date', dateStr);
+                          navigate({ pathname: location.pathname, search: next.toString() });
                           setFilterEnvioAdiadoDate(date);
                           setShowEnvioAdiadoCalendar(false);
                           setPage(1);
@@ -2176,6 +2186,9 @@ export function Comercial() {
                       <button
                         className="text-gray-500 hover:text-gray-700"
                         onClick={() => {
+                          const next = new URLSearchParams(location.search);
+                          next.delete('envio_adiado_date');
+                          navigate({ pathname: location.pathname, search: next.toString() });
                           setFilterEnvioAdiadoDate(undefined);
                           setPage(1);
                         }}
@@ -2192,6 +2205,7 @@ export function Comercial() {
                         setPage(1);
                         const next = new URLSearchParams(location.search);
                         next.delete('envio_adiado');
+                        next.delete('envio_adiado_date');
                         // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                       }}
