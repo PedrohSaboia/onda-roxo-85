@@ -936,12 +936,13 @@ export function Logistica() {
         </div>
 
         <div className="mt-6">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             <div className="relative" ref={filterDropdownRef}>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
+                className="h-12 px-4 bg-card rounded-[16px]"
                 onClick={() => {
                   setTempFilterPlataformaId(filterPlataformaId);
                   setTempFilterProdutos(filterProdutos);
@@ -950,7 +951,7 @@ export function Logistica() {
                   setShowFilters((s) => !s);
                 }}
               >
-                <HiFilter className="h-5 w-5" />
+                <HiFilter className="h-8 w-8" />
               </Button>
 
               {showFilters && (
