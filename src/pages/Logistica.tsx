@@ -322,7 +322,7 @@ export function Logistica() {
   const fetchPedidosPorPlataforma = async (plataformaId: string) => {
     setLoadingPedidosFiltrados(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       let pedidoIdsFiltroProduto: string[] | null = null;
       if (filterProdutos.length > 0) {
@@ -596,10 +596,10 @@ export function Logistica() {
                             && String(foundPedido.shipping_id).trim() !== '';
 
   const handleGerarEtiquetaML = async () => {
-    if (!foundPedido?.id_externo) {
+    if (!foundPedido?.id) {
       toast({ 
         title: 'Erro', 
-        description: 'O pedido não possui ID externo (id_externo) definido',
+        description: 'O pedido não possui id primário definido',
         variant: 'destructive'
       });
       return;
@@ -615,7 +615,7 @@ export function Logistica() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ id_externo: foundPedido.id_externo }),
+        body: JSON.stringify({ pedido_id: foundPedido.id }),
       });
 
       if (!response.ok) {
@@ -707,7 +707,7 @@ export function Logistica() {
       // fetch pedido details (responsável, plataforma, itens)
       const { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(`id,id_externo,plataforma_id,urgente,remetente_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
+        .select(`id,id_externo,plataforma_id,urgente,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
         .eq('id', row.pedido_id)
         .single();
 
@@ -799,7 +799,7 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       // Tentar buscar por id_externo primeiro
       let { data: pedidoData, error: pedErr } = await supabase
@@ -1330,6 +1330,13 @@ export function Logistica() {
                           try {
                             setLoadingScan(true);
 
+                            // ⚡ Atalho: se o pedido já tem link_etiqueta, abrir diretamente
+                            if (foundPedido?.link_etiqueta && String(foundPedido.link_etiqueta).trim() !== '') {
+                              window.open(String(foundPedido.link_etiqueta).trim(), '_blank');
+                              toast({ title: 'Etiqueta aberta', description: 'Link da etiqueta já gerado anteriormente.' });
+                              return;
+                            }
+
                             // Buscar empresa_id do usuário logado
                             if (!empresaId) {
                               throw new Error('Empresa do usuário não encontrada');
@@ -1464,34 +1471,30 @@ export function Logistica() {
                               );
                             }
 
+                            // Extrair link da etiqueta retornado pela Edge Function
+                            const link = etiquetaData?.etiqueta?.link_etiqueta as string | undefined;
+
                             // Atualizar status do pedido SOMENTE se a etiqueta foi gerada com sucesso
+                            const updatePayload: Record<string, any> = { 
+                              status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
+                              data_enviado: new Date().toISOString(),
+                              etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f',
+                            };
+                            // Persistir link_etiqueta para que o atalho funcione nas próximas vezes
+                            if (link) updatePayload.link_etiqueta = link;
+
                             const { data: dataArray, error } = await supabase
                               .from('pedidos')
-                              .update({ 
-                                status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
-                                data_enviado: new Date().toISOString(),
-                                etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f'
-                              })
+                              .update(updatePayload)
                               .eq('id', foundPedido?.id)
                               .select('id, id_externo');
                             
                             const data = dataArray?.[0];
 
                             if (error) throw error;
-
-                            console.log('=== APÓS ATUALIZAÇÃO DO PEDIDO ===');
-                            console.log('Pedido atualizado (data):', data);
-                            
-                            // Usar link da etiqueta retornado pela Edge Function
-                            const link = etiquetaData?.etiqueta?.link_etiqueta;
-                            console.log('Link extraído da Edge Function:', link);
-                            console.log('Tipo do link:', typeof link);
-                            console.log('Link é truthy?', !!link);
                             
                             if (link) {
-                              console.log('Tentando abrir link:', link);
                               window.open(link, '_blank');
-                              console.log('window.open executado');
                             } else {
                               console.log('Link não encontrado na resposta da Edge Function');
                             }
