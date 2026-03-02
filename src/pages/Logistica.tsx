@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert } from 'lucide-react';
 import { FaBoxesStacked } from 'react-icons/fa6';
@@ -144,6 +144,16 @@ export function Logistica() {
   const [pedidoAtualIndex, setPedidoAtualIndex] = useState(0);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const targetPedidoIdRef = useRef<string | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const savedScrollRef = useRef<number | null>(null);
+
+  // Restaura posição do scroll após qualquer re-render causado por paginação
+  useLayoutEffect(() => {
+    if (savedScrollRef.current !== null && scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = savedScrollRef.current;
+      savedScrollRef.current = null;
+    }
+  });
 
   const pedidoTemItemPrioritario = (pedido: any) => {
     const itens = pedido?.itens_pedido || [];
@@ -1230,7 +1240,7 @@ export function Logistica() {
  return (
     <div className="flex h-full">
       <LogisticaSidebar />
-      <div className="flex-1 h-full overflow-y-auto">
+      <div ref={scrollContainerRef} className="flex-1 h-full overflow-y-auto">
         <div className="space-y-6 p-6">
       <div>
         <div className="flex items-center justify-between">
@@ -1408,10 +1418,8 @@ export function Logistica() {
                     e.preventDefault();
                     e.stopPropagation();
                     if (page < 1 || page > totalPages) return;
+                    // Puramente síncrono — todos os itens já foram carregados ao abrir o card
                     setPlatformPage((s) => ({ ...s, [pc.id]: page }));
-                    const start2 = (page - 1) * PLATFORM_PAGE_SIZE;
-                    const ids = (pc.pedidos || []).slice(start2, start2 + PLATFORM_PAGE_SIZE).map((x: any) => x.id).filter(Boolean);
-                    if (ids.length > 0) fetchItemsForPedidoIds(ids).catch(console.error);
                   };
 
                   const isSyntheticCard = pc.id === 'urgentes' || pc.id === 'leads';
@@ -1419,15 +1427,15 @@ export function Logistica() {
                   return (
                   <Card key={pc.id} className="p-4 cursor-pointer">
                     <CardContent className="flex items-center gap-4 p-0">
-                      <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                      <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
                         {pc.img_url ? (
-                          <img src={pc.img_url} alt={pc.nome} className="w-14 h-14 object-cover" />
+                          <img src={pc.img_url} alt={pc.nome} className="w-9 h-9 object-cover" />
                         ) : pc.id === 'urgentes' ? (
-                          <TriangleAlert className="w-7 h-7 text-red-500" />
+                          <TriangleAlert className="w-5 h-5 text-red-500" />
                         ) : pc.id === 'leads' ? (
-                          <Users className="w-7 h-7 text-gray-600" />
+                          <Users className="w-5 h-5 text-gray-600" />
                         ) : (
-                          <FaBoxesStacked className="w-7 h-7 text-gray-500" />
+                          <FaBoxesStacked className="w-5 h-5 text-gray-500" />
                         )}
                       </div>
                       <div className="flex-1">
@@ -1481,7 +1489,8 @@ export function Logistica() {
                             if (next) {
                               setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
                               try {
-                                const ids = (pc.pedidos || []).slice(0, PLATFORM_PAGE_SIZE).map((x: any) => x.id).filter(Boolean);
+                                // Carrega TODOS os itens do card de uma vez
+                                const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
                                 if (ids.length > 0) await fetchItemsForPedidoIds(ids);
                               } catch (err) { console.error(err); }
                             }
@@ -1495,6 +1504,32 @@ export function Logistica() {
 
                     {openPlatformId === pc.id && (
                       <div className="p-2 border-t">
+                        {/* Paginação no topo */}
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between mb-2 pb-2 border-b">
+                            <span className="text-sm text-muted-foreground">
+                              {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={currentPage <= 1}
+                                onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                              >
+                                ‹
+                              </button>
+                              <button
+                                type="button"
+                                disabled={currentPage >= totalPages}
+                                onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                              >
+                                ›
+                              </button>
+                            </div>
+                          </div>
+                        )}
                         {pedidosPagina.length === 0 ? (
                           <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
                         ) : (
@@ -1564,32 +1599,7 @@ export function Logistica() {
                               );
                             })}
 
-                            {/* Paginação */}
-                            {totalPages > 1 && (
-                              <div className="flex items-center justify-between mt-3 pt-2 border-t">
-                                <span className="text-sm text-muted-foreground">
-                                  {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={currentPage <= 1}
-                                    onClick={(e) => handleGoToPage(e, currentPage - 1)}
-                                    className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                                  >
-                                    ‹
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={currentPage >= totalPages}
-                                    onClick={(e) => handleGoToPage(e, currentPage + 1)}
-                                    className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                                  >
-                                    ›
-                                  </button>
-                                </div>
-                              </div>
-                            )}
+
                           </div>
                         )}
                       </div>
