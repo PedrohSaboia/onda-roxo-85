@@ -846,10 +846,10 @@ export default function PedidoContabilidade() {
   };
 
   const handleGerarEtiquetaML = async () => {
-    if (!pedido?.id_externo) {
+    if (!pedido?.id) {
       toast({ 
         title: 'Erro', 
-        description: 'O pedido não possui ID externo (id_externo) definido',
+        description: 'O pedido não possui id primário definido',
         variant: 'destructive'
       });
       return;
@@ -865,7 +865,7 @@ export default function PedidoContabilidade() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ id_externo: pedido.id_externo }),
+        body: JSON.stringify({ pedido_id: pedido.id }),
       });
 
       if (!response.ok) {

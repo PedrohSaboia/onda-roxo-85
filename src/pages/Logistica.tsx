@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert } from 'lucide-react';
 import { FaBoxesStacked } from 'react-icons/fa6';
 import { HiFilter } from 'react-icons/hi';
 import { Button } from '@/components/ui/button';
@@ -51,6 +51,17 @@ export function Logistica() {
   // Estados para pedido já enviado
   const [pedidoJaEnviadoModalOpen, setPedidoJaEnviadoModalOpen] = useState(false);
   const [pedidoJaEnviado, setPedidoJaEnviado] = useState<any | null>(null);
+
+  // Modal de confirmação de envio (após abrir link da etiqueta)
+  type ConfirmEnvioData = {
+    open: boolean;
+    link: string | null;
+    pedidoId: string;
+    pedidoIdExterno: string | null;
+    updatePayload: Record<string, any>;
+  };
+  const [confirmEnvioModal, setConfirmEnvioModal] = useState<ConfirmEnvioData | null>(null);
+  const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // User ID para histórico
   const [userId, setUserId] = useState<string | null>(null);
@@ -111,6 +122,13 @@ export function Logistica() {
   const [logItemsError, setLogItemsError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [plataformasList, setPlataformasList] = useState<Array<{ id: string; nome: string }>>([]);
+  // cards por plataforma (nova exibição de itens a enviar)
+  const [plataformasCards, setPlataformasCards] = useState<Array<any>>([]);
+  const [loadingPlataformaCards, setLoadingPlataformaCards] = useState(false);
+  const [openPlatformId, setOpenPlatformId] = useState<string | null>(null);
+  const [platformOrderItems, setPlatformOrderItems] = useState<Record<string, any[]>>({});
+  const PLATFORM_PAGE_SIZE = 4;
+  const [platformPage, setPlatformPage] = useState<Record<string, number>>({});
   const [filterPlataformaId, setFilterPlataformaId] = useState('');
   const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState('');
   const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
@@ -125,6 +143,7 @@ export function Logistica() {
   const [loadingPedidosFiltrados, setLoadingPedidosFiltrados] = useState(false);
   const [pedidoAtualIndex, setPedidoAtualIndex] = useState(0);
   const filterDropdownRef = useRef<HTMLDivElement>(null);
+  const targetPedidoIdRef = useRef<string | null>(null);
 
   const pedidoTemItemPrioritario = (pedido: any) => {
     const itens = pedido?.itens_pedido || [];
@@ -133,6 +152,34 @@ export function Logistica() {
       item?.produto_id === ITEM_PRIORITARIO_ML_ID ||
       item?.variacao_id === ITEM_PRIORITARIO_ML_ID
     );
+  };
+
+  // Ordenação determinística compartilhada entre cards e sequência de pedidos
+  const sortPedidos = (pedidos: any[]): any[] => {
+    return [...pedidos].sort((a, b) => {
+      // 1. Itens prioritários do ML (só disponível com dados completos)
+      const aItemML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(a);
+      const bItemML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(b);
+      if (aItemML !== bItemML) return aItemML ? -1 : 1;
+
+      // 2. ML com shipping_id (só disponível com dados completos)
+      const aShipML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(a?.shipping_id || '').trim();
+      const bShipML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(b?.shipping_id || '').trim();
+      if (aShipML !== bShipML) return aShipML ? -1 : 1;
+
+      // 3. Urgente primeiro
+      const aUrg = !!a?.urgente;
+      const bUrg = !!b?.urgente;
+      if (aUrg !== bUrg) return aUrg ? -1 : 1;
+
+      // 4. Mais antigo primeiro (criado_em asc)
+      const aTime = new Date(a?.criado_em || 0).getTime();
+      const bTime = new Date(b?.criado_em || 0).getTime();
+      if (aTime !== bTime) return aTime - bTime;
+
+      // 5. Tiebreaker estável: UUID
+      return String(a?.id || '').localeCompare(String(b?.id || ''));
+    });
   };
 
   const filterProdutosKey = filterProdutos.map((p) => `${p.tipo}:${p.id}`).sort().join('|');
@@ -319,10 +366,22 @@ export function Logistica() {
     }
   };
 
+  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
+
+  const fetchPedidosPorIds = async (ids: string[]): Promise<any[]> => {
+    if (!ids.length) return [];
+    const { data, error } = await (supabase as any)
+      .from('pedidos')
+      .select(FULL_PEDIDO_SELECT)
+      .in('id', ids);
+    if (error) throw error;
+    return data || [];
+  };
+
   const fetchPedidosPorPlataforma = async (plataformaId: string) => {
     setLoadingPedidosFiltrados(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = FULL_PEDIDO_SELECT;
 
       let pedidoIdsFiltroProduto: string[] | null = null;
       if (filterProdutos.length > 0) {
@@ -356,7 +415,8 @@ export function Logistica() {
         .from('pedidos')
         .select(selectQuery)
         .eq('plataforma_id', plataformaId)
-        .eq('status_id', LOGISTICA_STATUS_ID);
+        .eq('status_id', LOGISTICA_STATUS_ID)
+        .eq('etiqueta_envio_id', '466958dd-e525-4e8d-95f1-067124a5ea7f');
 
       if (pedidoIdsFiltroProduto && pedidoIdsFiltroProduto.length > 0) {
         query = query.in('id', pedidoIdsFiltroProduto);
@@ -370,32 +430,19 @@ export function Logistica() {
       if (error) throw error;
 
       const pedidos = (data || []) as any[];
-      const priorizados = [...pedidos].sort((a, b) => {
-        const aTemItemPrioritarioML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(a);
-        const bTemItemPrioritarioML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(b);
+      const priorizados = sortPedidos(pedidos);
 
-        if (aTemItemPrioritarioML !== bTemItemPrioritarioML) return aTemItemPrioritarioML ? -1 : 1;
-
-        const aTemShippingML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(a?.shipping_id || '').trim();
-        const bTemShippingML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(b?.shipping_id || '').trim();
-
-        if (aTemShippingML !== bTemShippingML) return aTemShippingML ? -1 : 1;
-
-        const aUrgente = !!a?.urgente;
-        const bUrgente = !!b?.urgente;
-        if (aUrgente !== bUrgente) return aUrgente ? -1 : 1;
-
-        const aTime = new Date(a?.criado_em || 0).getTime();
-        const bTime = new Date(b?.criado_em || 0).getTime();
-        return aTime - bTime;
-      });
+      const targetId = targetPedidoIdRef.current;
+      targetPedidoIdRef.current = null;
+      const targetIdx = targetId ? priorizados.findIndex((p: any) => p.id === targetId) : -1;
+      const startIdx = targetIdx >= 0 ? targetIdx : 0;
 
       setPedidosFiltrados(priorizados);
-      setPedidoAtualIndex(0);
+      setPedidoAtualIndex(startIdx);
       setFoundItemIds([]);
       setItemInputs({});
       setItemStatus({});
-      setFoundPedido(priorizados[0] || null);
+      setFoundPedido(priorizados[startIdx] || null);
     } catch (err) {
       console.error('Erro ao buscar pedidos por plataforma:', err);
       setPedidosFiltrados([]);
@@ -428,7 +475,6 @@ export function Logistica() {
 
     setPedidosFiltrados((prev) => {
       const listaAtual = Array.isArray(prev) ? prev : [];
-      const indexAtual = listaAtual.findIndex((p: any) => p.id === foundPedido?.id);
       const listaSemConcluido = pedidoConcluidoId
         ? listaAtual.filter((p: any) => p.id !== pedidoConcluidoId)
         : listaAtual;
@@ -443,12 +489,9 @@ export function Logistica() {
         return [];
       }
 
-      const proximoIndex = indexAtual < 0
-        ? 0
-        : Math.min(indexAtual, listaSemConcluido.length - 1);
-
-      setPedidoAtualIndex(proximoIndex);
-      setFoundPedido(listaSemConcluido[proximoIndex]);
+      // após imprimir etiqueta, volta sempre ao primeiro da lista
+      setPedidoAtualIndex(0);
+      setFoundPedido(listaSemConcluido[0]);
       setFoundItemIds([]);
       setItemInputs({});
       setItemStatus({});
@@ -501,6 +544,12 @@ export function Logistica() {
 
         const plataformasOrdenadas = (data || []).map((p: any) => ({ id: p.id, nome: p.nome }));
         setPlataformasList(plataformasOrdenadas);
+        // também buscar os cards por plataforma (contagens de pedidos em logística com etiqueta disponível)
+        try {
+          await fetchPlataformaCards();
+        } catch (e) {
+          // ignore
+        }
       } catch (err) {
         console.error('Erro ao carregar plataformas:', err);
         if (!mounted) return;
@@ -514,6 +563,102 @@ export function Logistica() {
       mounted = false;
     };
   }, [empresaId]);
+
+  const fetchPlataformaCards = async () => {
+    setLoadingPlataformaCards(true);
+    try {
+      // obter plataformas (já carregadas normalmente) e pedidos que estão em status LOGISTICA
+      const { data: plataformas } = await supabase
+        .from('plataformas')
+        .select('id, nome, img_url')
+        .order('nome');
+
+      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+
+      // IDs das plataformas de leads
+      const LEADS_PLATFORM_IDS = new Set([
+        '0e27f292-924c-4ffc-a141-bbe00ec00428',
+        'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f',
+        'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+      ]);
+
+      // buscar pedidos com status LOGISTICA e etiqueta_envio_id exatos (filtros aplicados no servidor)
+      let pedidosQuery = (supabase as any)
+        .from('pedidos')
+        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id')
+        .eq('status_id', LOGISTICA_STATUS_ID)
+        .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
+      if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+
+      const { data: pedidosData, error: pedidosErr } = await pedidosQuery;
+      if (pedidosErr) throw pedidosErr;
+      const pedidosComEtiqueta = pedidosData || [];
+
+      const platformMap = new Map((plataformas || []).map((p: any) => [p.id, p]));
+
+      // identificar plataformas principais
+      const yampiPlatform = (plataformas || []).find((p: any) => /yampi/i.test(p.nome));
+      const mlPlatform = (plataformas || []).find((p: any) => p.id === MERCADO_LIVRE_PLATAFORMA_ID || /mercado livre/i.test(p.nome));
+
+      // nomes de plataformas urgentes (exceto ML e Yampi)
+      const urgentPlatformNames = ['shopee', 'tiktok', 'magalu'];
+
+      const yampiPedidos = pedidosComEtiqueta.filter((p: any) =>
+        p.plataforma_id === yampiPlatform?.id && !p.urgente,
+      );
+      const mlPedidos = pedidosComEtiqueta.filter((p: any) =>
+        p.plataforma_id === mlPlatform?.id && !p.etiqueta_ml && !p.urgente,
+      );
+      const leadsPedidos = pedidosComEtiqueta.filter((p: any) =>
+        LEADS_PLATFORM_IDS.has(p.plataforma_id),
+      );
+      const urgentesPedidos = pedidosComEtiqueta.filter((p: any) => {
+        const pname = String(platformMap.get(p.plataforma_id)?.nome || '').toLowerCase();
+        const isUrgentPlatform = urgentPlatformNames.some((n) => pname.includes(n));
+        const isMLComEtiquetaML = p.plataforma_id === mlPlatform?.id && !!p.etiqueta_ml;
+        const isUrgente = !!p.urgente;
+        return isUrgentPlatform || isMLComEtiquetaML || isUrgente;
+      });
+
+      const cards = [
+        {
+          id: yampiPlatform?.id || 'yampi-card',
+          nome: yampiPlatform?.nome || 'Yampi',
+          img_url: yampiPlatform?.img_url,
+          count: yampiPedidos.length,
+          pedidos: sortPedidos(yampiPedidos),
+        },
+        {
+          id: mlPlatform?.id || MERCADO_LIVRE_PLATAFORMA_ID,
+          nome: mlPlatform?.nome || 'Mercado Livre',
+          img_url: mlPlatform?.img_url,
+          count: mlPedidos.length,
+          pedidos: sortPedidos(mlPedidos),
+        },
+        {
+          id: 'leads',
+          nome: 'Leads',
+          img_url: null,
+          count: leadsPedidos.length,
+          pedidos: sortPedidos(leadsPedidos),
+        },
+        {
+          id: 'urgentes',
+          nome: 'Urgentes',
+          img_url: null,
+          count: urgentesPedidos.length,
+          pedidos: sortPedidos(urgentesPedidos),
+        },
+      ];
+
+      setPlataformasCards(cards);
+    } catch (err) {
+      console.error('Erro ao buscar cards por plataforma:', err);
+      setPlataformasCards([]);
+    } finally {
+      setLoadingPlataformaCards(false);
+    }
+  };
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -530,6 +675,31 @@ export function Logistica() {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showFilters]);
+
+  const fetchItemsForPedidoIds = async (pedidoIds: string[]) => {
+    if (!pedidoIds || pedidoIds.length === 0) return;
+    try {
+      const { data: itemsData, error: itemsErr } = await (supabase as any)
+        .from('itens_pedido')
+        .select('pedido_id, quantidade, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url)')
+        .in('pedido_id', pedidoIds);
+      if (itemsErr) throw itemsErr;
+      const grouped: Record<string, any[]> = {};
+      (itemsData || []).forEach((it: any) => {
+        const pid = it.pedido_id;
+        const entry = grouped[pid] || [];
+        entry.push({
+          quantidade: it.quantidade,
+          img_url: it.produto?.img_url || it.variacao?.img_url || null,
+          nome: it.produto?.nome || it.variacao?.nome || null,
+        });
+        grouped[pid] = entry;
+      });
+      setPlatformOrderItems((prev) => ({ ...prev, ...grouped }));
+    } catch (err) {
+      console.error('Erro ao buscar itens para pedidos:', err);
+    }
+  };
 
   useEffect(() => {
     // focus on mount
@@ -578,8 +748,10 @@ export function Logistica() {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      // call RPC to find best matching item for this barcode
-      handleScan(barcode.trim());
+      // agora a pesquisa é por id_externo do pedido
+      const code = barcode.trim();
+      if (!code) return;
+      void handleBuscarPedidoPorId(code);
     }
   };
 
@@ -781,13 +953,10 @@ export function Logistica() {
     }
   };
 
-  const handleEnviarPorPedido = () => {
-    setPedidoIdInput('');
-    setPedidoIdModalOpen(true);
-  };
+  // note: botão "Enviar por pedido" removido — pesquisa agora é feita diretamente pelo input principal
 
-  const handleBuscarPedidoPorId = async () => {
-    const pedidoId = pedidoIdInput.trim();
+  const handleBuscarPedidoPorId = async (pedidoIdParam?: string) => {
+    const pedidoId = (pedidoIdParam ?? pedidoIdInput).trim();
     if (!pedidoId) {
       toast({ 
         title: 'ID inválido', 
@@ -858,7 +1027,7 @@ export function Logistica() {
       if (pedidoRow2?.id && userId) {
         await registrarHistoricoMovimentacao(
           pedidoRow2.id,
-          `Pedido carregado manualmente via logística (ID/ID Externo: ${pedidoIdInput})`,
+          `Pedido carregado manualmente via logística (ID/ID Externo: ${pedidoId})`,
           userId
         );
       }
@@ -883,6 +1052,156 @@ export function Logistica() {
       });
     } finally {
       setLoadingPedidoManual(false);
+    }
+  };
+
+  // ──────────────────────────────────────────────────────────
+  // Função: processar etiqueta e abrir modal de confirmação
+  // ──────────────────────────────────────────────────────────
+  const handleImprimirEtiqueta = async () => {
+    try {
+      setLoadingScan(true);
+
+      // Atalho: pedido já tem link_etiqueta
+      if (foundPedido?.link_etiqueta && String(foundPedido.link_etiqueta).trim() !== '') {
+        const link = String(foundPedido.link_etiqueta).trim();
+        window.open(link, '_blank');
+        setConfirmEnvioModal({
+          open: true,
+          link,
+          pedidoId: foundPedido.id,
+          pedidoIdExterno: foundPedido.id_externo ?? null,
+          updatePayload: {
+            status_id: ENVIADO_STATUS_ID,
+            data_enviado: new Date().toISOString(),
+          },
+        });
+        return;
+      }
+
+      if (!empresaId) throw new Error('Empresa do usuário não encontrada');
+
+      // Verificar saldo Melhor Envio
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Usuário não autenticado');
+
+      const saldoResponse = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
+      });
+      if (!saldoResponse.ok) {
+        const e = await saldoResponse.json().catch(() => ({ message: 'Erro ao verificar saldo' }));
+        throw new Error(e.message || 'Erro ao verificar saldo do Melhor Envio');
+      }
+      const saldoData = await saldoResponse.json();
+      const saldoAtual = saldoData?.balance || 0;
+      if (saldoAtual < 50) {
+        toast({
+          title: '⚠️ Saldo Insuficiente',
+          description: `Saldo atual: R$ ${saldoAtual.toFixed(2)}. Mínimo necessário: R$ 50,00. Por favor, recarregue sua conta no Melhor Envio.`,
+          variant: 'destructive',
+          duration: 8000,
+        });
+        return;
+      }
+
+      // Definir remetente_id
+      let remetenteId = foundPedido?.remetente_id;
+      if (!remetenteId) {
+        const plataformaId = foundPedido?.plataforma_id;
+        const plataformasEspeciais = [
+          '0e27f292-924c-4ffc-a141-bbe00ec00428',
+          'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f',
+          'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+        ];
+        remetenteId = plataformasEspeciais.includes(plataformaId)
+          ? '3fc6839c-e959-4dc1-a983-f61d557e50ec'
+          : '128a7de7-d649-43e1-8ba3-2b54c3496b14';
+        const { error: updateError } = await supabase.from('pedidos').update({ remetente_id: remetenteId } as any).eq('id', foundPedido?.id);
+        if (updateError) throw new Error('Erro ao definir remetente do pedido');
+        if (foundPedido?.id && userId) {
+          const plataformaNome = plataformasEspeciais.includes(foundPedido?.plataforma_id) ? 'especial' : 'padrão';
+          await registrarHistoricoMovimentacao(foundPedido.id, `Remetente definido automaticamente via logística (plataforma ${plataformaNome})`, userId);
+        }
+      }
+
+      // Chamar Edge Function para processar etiqueta
+      const edgeFunctionUrl = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/processar_etiqueta_em_envio_de_pedido';
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+      const edgeResponse = await fetch(edgeFunctionUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
+        body: JSON.stringify({ pedido_id: foundPedido?.id, empresa_id: empresaId, remetente_id: remetenteId }),
+      });
+      if (!edgeResponse.ok) {
+        const errorData = await edgeResponse.json().catch(() => ({ error: 'Erro desconhecido' }));
+        throw new Error(errorData.error || `Erro ao processar etiqueta: ${edgeResponse.status}`);
+      }
+      const etiquetaData = await edgeResponse.json();
+
+      if (etiquetaData?.etiqueta_error) {
+        toast({ title: '❌ Erro ao gerar etiqueta', description: etiquetaData.etiqueta_error, variant: 'destructive', duration: 10000 });
+        return;
+      }
+
+      if (foundPedido?.id && userId) {
+        await registrarHistoricoMovimentacao(foundPedido.id, `Etiqueta Melhor Envio gerada via logística (ID Externo: ${foundPedido.id_externo || foundPedido.id})`, userId);
+      }
+
+      const link = etiquetaData?.etiqueta?.link_etiqueta as string | undefined;
+
+      const updatePayload: Record<string, any> = {
+        status_id: ENVIADO_STATUS_ID,
+        data_enviado: new Date().toISOString(),
+        etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f',
+      };
+      if (link) updatePayload.link_etiqueta = link;
+
+      // Abrir link da etiqueta
+      if (link) window.open(link, '_blank');
+
+      // Mostrar modal de confirmação — o status só muda quando o usuário confirmar
+      setConfirmEnvioModal({
+        open: true,
+        link: link ?? null,
+        pedidoId: foundPedido?.id,
+        pedidoIdExterno: foundPedido?.id_externo ?? null,
+        updatePayload,
+      });
+    } catch (err: any) {
+      console.error('Erro ao processar pedido:', err);
+      toast({ title: 'Erro ao processar pedido', description: err.message || String(err), variant: 'destructive' });
+    } finally {
+      setLoadingScan(false);
+    }
+  };
+
+  // Confirma o envio: atualiza status e avança para o próximo pedido
+  const handleConfirmarEnvio = async () => {
+    if (!confirmEnvioModal) return;
+    const { pedidoId, pedidoIdExterno, updatePayload } = confirmEnvioModal;
+    setConfirmEnvioModal(null);
+    try {
+      const { data: dataArray, error } = await supabase
+        .from('pedidos')
+        .update(updatePayload)
+        .eq('id', pedidoId)
+        .select('id, id_externo');
+      if (error) throw error;
+      const data = dataArray?.[0];
+      toast({ title: 'Pedido concluído', description: 'Etiqueta processada e status atualizado com sucesso' });
+      if (data?.id && userId) {
+        await registrarHistoricoMovimentacao(
+          data.id,
+          `Pedido enviado via logística - status atualizado para "Enviado" (${data.id_externo || data.id})`,
+          userId,
+        );
+      }
+      avancarParaProximoPedidoAposConclusao(pedidoId);
+      try { await fetchLogItems(); } catch (_) {}
+    } catch (err: any) {
+      console.error('Erro ao confirmar envio:', err);
+      toast({ title: 'Erro ao atualizar status', description: err.message || String(err), variant: 'destructive' });
     }
   };
 
@@ -916,10 +1235,32 @@ export function Logistica() {
       <div>
         <div className="flex items-center justify-between">
           <div>
+            {(modoListaPorPlataforma || !!foundPedido) && (
+              <div className="mb-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="-ml-1"
+                  onClick={() => {
+                    setFoundPedido(null);
+                    setFoundItemIds([]);
+                    setFilterPlataformaId('');
+                    setModoListaPorPlataforma(false);
+                    setPedidosFiltrados([]);
+                    setPedidoAtualIndex(0);
+                    setOpenPlatformId(null);
+                    setItemInputs({});
+                    setItemStatus({});
+                    setTimeout(() => barcodeRef.current?.focus(), 50);
+                  }}
+                >
+                  <ChevronLeft className="h-4 w-4 mr-2" />
+                  Voltar
+                </Button>
+              </div>
+            )}
             <h1 className="text-2xl font-bold">Logística</h1>
-            <p className="text-muted-foreground">
-              Envio de pedidos
-            </p>
+            <p className="text-muted-foreground">Envio de pedidos</p>
           </div>
           <div className="text-right">
             <div className="text-sm text-muted-foreground">Saldo Melhor Envio</div>
@@ -1023,7 +1364,7 @@ export function Logistica() {
                   if (!hasMissing) barcodeRef.current?.focus();
                 }, 0)}
                 className="w-full text-2xl py-2 pl-3 pr-24 border-2 rounded-[16px] bg-white focus:outline-none focus:ring-0 focus:border-custom-600 transition-colors"
-                placeholder="Escaneie o código do produto aqui"
+                placeholder="Pesquisar pelo ID do pedido"
                 aria-label="Leitor de código"
               />
               <Button
@@ -1042,52 +1383,221 @@ export function Logistica() {
           <div className="mt-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>ITENS A ENVIAR</h3>
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  Atualizar
-                </Button>
-                <Button onClick={handleEnviarPorPedido} className="rounded-md px-3 py-1 flex items-center gap-2">
-                  Enviar por pedido
-                </Button>
-              </div>
+                      <div className="flex items-center gap-2">
+                        <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
+                          <RefreshCw className="h-4 w-4" />
+                          Atualizar
+                        </Button>
+                      </div>
             </div>
 
-            {loadingLogItems ? (
-              <div className="text-sm text-muted-foreground">Carregando itens de logística...</div>
-            ) : logItemsError ? (
-              <div className="text-sm text-destructive">Erro: {logItemsError}</div>
-            ) : filteredLogItems.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nenhum item pendente para logística.</div>
+            {loadingPlataformaCards ? (
+              <div className="text-sm text-muted-foreground">Carregando plataformas...</div>
+            ) : plataformasCards.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {filteredLogItems.map((it) => (
-                <Card key={`${it.produto_id ?? 'p'}-${it.variacao_id ?? 'v'}`} className="h-28">
-                  <CardContent className="flex items-center p-4 gap-3 h-full">
-                    <div className="flex items-center h-full">
-                      {it.variacao?.img_url || it.produto?.img_url ? (
-                        <img src={it.variacao?.img_url || it.produto?.img_url} className="w-12 h-12 rounded-full object-cover border-2 border-gray-200" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full border-2 border-gray-200 flex items-center justify-center text-custom-700">
-                          <FaBoxesStacked className="w-6 h-6" aria-hidden />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 flex flex-col justify-center h-full">
-                      <div className="font-medium">{it.produto?.nome || it.variacao?.nome || '—'}</div>
-                      {it.variacao?.nome ? (
-                        <div className="text-sm text-muted-foreground">{it.variacao.nome}</div>
-                      ) : null}
-                    </div>
-                    <div className="text-right flex flex-col justify-center h-full">
-                      <div className="text-sm text-muted-foreground">A enviar</div>
-                      <div className="text-xl font-semibold">{it.quantidade_total}</div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full mx-auto">
+                {plataformasCards.map((pc) => {
+                  const currentPage = platformPage[pc.id] ?? 1;
+                  const totalPages = Math.max(1, Math.ceil((pc.pedidos?.length ?? 0) / PLATFORM_PAGE_SIZE));
+                  const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
+                  const pedidosPagina = (pc.pedidos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
+
+                  const handleGoToPage = (e: React.MouseEvent, page: number) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (page < 1 || page > totalPages) return;
+                    setPlatformPage((s) => ({ ...s, [pc.id]: page }));
+                    const start2 = (page - 1) * PLATFORM_PAGE_SIZE;
+                    const ids = (pc.pedidos || []).slice(start2, start2 + PLATFORM_PAGE_SIZE).map((x: any) => x.id).filter(Boolean);
+                    if (ids.length > 0) fetchItemsForPedidoIds(ids).catch(console.error);
+                  };
+
+                  const isSyntheticCard = pc.id === 'urgentes' || pc.id === 'leads';
+
+                  return (
+                  <Card key={pc.id} className="p-4 cursor-pointer">
+                    <CardContent className="flex items-center gap-4 p-0">
+                      <div className="w-14 h-14 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                        {pc.img_url ? (
+                          <img src={pc.img_url} alt={pc.nome} className="w-14 h-14 object-cover" />
+                        ) : pc.id === 'urgentes' ? (
+                          <TriangleAlert className="w-7 h-7 text-red-500" />
+                        ) : pc.id === 'leads' ? (
+                          <Users className="w-7 h-7 text-gray-600" />
+                        ) : (
+                          <FaBoxesStacked className="w-7 h-7 text-gray-500" />
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="font-semibold text-base">{pc.nome}</div>
+                        <div className="text-sm text-muted-foreground">{pc.count} pedido(s)</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setOpenPlatformId(null);
+                            if (isSyntheticCard) {
+                              setLoadingPedidosFiltrados(true);
+                              try {
+                                const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                setModoListaPorPlataforma(true);
+                                setFilterPlataformaId('');
+                                setPedidosFiltrados(fullList);
+                                setPedidoAtualIndex(0);
+                                setFoundPedido(fullList[0] || null);
+                                setFoundItemIds([]);
+                                setItemInputs({});
+                                setItemStatus({});
+                              } catch (err) {
+                                console.error('Erro ao buscar pedidos do card:', err);
+                              } finally {
+                                setLoadingPedidosFiltrados(false);
+                              }
+                            } else {
+                              setFilterPlataformaId(pc.id);
+                              try { await fetchPedidosPorPlataforma(pc.id); } catch (_) {}
+                            }
+                            setTimeout(() => barcodeRef.current?.focus(), 50);
+                          }}
+                        >
+                          Enviar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={async (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const next = openPlatformId === pc.id ? null : pc.id;
+                            setOpenPlatformId(next);
+                            if (next) {
+                              setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
+                              try {
+                                const ids = (pc.pedidos || []).slice(0, PLATFORM_PAGE_SIZE).map((x: any) => x.id).filter(Boolean);
+                                if (ids.length > 0) await fetchItemsForPedidoIds(ids);
+                              } catch (err) { console.error(err); }
+                            }
+                          }}
+                          aria-label="Abrir pedidos"
+                        >
+                          <ChevronDown className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+
+                    {openPlatformId === pc.id && (
+                      <div className="p-2 border-t">
+                        {pedidosPagina.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {pedidosPagina.map((p: any) => {
+                              const items = platformOrderItems[p.id] || [];
+                              return (
+                                <div key={p.id} className="rounded border px-3 py-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                      <span className="font-mono text-sm">{p.id_externo || p.id}</span>
+                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      className="text-sm text-primary underline-offset-4 hover:underline"
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpenPlatformId(null);
+                                        if (isSyntheticCard) {
+                                          // card sintético: buscar dados completos por IDs
+                                          try {
+                                            const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                            const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                            const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
+                                            setModoListaPorPlataforma(true);
+                                            setFilterPlataformaId('');
+                                            setPedidosFiltrados(fullList);
+                                            setPedidoAtualIndex(startIdx);
+                                            setFoundPedido(fullList[startIdx] || null);
+                                            setFoundItemIds([]);
+                                            setItemInputs({});
+                                            setItemStatus({});
+                                            setTimeout(() => barcodeRef.current?.focus(), 50);
+                                          } catch (err) {
+                                            console.error('Erro ao buscar pedidos do card:', err);
+                                          }
+                                        } else {
+                                          // plataforma real: buscar lista completa e navegar ao pedido específico
+                                          targetPedidoIdRef.current = p.id;
+                                          setFilterPlataformaId(pc.id);
+                                        }
+                                      }}
+                                    >
+                                      Abrir
+                                    </button>
+                                  </div>
+                                  {items.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 border-t mt-2 pt-2">
+                                      {items.map((item: any, idx: number) => (
+                                        <div key={idx} className="flex flex-col items-center gap-1 max-w-[60px]">
+                                          {item.img_url ? (
+                                            <img src={item.img_url} alt={item.nome || ''} className="h-12 w-12 rounded object-cover border" />
+                                          ) : (
+                                            <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">sem foto</div>
+                                          )}
+                                          <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
+                                          {(item.quantidade ?? 1) > 1 && (
+                                            <span className="text-[10px] font-semibold text-muted-foreground">×{item.quantidade}</span>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+
+                            {/* Paginação */}
+                            {totalPages > 1 && (
+                              <div className="flex items-center justify-between mt-3 pt-2 border-t">
+                                <span className="text-sm text-muted-foreground">
+                                  {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={currentPage <= 1}
+                                    onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                    className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                  >
+                                    ‹
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={currentPage >= totalPages}
+                                    onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                    className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                  >
+                                    ›
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -1326,215 +1836,7 @@ export function Logistica() {
                       // Botão Imprimir Etiqueta original
                       <Button
                         disabled={loadingScan}
-                        onClick={async () => {
-                          try {
-                            setLoadingScan(true);
-
-                            // ⚡ Atalho: se o pedido já tem link_etiqueta, abrir diretamente
-                            if (foundPedido?.link_etiqueta && String(foundPedido.link_etiqueta).trim() !== '') {
-                              window.open(String(foundPedido.link_etiqueta).trim(), '_blank');
-                              toast({ title: 'Etiqueta aberta', description: 'Link da etiqueta já gerado anteriormente.' });
-                              return;
-                            }
-
-                            // Buscar empresa_id do usuário logado
-                            if (!empresaId) {
-                              throw new Error('Empresa do usuário não encontrada');
-                            }
-
-                            // 1️⃣ VERIFICAR SALDO DO MELHOR ENVIO PRIMEIRO
-                            const { data: { session } } = await supabase.auth.getSession();
-                            
-                            if (!session) {
-                              throw new Error('Usuário não autenticado');
-                            }
-
-                            const saldoResponse = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
-                              method: 'POST',
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${session.access_token}`,
-                              },
-                            });
-
-                            if (!saldoResponse.ok) {
-                              const errorData = await saldoResponse.json().catch(() => ({ message: 'Erro ao verificar saldo' }));
-                              throw new Error(errorData.message || 'Erro ao verificar saldo do Melhor Envio');
-                            }
-
-                            const saldoData = await saldoResponse.json();
-                            const saldoAtual = saldoData?.balance || 0;
-
-                            // Verificar se o saldo é suficiente (mínimo R$ 50)
-                            if (saldoAtual < 50) {
-                              toast({
-                                title: '⚠️ Saldo Insuficiente',
-                                description: `Saldo atual: R$ ${saldoAtual.toFixed(2)}. Mínimo necessário: R$ 50,00. Por favor, recarregue sua conta no Melhor Envio.`,
-                                variant: 'destructive',
-                                duration: 8000,
-                              });
-                              return; // Interromper o fluxo
-                            }
-
-                            // 2️⃣ SALDO OK - PROSSEGUIR COM A GERAÇÃO DA ETIQUETA
-                            
-                            // 2.1️⃣ VERIFICAR E SETAR REMETENTE_ID SE NECESSÁRIO
-                            let remetenteId = foundPedido?.remetente_id;
-                            
-                            if (!remetenteId) {
-                              const plataformaId = foundPedido?.plataforma_id;
-                              const plataformasEspeciais = [
-                                '0e27f292-924c-4ffc-a141-bbe00ec00428',
-                                'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f',
-                                'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4'
-                              ];
-                              
-                              // Definir remetente baseado na plataforma
-                              if (plataformasEspeciais.includes(plataformaId)) {
-                                remetenteId = '3fc6839c-e959-4dc1-a983-f61d557e50ec';
-                              } else {
-                                remetenteId = '128a7de7-d649-43e1-8ba3-2b54c3496b14';
-                              }
-                              
-                              // Atualizar o pedido com o remetente_id
-                              const { error: updateError } = await supabase
-                                .from('pedidos')
-                                .update({ remetente_id: remetenteId } as any)
-                                .eq('id', foundPedido?.id);
-                              
-                              if (updateError) {
-                                console.error('Erro ao atualizar remetente_id:', updateError);
-                                throw new Error('Erro ao definir remetente do pedido');
-                              }
-                              
-                              console.log('Remetente setado:', remetenteId);
-                              
-                              // Registrar no histórico
-                              if (foundPedido?.id && userId) {
-                                const plataformaNome = plataformasEspeciais.includes(foundPedido?.plataforma_id) ? 'especial' : 'padrão';
-                                await registrarHistoricoMovimentacao(
-                                  foundPedido.id,
-                                  `Remetente definido automaticamente via logística (plataforma ${plataformaNome})`,
-                                  userId
-                                );
-                              }
-                            }
-                            
-                            // Chamar Edge Function para processar etiqueta
-                            const edgeFunctionUrl = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/processar_etiqueta_em_envio_de_pedido';
-                            const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-                            console.log('Chamando Edge Function para processar etiqueta...');
-                            const edgeResponse = await fetch(edgeFunctionUrl, {
-                              method: 'POST',
-                              headers: {
-                                'Content-Type': 'application/json',
-                                'Authorization': `Bearer ${supabaseKey}`,
-                              },
-                              body: JSON.stringify({
-                                pedido_id: foundPedido?.id,
-                                empresa_id: empresaId,
-                                remetente_id: remetenteId,
-                              }),
-                            });
-
-                            if (!edgeResponse.ok) {
-                              const errorData = await edgeResponse.json().catch(() => ({ error: 'Erro desconhecido' }));
-                              throw new Error(errorData.error || `Erro ao processar etiqueta: ${edgeResponse.status}`);
-                            }
-
-                            const etiquetaData = await edgeResponse.json();
-                            console.log('Etiqueta processada com sucesso:', etiquetaData);
-
-                            // Verificar se houve erro ao processar a etiqueta
-                            if (etiquetaData?.etiqueta_error) {
-                              // Exibir notificação de erro em vermelho
-                              toast({
-                                title: '❌ Erro ao gerar etiqueta',
-                                description: etiquetaData.etiqueta_error,
-                                variant: 'destructive',
-                                duration: 10000,
-                              });
-                              
-                              console.error('Erro ao processar etiqueta:', etiquetaData.etiqueta_error);
-                              
-                              // NÃO limpar o pedido - deixar aberto para correção
-                              return;
-                            }
-
-                            // Registrar no histórico que a etiqueta Melhor Envio foi gerada
-                            if (foundPedido?.id && userId) {
-                              await registrarHistoricoMovimentacao(
-                                foundPedido.id,
-                                `Etiqueta Melhor Envio gerada via logística (ID Externo: ${foundPedido.id_externo || foundPedido.id})`,
-                                userId
-                              );
-                            }
-
-                            // Extrair link da etiqueta retornado pela Edge Function
-                            const link = etiquetaData?.etiqueta?.link_etiqueta as string | undefined;
-
-                            // Atualizar status do pedido SOMENTE se a etiqueta foi gerada com sucesso
-                            const updatePayload: Record<string, any> = { 
-                              status_id: 'fa6b38ba-1d67-4bc3-821e-ab089d641a25',
-                              data_enviado: new Date().toISOString(),
-                              etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f',
-                            };
-                            // Persistir link_etiqueta para que o atalho funcione nas próximas vezes
-                            if (link) updatePayload.link_etiqueta = link;
-
-                            const { data: dataArray, error } = await supabase
-                              .from('pedidos')
-                              .update(updatePayload)
-                              .eq('id', foundPedido?.id)
-                              .select('id, id_externo');
-                            
-                            const data = dataArray?.[0];
-
-                            if (error) throw error;
-                            
-                            if (link) {
-                              window.open(link, '_blank');
-                            } else {
-                              console.log('Link não encontrado na resposta da Edge Function');
-                            }
-
-                            toast({ 
-                              title: 'Pedido concluído', 
-                              description: 'Etiqueta processada e status atualizado com sucesso', 
-                              variant: 'default' 
-                            });
-
-                            // Registrar no histórico
-                            if (data?.id && userId) {
-                              await registrarHistoricoMovimentacao(
-                                data.id,
-                                `Pedido enviado via logística - Etiqueta gerada e status atualizado para "Enviado" (${data.id_externo || data.id})`,
-                                userId
-                              );
-                            }
-
-                            // Manter filtros/paginação e avançar para o próximo pedido (quando aplicável)
-                            avancarParaProximoPedidoAposConclusao(foundPedido?.id);
-
-                            // Atualizar cards de logística
-                            try {
-                              await fetchLogItems();
-                            } catch (e) {
-                              // ignore — fetchLogItems logs its own errors
-                            }
-
-                          } catch (err: any) {
-                            console.error('Erro ao processar pedido:', err);
-                            toast({ 
-                              title: 'Erro ao processar pedido', 
-                              description: err.message || String(err), 
-                              variant: 'destructive' 
-                            });
-                          } finally {
-                            setLoadingScan(false);
-                          }
-                        }}
+                        onClick={() => void handleImprimirEtiqueta()}
                       >
                         {loadingScan ? 'PROCESSANDO...' : 'IMPRIMIR ETIQUETA'}
                       </Button>
@@ -1546,6 +1848,62 @@ export function Logistica() {
           )}
       </div>
       
+      {/* Modal: Confirmação de Envio */}
+      <Dialog
+        open={!!confirmEnvioModal?.open}
+        onOpenChange={(open) => { if (!open) setConfirmEnvioModal(null); }}
+      >
+        <DialogContent
+          className="max-w-md"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleConfirmarEnvio(); } }}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <CheckCircle className="h-5 w-5 text-green-500" />
+              Confirmar envio do pedido
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-4 space-y-3">
+            <p className="text-sm text-muted-foreground text-center">
+              A etiqueta foi aberta em uma nova aba.
+            </p>
+            <div className="rounded-lg border bg-muted/30 px-4 py-3 text-center">
+              <p className="text-xs text-muted-foreground mb-0.5">Pedido</p>
+              <p className="font-mono font-semibold text-base">
+                {confirmEnvioModal?.pedidoIdExterno || confirmEnvioModal?.pedidoId || '—'}
+              </p>
+            </div>
+            <p className="text-sm text-center font-medium">
+              Após imprimir a etiqueta, confirme para atualizar o status para <span className="text-green-600 font-semibold">Enviado</span>.
+            </p>
+            <p className="text-xs text-center text-muted-foreground">
+              Pressione <kbd className="rounded border px-1.5 py-0.5 font-mono text-xs bg-muted">Enter</kbd> ou clique em Confirmar.
+            </p>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmEnvioModal(null)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              ref={confirmBtnRef}
+              type="button"
+              autoFocus
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => void handleConfirmarEnvio()}
+            >
+              <CheckCircle className="h-4 w-4 mr-1.5" />
+              Confirmar envio
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal: Etiqueta Mercado Livre */}
       <Dialog open={etiquetaMLModalOpen} onOpenChange={(open) => { if (!open) handleFecharModalEtiquetaML(); }}>
         <DialogContent className="max-w-4xl h-[85vh] flex flex-col">

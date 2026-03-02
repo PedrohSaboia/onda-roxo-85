@@ -2043,50 +2043,15 @@ export function Comercial() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={async () => {
+                      onClick={() => {
                         const canBulkDelete = (hasPermissao ? hasPermissao(35) : false) || ((permissoes ?? []).includes(35));
                         if (!canBulkDelete) {
                           toast({ title: 'Sem permissão', description: 'Você não tem permissão para excluir pedidos.', variant: 'destructive' });
                           return;
                         }
 
-                        if (!confirm(`Tem certeza que deseja excluir ${selectedPedidosIds.size} ${selectedPedidosIds.size === 1 ? 'pedido' : 'pedidos'}?`)) {
-                          return;
-                        }
-
-                        try {
-                          const idsArray = Array.from(selectedPedidosIds);
-                          // Registrar histórico antes de deletar
-                          for (const pid of idsArray) {
-                            await registrarHistoricoMovimentacao(pid, 'Pedido excluído em massa');
-                          }
-                          const { error } = await supabase
-                            .from('pedidos')
-                            .delete()
-                            .in('id', idsArray);
-
-                          if (error) throw error;
-
-                          toast({
-                            title: 'Sucesso',
-                            description: `${idsArray.length} ${idsArray.length === 1 ? 'pedido excluído' : 'pedidos excluídos'} com sucesso`,
-                          });
-
-                          // Remover da lista local
-                          setPedidos(prev => prev.filter(p => !selectedPedidosIds.has(p.id)));
-                          setSelectedPedidosIds(new Set());
-                          setSelectedMelhorEnvioIds([]);
-
-                          // Forçar recarga atualizando o estado de página para re-executar o useEffect
-                          setPage(p => p);
-                        } catch (err: any) {
-                          console.error('Erro ao excluir pedidos:', err);
-                          toast({
-                            title: 'Erro',
-                            description: err?.message || 'Não foi possível excluir os pedidos',
-                            variant: 'destructive',
-                          });
-                        }
+                        // Abrir diálogo de confirmação customizado em vez do popup do navegador
+                        setConfirmDeleteOpen(true);
                       }}
                       className="flex items-center gap-2 h-8"
                     >
