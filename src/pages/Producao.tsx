@@ -10,7 +10,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 type SectionKey = 'yampi' | 'mercado_livre' | 'leads' | 'urgentes';
-type DateRangeKey = 'r1_10' | 'r11_20' | 'r21_30' | 'r31_plus';
+type DateRangeKey = 'r1_10' | 'r11_20' | 'r21_30' | 'r31_plus' | 'ml_r1_5' | 'ml_r6_11' | 'ml_r11_20' | 'ml_r20_plus';
 
 type DateRangeConfig = {
   key: DateRangeKey;
@@ -82,9 +82,9 @@ type SingleLabelProgress = {
 type PlatformSectionProps = {
   section: SectionConfig;
   ranges: DateRangeConfig[];
-  totals: Record<DateRangeKey, number>;
+  totals: Partial<Record<DateRangeKey, number>>;
   expandedKey: DateRangeKey | null;
-  loadingByRange: Record<DateRangeKey, boolean>;
+  loadingByRange: Partial<Record<DateRangeKey, boolean>>;
   itemsByRange: Partial<Record<DateRangeKey, GroupedItem[]>>;
   orderIdsByRange: Partial<Record<DateRangeKey, string[]>>;
   onToggleRange: (rangeKey: DateRangeKey) => void;
@@ -113,6 +113,13 @@ const DATE_RANGES: DateRangeConfig[] = [
   { key: 'r31_plus', label: '(31+ DIAS)', minDaysAgo: 31, maxDaysAgo: null },
 ];
 
+const ML_DATE_RANGES: DateRangeConfig[] = [
+  { key: 'ml_r1_5',    label: '(1 A 5 DIAS)',   minDaysAgo: 1,  maxDaysAgo: 5  },
+  { key: 'ml_r6_11',   label: '(6 A 11 DIAS)',  minDaysAgo: 6,  maxDaysAgo: 11 },
+  { key: 'ml_r11_20',  label: '(11 A 20 DIAS)', minDaysAgo: 11, maxDaysAgo: 20 },
+  { key: 'ml_r20_plus', label: '(20+ DIAS)',     minDaysAgo: 20, maxDaysAgo: null },
+];
+
 const URGENT_PLATFORMS = new Set(['shopee', 'tiktok_shop', 'magazine_luiza']);
 const ML_KEYWORD = 'organizador de relogio';
 const SPECIAL_URGENT_PRODUCT_ID = 'ab8a89a1-aa95-4a98-99c2-eaa3de670462';
@@ -129,6 +136,18 @@ const fetchProducaoItens = async (opts: {
   const { data, error } = await (supabase as any).rpc('producao_get_itens', {
     p_end: opts.end.toISOString(),
     p_start: opts.start ? opts.start.toISOString() : null,
+  });
+  if (error) throw error;
+  return (data || []) as ProducaoItem[];
+};
+
+const fetchProducaoItensMl = async (opts: {
+  diasMin: number;
+  diasMax: number | null;
+}): Promise<ProducaoItem[]> => {
+  const { data, error } = await (supabase as any).rpc('producao_get_itens_ml', {
+    p_dias_min: opts.diasMin,
+    p_dias_max: opts.diasMax ?? 9999,
   });
   if (error) throw error;
   return (data || []) as ProducaoItem[];
@@ -410,6 +429,7 @@ function PlatformSection({
 
 export function ProductionPage() {
   const [summaryItems, setSummaryItems] = useState<ProducaoItem[]>([]);
+  const [mlSummaryItems, setMlSummaryItems] = useState<ProducaoItem[]>([]);
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [platformImages, setPlatformImages] = useState<Record<string, string | null>>({});
@@ -422,12 +442,12 @@ export function ProductionPage() {
   });
 
   const [loadingByCard, setLoadingByCard] = useState<
-    Record<SectionKey, Record<DateRangeKey, boolean>>
+    Record<SectionKey, Partial<Record<DateRangeKey, boolean>>>
   >({
-    yampi: { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
-    mercado_livre: { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
-    leads: { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
-    urgentes: { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
+    yampi:          { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
+    mercado_livre:  { ml_r1_5: false, ml_r6_11: false, ml_r11_20: false, ml_r20_plus: false },
+    leads:          { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
+    urgentes:       { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
   });
 
   const [itemsCache, setItemsCache] = useState<
@@ -459,7 +479,7 @@ export function ProductionPage() {
     isMl: boolean;
     items: Array<{ id: string; quantidade: number; nome: string; nomeVariacao: string | null; img_url: string | null }>;
   };
-  const [pageSearchResult, setPageSearchResult] = useState<PageSearchResult | null | 'not_found'>(null);
+  const [pageSearchResult, setPageSearchResult] = useState<PageSearchResult | null | 'not_found' | 'already_processed'>(null);
 
   const [orderIdsModalOpen, setOrderIdsModalOpen] = useState(false);
   const [orderIdsModalData, setOrderIdsModalData] = useState<string[]>([]);
@@ -486,8 +506,12 @@ export function ProductionPage() {
       setSummaryError(null);
       const now = new Date();
       const end = endOfDay(subtractDays(now, 1));
-      const items = await fetchProducaoItens({ start: null, end });
+      const [items, mlItems] = await Promise.all([
+        fetchProducaoItens({ start: null, end }),
+        fetchProducaoItensMl({ diasMin: 1, diasMax: null }),
+      ]);
       setSummaryItems(items);
+      setMlSummaryItems(mlItems);
       // limpar caches para garantir que os próximos acessos peguem dados atualizados
       setItemsCache({ yampi: {}, mercado_livre: {}, leads: {}, urgentes: {} });
       setOrderIdsCache({ yampi: {}, mercado_livre: {}, leads: {}, urgentes: {} });
@@ -856,6 +880,20 @@ export function ProductionPage() {
 
     void fetchSummary();
 
+    // fetch ML summary
+    const fetchMlSummary = async () => {
+      try {
+        const now = new Date();
+        const end = endOfDay(subtractDays(now, 1));
+        const items = await fetchProducaoItensMl({ diasMin: 1, diasMax: null });
+        if (mounted) setMlSummaryItems(items);
+      } catch (err) {
+        console.warn('Erro ao buscar itens ML:', err);
+      }
+    };
+
+    void fetchMlSummary();
+
     // fetch plataformas imagens
     const fetchPlataformas = async () => {
       try {
@@ -883,34 +921,42 @@ export function ProductionPage() {
   const totalsBySection = useMemo(() => {
     const now = new Date();
 
-    const emptyTotals: Record<DateRangeKey, number> = {
-      r1_10: 0,
-      r11_20: 0,
-      r21_30: 0,
-      r31_plus: 0,
+    const standardEmpty: Partial<Record<DateRangeKey, number>> = {
+      r1_10: 0, r11_20: 0, r21_30: 0, r31_plus: 0,
+    };
+    const mlEmpty: Partial<Record<DateRangeKey, number>> = {
+      ml_r1_5: 0, ml_r6_11: 0, ml_r11_20: 0, ml_r20_plus: 0,
     };
 
-    const base: Record<SectionKey, Record<DateRangeKey, number>> = {
-      yampi: { ...emptyTotals },
-      mercado_livre: { ...emptyTotals },
-      leads: { ...emptyTotals },
-      urgentes: { ...emptyTotals },
+    const base: Record<SectionKey, Partial<Record<DateRangeKey, number>>> = {
+      yampi:          { ...standardEmpty },
+      mercado_livre:  { ...mlEmpty },
+      leads:          { ...standardEmpty },
+      urgentes:       { ...standardEmpty },
     };
 
-    for (const section of SECTION_CONFIGS) {
+    // Seções não-ML: usar summaryItems + DATE_RANGES
+    for (const section of SECTION_CONFIGS.filter((s) => s.key !== 'mercado_livre')) {
       for (const range of DATE_RANGES) {
         const filtered = summaryItems.filter(
           (item) => itemMatchesSection(item, section.key) && itemInRange(item, range, now),
         );
         base[section.key][range.key] = filtered.reduce(
-          (sum, item) => sum + Number(item.quantidade || 0),
-          0,
+          (sum, item) => sum + Number(item.quantidade || 0), 0,
         );
       }
     }
 
+    // Mercado Livre: usar mlSummaryItems + ML_DATE_RANGES
+    for (const range of ML_DATE_RANGES) {
+      const filtered = mlSummaryItems.filter((item) => itemInRange(item, range, now));
+      base.mercado_livre[range.key] = filtered.reduce(
+        (sum, item) => sum + Number(item.quantidade || 0), 0,
+      );
+    }
+
     return base;
-  }, [summaryItems]);
+  }, [summaryItems, mlSummaryItems]);
 
   const loadDropdownItems = async (section: SectionKey, range: DateRangeConfig) => {
     setLoadingByCard((prev) => ({
@@ -925,8 +971,12 @@ export function ProductionPage() {
       const now = new Date();
       const bounds = getRangeBounds(range, now);
 
-      const items = await fetchProducaoItens({ start: bounds.start, end: bounds.end });
-      const filteredRows = items.filter((item) => itemMatchesSection(item, section));
+      // Mercado Livre usa RPC dedicada — sem necessidade de filtrar por plataforma
+      const isMlSection = section === 'mercado_livre';
+      const rawItems = isMlSection
+        ? await fetchProducaoItensMl({ diasMin: range.minDaysAgo, diasMax: range.maxDaysAgo })
+        : await fetchProducaoItens({ start: bounds.start, end: bounds.end });
+      const filteredRows = isMlSection ? rawItems : rawItems.filter((item) => itemMatchesSection(item, section));
       const grouped = groupItems(filteredRows);
       const uniqueOrderIds = Array.from(
         new Set(
@@ -989,7 +1039,8 @@ export function ProductionPage() {
 
     setExpandedBySection((prev) => ({ ...prev, [section]: rangeKey }));
 
-    const range = DATE_RANGES.find((r) => r.key === rangeKey);
+    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES;
+    const range = allRanges.find((r) => r.key === rangeKey);
     if (!range) return;
 
     await loadDropdownItems(section, range);
@@ -1000,7 +1051,8 @@ export function ProductionPage() {
 
     const orderIds = orderIdsCache[section]?.[rangeKey] || [];
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
-    const rangeLabel = DATE_RANGES.find((item) => item.key === rangeKey)?.label || rangeKey;
+    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES;
+    const rangeLabel = allRanges.find((item) => item.key === rangeKey)?.label || rangeKey;
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel}`);
     setOrderIdsModalData(orderIds);
@@ -1015,7 +1067,8 @@ export function ProductionPage() {
 
     const orderIds = orderIdsCache[section]?.[rangeKey] || [];
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
-    const rangeLabel = DATE_RANGES.find((item) => item.key === rangeKey)?.label || rangeKey;
+    const allRangesForProduct = section === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES;
+    const rangeLabel = allRangesForProduct.find((item) => item.key === rangeKey)?.label || rangeKey;
     const productLabel = filter.nomeVariacao ? `${filter.nome} — ${filter.nomeVariacao}` : filter.nome;
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel} • ${productLabel}`);
@@ -1040,6 +1093,7 @@ export function ProductionPage() {
           id,
           id_externo,
           etiqueta_ml,
+          etiqueta_envio_id,
           plataforma:plataformas(nome, img_url),
           itens_pedido(
             id, quantidade,
@@ -1052,6 +1106,8 @@ export function ProductionPage() {
         .single();
       if (error || !data) {
         setPageSearchResult('not_found');
+      } else if (data.etiqueta_envio_id === '466958dd-e525-4e8d-95f1-067124a5ea7f') {
+        setPageSearchResult('already_processed');
       } else {
         const items = (data.itens_pedido || []).map((it: any) => ({
           id: it.id,
@@ -1116,11 +1172,17 @@ export function ProductionPage() {
                 Pedido não encontrado.
               </div>
             )}
+            {/* "Já processado" inline */}
+            {pageSearchResult === 'already_processed' && (
+              <div className="rounded-md border border-yellow-400/60 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+                Etiqueta já gerada para este pedido.
+              </div>
+            )}
           </div>
         </div>
 
         {/* Card de pedido encontrado — full width, igual à logística */}
-        {pageSearchResult && pageSearchResult !== 'not_found' && (
+        {pageSearchResult && pageSearchResult !== 'not_found' && pageSearchResult !== 'already_processed' && (
           <Card className="w-full shadow-md">
             {/* Cabeçalho */}
             <CardHeader className="pb-3">
@@ -1200,22 +1262,22 @@ export function ProductionPage() {
           </Card>
         )}
 
-        {loadingSummary && !(pageSearchResult && pageSearchResult !== 'not_found') && (
+        {loadingSummary && !(pageSearchResult && pageSearchResult !== 'not_found' && pageSearchResult !== 'already_processed') && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Carregando totais de produção...
           </div>
         )}
 
-        {summaryError && !(pageSearchResult && pageSearchResult !== 'not_found') && <div className="text-sm text-red-600">{summaryError}</div>}
+        {summaryError && !(pageSearchResult && pageSearchResult !== 'not_found' && pageSearchResult !== 'already_processed') && <div className="text-sm text-red-600">{summaryError}</div>}
 
-        {!loadingSummary && !summaryError && !(pageSearchResult && pageSearchResult !== 'not_found') && (
+        {!loadingSummary && !summaryError && !(pageSearchResult && pageSearchResult !== 'not_found' && pageSearchResult !== 'already_processed') && (
           <div className="space-y-6">
             {SECTION_CONFIGS.map((section) => (
               <PlatformSection
                 key={section.key}
                 section={section}
-                ranges={DATE_RANGES}
+                ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES}
                 totals={totalsBySection[section.key]}
                 expandedKey={expandedBySection[section.key]}
                 loadingByRange={loadingByCard[section.key]}

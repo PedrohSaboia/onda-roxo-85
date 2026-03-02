@@ -113,6 +113,7 @@ export function Comercial() {
   const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState(urlPlataforma);
   const [tempFilterStatusId, setTempFilterStatusId] = useState(urlStatus);
   const [tempFilterDuplicados, setTempFilterDuplicados] = useState(urlDuplicados);
+  const [tempFilterEtiquetaId, setTempFilterEtiquetaId] = useState(urlEtiqueta);
   
   // Estados para filtro de produtos
   const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
@@ -410,6 +411,8 @@ export function Comercial() {
         const usuariosMap = (userResp?.data || (userResp as any)) ? ((userResp as any).data || (userResp as any)).reduce((acc: any, u: any) => (acc[u.id] = u, acc), {}) : {};
         const statusMap = (statusResp?.data || (statusResp as any)) ? ((statusResp as any).data || (statusResp as any)).reduce((acc: any, s: any) => (acc[s.id] = s, acc), {}) : {};
         const etiquetaMap = (etiquetaResp?.data || (etiquetaResp as any)) ? ((etiquetaResp as any).data || (etiquetaResp as any)).reduce((acc: any, t: any) => (acc[t.id] = t, acc), {}) : {};
+        const etiquetaRespData: any[] = (etiquetaResp as any)?.data || [];
+        if (etiquetaRespData.length) setEtiquetaOptions(etiquetaRespData.map((t: any) => ({ id: t.id, nome: t.nome, cor_hex: t.cor_hex, ordem: t.ordem ?? 0 })));
 
         // If the view doesn't expose cor_do_pedido, fetch it directly from pedidos table
         const pedidoIds = (data || []).map((r: any) => r.pedido_id).filter(Boolean);
@@ -1620,6 +1623,7 @@ export function Comercial() {
                   setTempFilterPlataformaId(filterPlataformaId);
                   setTempFilterStatusId(filterStatusId);
                   setTempFilterDuplicados(filterDuplicados);
+                  setTempFilterEtiquetaId(filterEtiquetaId);
                   setShowFilters(s => !s);
                 }}>
                   <HiFilter className="h-5 w-5" />
@@ -1686,6 +1690,20 @@ export function Comercial() {
                       </select>
                     </div>
                     <div className="mb-3">
+                      <label htmlFor="filter-etiqueta" className="text-sm block mb-1">Filtrar por etiqueta</label>
+                      <select
+                        id="filter-etiqueta"
+                        value={tempFilterEtiquetaId}
+                        onChange={(e) => setTempFilterEtiquetaId(e.target.value)}
+                        className="w-full border rounded px-2 py-1 text-sm"
+                      >
+                        <option value="">Todas</option>
+                        {etiquetaOptions.map(et => (
+                          <option key={et.id} value={et.id}>{et.nome}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="mb-3">
                       <label htmlFor="filter-produto" className="text-sm block mb-1">Filtrar por produto</label>
                       <div className="relative">
                         <Input
@@ -1725,6 +1743,7 @@ export function Comercial() {
                         setTempFilterPlataformaId('');
                         setTempFilterStatusId('');
                         setTempFilterDuplicados(false);
+                        setTempFilterEtiquetaId('');
                         setSelectedProdutos([]);
                         setProdutoSearchTerm('');
                         setProdutosList([]);
@@ -1738,6 +1757,7 @@ export function Comercial() {
                         if (tempFilterPlataformaId) next.set('plataforma_id', tempFilterPlataformaId); else next.delete('plataforma_id');
                         if (tempFilterStatusId) next.set('status_id', tempFilterStatusId); else next.delete('status_id');
                         if (tempFilterDuplicados) next.set('duplicados', 'true'); else next.delete('duplicados');
+                        if (tempFilterEtiquetaId) next.set('etiqueta_envio_id', tempFilterEtiquetaId); else next.delete('etiqueta_envio_id');
                         // module query removed — navigation uses pathname now
                         navigate({ pathname: location.pathname, search: next.toString() });
                         setShowFilters(false);
