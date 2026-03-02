@@ -396,7 +396,7 @@ function UrgentesItemsDropdown({
     { key: 'todos', label: 'Todos' },
     { key: 'comercial', label: 'Comercial' },
     { key: 'yampi', label: 'Yampi' },
-    { key: 'ecommerce', label: 'E-commerce' },
+    { key: 'ecommerce', label: 'Marketplace' },
   ];
 
   return (
