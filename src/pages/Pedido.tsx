@@ -1435,6 +1435,18 @@ export default function Pedido() {
               }
             }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
             <div className="flex items-center gap-3">
+              {pedido?.plataforma?.img_url ? (
+                <img
+                  src={pedido.plataforma.img_url}
+                  alt={pedido.plataforma.nome || 'Plataforma'}
+                  title={pedido.plataforma.nome || 'Plataforma'}
+                  className="h-8 w-8 rounded-md object-contain border bg-white p-0.5"
+                />
+              ) : pedido?.plataforma?.nome ? (
+                <span className="text-xs font-semibold px-2 py-1 rounded bg-muted text-muted-foreground border">
+                  {pedido.plataforma.nome}
+                </span>
+              ) : null}
               <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
               {pedido?.tempo_ganho && pedido?.criado_em && (() => {
                 const criadoEm = new Date(pedido.criado_em);

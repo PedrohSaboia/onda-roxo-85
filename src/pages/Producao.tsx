@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronDown, Loader2, TriangleAlert, List, X, Search, Printer, Truck, PackageCheck, CheckSquare, Users, CheckCircle2, XCircle, Clock } from 'lucide-react';
+import { ChevronDown, Loader2, TriangleAlert, List, X, Search, Printer, Truck, PackageCheck, CheckSquare, Users, CheckCircle2, XCircle, Clock, Copy } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -89,8 +89,14 @@ type PlatformSectionProps = {
   orderIdsByRange: Partial<Record<DateRangeKey, string[]>>;
   onToggleRange: (rangeKey: DateRangeKey) => void;
   onOpenOrderIds: (rangeKey: DateRangeKey) => void;
-  onOpenOrderIdsForProduct: (rangeKey: DateRangeKey, filter: ProductFilter) => void;
+  onOpenOrderIdsForProduct: (rangeKey: DateRangeKey, filter: ProductFilter, overrideOrderIds?: string[]) => void;
   imageUrl?: string | null;
+  // urgentes-specific
+  urgentesRawItems?: ProducaoItem[];
+  urgentesMainTab?: UrgenteMainTab;
+  urgentesSubTab?: string;
+  onUrgentesMainTabChange?: (tab: UrgenteMainTab) => void;
+  onUrgentesSubTabChange?: (subTab: string) => void;
 };
 
 const LEADS_PLATFORM_IDS = new Set([
@@ -119,6 +125,15 @@ const ML_DATE_RANGES: DateRangeConfig[] = [
   { key: 'ml_r11_20',  label: '(11 A 20 DIAS)', minDaysAgo: 11, maxDaysAgo: 20 },
   { key: 'ml_r20_plus', label: '(20+ DIAS)',     minDaysAgo: 20, maxDaysAgo: null },
 ];
+
+type UrgenteMainTab = 'todos' | 'comercial' | 'yampi' | 'ecommerce';
+
+const ECOMMERCE_SUB_TABS = [
+  { key: 'shopee', label: 'Shopee' },
+  { key: 'tiktok', label: 'TikTok Shop' },
+  { key: 'magalu', label: 'Magalu' },
+  { key: 'ml_org', label: 'ML Organizador' },
+] as const;
 
 const URGENT_PLATFORMS = new Set(['shopee', 'tiktok_shop', 'magazine_luiza']);
 const ML_KEYWORD = 'organizador de relogio';
@@ -293,6 +308,185 @@ function ItemsDropdown({ items, onProductClick }: { items: GroupedItem[]; onProd
   );
 }
 
+function filterUrgentesItems(
+  rawItems: ProducaoItem[],
+  mainTab: UrgenteMainTab,
+  subTab: string,
+): ProducaoItem[] {
+  if (mainTab === 'todos') return rawItems;
+
+  if (mainTab === 'comercial') {
+    const withLeads = rawItems.filter((item) => LEADS_PLATFORM_IDS.has(item.plataforma_id ?? ''));
+    if (!subTab) return withLeads;
+    return withLeads.filter((item) => item.plataforma_id === subTab);
+  }
+
+  if (mainTab === 'yampi') {
+    return rawItems.filter((item) => normalize(item.plataforma_nome) === 'yampi');
+  }
+
+  if (mainTab === 'ecommerce') {
+    const withEco = rawItems.filter((item) => {
+      const pn = normalize(item.plataforma_nome);
+      const pd = normalize(item.nome_produto) + ' ' + normalize(item.nome_variacao);
+      const isSpecial =
+        item.produto_id === SPECIAL_URGENT_PRODUCT_ID &&
+        item.plataforma_id === SPECIAL_URGENT_PLATFORM_ID;
+      return (
+        isSpecial ||
+        pn.includes('shopee') ||
+        pn.includes('tiktok') ||
+        pn.includes('magalu') ||
+        pn.includes('magazine') ||
+        (pn === 'mercado_livre' && (pd.includes(normalize(ML_KEYWORD)) || pd.includes('organizador') && pd.includes('relogio')))
+      );
+    });
+    if (!subTab) return withEco;
+    return withEco.filter((item) => {
+      const pn = normalize(item.plataforma_nome);
+      const pd = normalize(item.nome_produto) + ' ' + normalize(item.nome_variacao);
+      const isSpecial =
+        item.produto_id === SPECIAL_URGENT_PRODUCT_ID &&
+        item.plataforma_id === SPECIAL_URGENT_PLATFORM_ID;
+      if (subTab === 'shopee') return pn.includes('shopee');
+      if (subTab === 'tiktok') return pn.includes('tiktok');
+      if (subTab === 'magalu') return pn.includes('magalu') || pn.includes('magazine');
+      if (subTab === 'ml_org')
+        return isSpecial || (pn === 'mercado_livre' && (pd.includes(normalize(ML_KEYWORD)) || (pd.includes('organizador') && pd.includes('relogio'))));
+      return true;
+    });
+  }
+
+  return rawItems;
+}
+
+function UrgentesItemsDropdown({
+  rawItems,
+  allGroupedItems,
+  mainTab,
+  subTab,
+  onSetMainTab,
+  onSetSubTab,
+  onProductClick,
+}: {
+  rawItems: ProducaoItem[];
+  allGroupedItems: GroupedItem[];
+  mainTab: UrgenteMainTab;
+  subTab: string;
+  onSetMainTab: (tab: UrgenteMainTab) => void;
+  onSetSubTab: (subTab: string) => void;
+  onProductClick?: (filter: ProductFilter, tabFilteredOrderIds: string[]) => void;
+}) {
+  const leadPlatformsInItems = useMemo(() => {
+    const seen = new Map<string, string>();
+    rawItems.forEach((item) => {
+      if (LEADS_PLATFORM_IDS.has(item.plataforma_id ?? '')) {
+        seen.set(item.plataforma_id!, item.plataforma_nome ?? item.plataforma_id!);
+      }
+    });
+    return Array.from(seen.entries()).map(([id, nome]) => ({ id, nome }));
+  }, [rawItems]);
+
+  const filteredGrouped = useMemo(() => {
+    if (mainTab === 'todos') return allGroupedItems;
+    return groupItems(filterUrgentesItems(rawItems, mainTab, subTab));
+  }, [rawItems, allGroupedItems, mainTab, subTab]);
+
+  const MAIN_TABS: { key: UrgenteMainTab; label: string }[] = [
+    { key: 'todos', label: 'Todos' },
+    { key: 'comercial', label: 'Comercial' },
+    { key: 'yampi', label: 'Yampi' },
+    { key: 'ecommerce', label: 'E-commerce' },
+  ];
+
+  return (
+    <div className="space-y-2">
+      {/* Main tabs */}
+      <div className="flex flex-wrap gap-2 border-b pb-2">
+        {MAIN_TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => { onSetMainTab(tab.key); onSetSubTab(''); }}
+            className={`px-4 py-2 text-sm font-semibold rounded transition-colors ${
+              mainTab === tab.key
+                ? 'bg-primary text-primary-foreground'
+                : 'bg-muted text-muted-foreground hover:bg-muted/70'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Sub-tabs Comercial */}
+      {mainTab === 'comercial' && leadPlatformsInItems.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onSetSubTab('')}
+            className={`px-4 py-2 text-sm rounded border transition-colors ${
+              !subTab ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-border text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            Todas
+          </button>
+          {leadPlatformsInItems.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onSetSubTab(p.id)}
+              className={`px-4 py-2 text-sm rounded border transition-colors ${
+                subTab === p.id ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-border text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {p.nome}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Sub-tabs E-commerce */}
+      {mainTab === 'ecommerce' && (
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => onSetSubTab('')}
+            className={`px-4 py-2 text-sm rounded border transition-colors ${
+              !subTab ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-border text-muted-foreground hover:bg-muted'
+            }`}
+          >
+            Todos
+          </button>
+          {ECOMMERCE_SUB_TABS.map((st) => (
+            <button
+              key={st.key}
+              type="button"
+              onClick={() => onSetSubTab(st.key)}
+              className={`px-4 py-2 text-sm rounded border transition-colors ${
+                subTab === st.key ? 'border-primary bg-primary/10 text-primary font-semibold' : 'border-border text-muted-foreground hover:bg-muted'
+              }`}
+            >
+              {st.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <ItemsDropdown
+        items={filteredGrouped}
+        onProductClick={(filter) => {
+          const tabFiltered = filterUrgentesItems(rawItems, mainTab, subTab);
+          const tabIds = Array.from(
+            new Set(tabFiltered.map((i) => i.id_externo).filter((id): id is string => !!id && id.trim().length > 0))
+          );
+          onProductClick?.(filter, tabIds);
+        }}
+      />
+    </div>
+  );
+}
+
 function DateRangeCard({ range, quantity, expanded, onToggle }: DateRangeCardProps) {
   return (
     <div>
@@ -330,6 +524,11 @@ function PlatformSection({
   onOpenOrderIds,
   onOpenOrderIdsForProduct,
   imageUrl,
+  urgentesRawItems,
+  urgentesMainTab,
+  urgentesSubTab,
+  onUrgentesMainTabChange,
+  onUrgentesSubTabChange,
 }: PlatformSectionProps) {
   const selectedRangeLabel = ranges.find((range) => range.key === expandedKey)?.label;
   const cardStyle =
@@ -414,6 +613,16 @@ function PlatformSection({
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Carregando itens...
               </div>
+            ) : section.key === 'urgentes' && urgentesRawItems ? (
+              <UrgentesItemsDropdown
+                rawItems={urgentesRawItems}
+                allGroupedItems={itemsByRange[expandedKey] || []}
+                mainTab={urgentesMainTab ?? 'todos'}
+                subTab={urgentesSubTab ?? ''}
+                onSetMainTab={(tab) => onUrgentesMainTabChange?.(tab)}
+                onSetSubTab={(sub) => onUrgentesSubTabChange?.(sub)}
+                onProductClick={(filter, tabIds) => onOpenOrderIdsForProduct(expandedKey, filter, tabIds)}
+              />
             ) : (
               <ItemsDropdown
                 items={itemsByRange[expandedKey] || []}
@@ -500,6 +709,11 @@ export function ProductionPage() {
   const [singleLabelProgress, setSingleLabelProgress] = useState<SingleLabelProgress | null>(null);
   const [saldoMelhorEnvio, setSaldoMelhorEnvio] = useState<number | null>(null);
   const [loadingSaldo, setLoadingSaldo] = useState(false);
+
+  // Urgentes: raw items por range para filtragem por aba de plataforma
+  const [urgentesRawByRange, setUrgentesRawByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
+  const [urgentesMainTabByRange, setUrgentesMainTabByRange] = useState<Partial<Record<DateRangeKey, UrgenteMainTab>>>({});
+  const [urgentesSubTabByRange, setUrgentesSubTabByRange] = useState<Partial<Record<DateRangeKey, string>>>({});
 
   // Recarrega os itens da produção chamando a RPC `producao_get_itens` e limpa caches locais
   const reloadSummary = async () => {
@@ -775,7 +989,10 @@ export function ProductionPage() {
     }
 
     try {
-      if (success > 0) await reloadSummary();
+      if (success > 0) {
+        await reloadSummary();
+        void fetchSaldoMelhorEnvio();
+      }
     } catch (err) {
       console.warn('Erro ao recarregar produção após lote:', err);
     }
@@ -844,6 +1061,7 @@ export function ProductionPage() {
 
             setSingleLabelProgress((prev) => prev ? { ...prev, status: 'success', message: 'Etiqueta ML gerada com sucesso!' } : prev);
             toast({ title: 'Sucesso', description: `Etiqueta ML gerada para ${pedidoId}` });
+            void fetchSaldoMelhorEnvio();
             try { await registrarHistoricoMovimentacao(primaryPedidoId ?? pedidoId, 'Etiqueta gerada (Mercado Livre)'); } catch (_) {}
           } catch (openErr) {
             console.error('Erro ao abrir PDF ML:', openErr);
@@ -888,6 +1106,7 @@ export function ProductionPage() {
 
       setSingleLabelProgress((prev) => prev ? { ...prev, status: 'success', message: 'Etiqueta processada com sucesso!' } : prev);
       toast({ title: 'Sucesso', description: `Etiqueta processada para ${pedidoId}` });
+      void fetchSaldoMelhorEnvio();
 
       try { await reloadSummary(); } catch (_) {}
 
@@ -1022,6 +1241,10 @@ export function ProductionPage() {
         ? await fetchProducaoItensMl({ diasMin: range.minDaysAgo, diasMax: range.maxDaysAgo })
         : await fetchProducaoItens({ start: bounds.start, end: bounds.end });
       const filteredRows = isMlSection ? rawItems : rawItems.filter((item) => itemMatchesSection(item, section));
+      // Armazenar itens brutos para urgentes (necessário para filtragem por abas de plataforma)
+      if (section === 'urgentes') {
+        setUrgentesRawByRange((prev) => ({ ...prev, [range.key]: filteredRows }));
+      }
       const grouped = groupItems(filteredRows);
       const uniqueOrderIds = Array.from(
         new Set(
@@ -1107,10 +1330,10 @@ export function ProductionPage() {
     setOrderIdsModalOpen(true);
   };
 
-  const handleOpenOrderIdsForProduct = (section: SectionKey, rangeKey: DateRangeKey, filter: ProductFilter) => {
+  const handleOpenOrderIdsForProduct = (section: SectionKey, rangeKey: DateRangeKey, filter: ProductFilter, overrideOrderIds?: string[]) => {
     if (loadingByCard[section][rangeKey]) return;
 
-    const orderIds = orderIdsCache[section]?.[rangeKey] || [];
+    const orderIds = overrideOrderIds ?? orderIdsCache[section]?.[rangeKey] ?? [];
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
     const allRangesForProduct = section === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES;
     const rangeLabel = allRangesForProduct.find((item) => item.key === rangeKey)?.label || rangeKey;
@@ -1349,10 +1572,27 @@ export function ProductionPage() {
                 onOpenOrderIds={(rangeKey) => {
                   handleOpenOrderIds(section.key, rangeKey);
                 }}
-                onOpenOrderIdsForProduct={(rangeKey, filter) => {
-                  handleOpenOrderIdsForProduct(section.key, rangeKey, filter);
+                onOpenOrderIdsForProduct={(rangeKey, filter, overrideOrderIds) => {
+                  handleOpenOrderIdsForProduct(section.key, rangeKey, filter, overrideOrderIds);
                 }}
-                
+                {...(section.key === 'urgentes'
+                  ? {
+                      urgentesRawItems: urgentesRawByRange[expandedBySection['urgentes'] as DateRangeKey] ?? [],
+                      urgentesMainTab: urgentesMainTabByRange[expandedBySection['urgentes'] as DateRangeKey] ?? 'todos',
+                      urgentesSubTab: urgentesSubTabByRange[expandedBySection['urgentes'] as DateRangeKey] ?? '',
+                      onUrgentesMainTabChange: (tab: UrgenteMainTab) => {
+                        const rk = expandedBySection['urgentes'];
+                        if (rk) {
+                          setUrgentesMainTabByRange((prev) => ({ ...prev, [rk]: tab }));
+                          setUrgentesSubTabByRange((prev) => ({ ...prev, [rk]: '' }));
+                        }
+                      },
+                      onUrgentesSubTabChange: (sub: string) => {
+                        const rk = expandedBySection['urgentes'];
+                        if (rk) setUrgentesSubTabByRange((prev) => ({ ...prev, [rk]: sub }));
+                      },
+                    }
+                  : {})}
               />
             ))}
           </div>
@@ -1489,7 +1729,20 @@ export function ProductionPage() {
                               />
 
                               {/* ID do pedido */}
-                              <span className="font-mono text-sm font-semibold truncate">{orderId}</span>
+                              <button
+                                type="button"
+                                title="Clique para copiar o ID"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void navigator.clipboard.writeText(orderId).then(() => {
+                                    toast({ description: `ID copiado: ${orderId}` });
+                                  });
+                                }}
+                                className="flex items-center gap-1 group rounded px-1 -mx-1 hover:bg-muted transition-colors"
+                              >
+                                <span className="font-mono text-sm font-semibold truncate">{orderId}</span>
+                                <Copy className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                              </button>
 
                               {/* Badges */}
                               {isMl && (
