@@ -448,6 +448,19 @@ export function ProductionPage() {
     urgentes: {},
   });
 
+  // Busca rápida na página principal por id_externo
+  const [pageSearchQuery, setPageSearchQuery] = useState('');
+  const [pageSearchLoading, setPageSearchLoading] = useState(false);
+  type PageSearchResult = {
+    id_externo: string;
+    pedido_id: string;
+    plataforma: string | null;
+    plataforma_img: string | null;
+    isMl: boolean;
+    items: Array<{ id: string; quantidade: number; nome: string; nomeVariacao: string | null; img_url: string | null }>;
+  };
+  const [pageSearchResult, setPageSearchResult] = useState<PageSearchResult | null | 'not_found'>(null);
+
   const [orderIdsModalOpen, setOrderIdsModalOpen] = useState(false);
   const [orderIdsModalData, setOrderIdsModalData] = useState<string[]>([]);
   const [orderIdsModalTitle, setOrderIdsModalTitle] = useState('');
@@ -1015,24 +1028,188 @@ export function ProductionPage() {
 
   // removed: handleOpenAllOrderIds - now only per-range button opens modal
 
+  const handlePageSearch = async () => {
+    const query = pageSearchQuery.trim();
+    if (!query) return;
+    setPageSearchLoading(true);
+    setPageSearchResult(null);
+    try {
+      const { data, error } = await (supabase as any)
+        .from('pedidos')
+        .select(`
+          id,
+          id_externo,
+          etiqueta_ml,
+          plataforma:plataformas(nome, img_url),
+          itens_pedido(
+            id, quantidade,
+            produto:produtos(id, nome, img_url),
+            variacao:variacoes_produto(id, nome, img_url)
+          )
+        `)
+        .eq('id_externo', query)
+        .limit(1)
+        .single();
+      if (error || !data) {
+        setPageSearchResult('not_found');
+      } else {
+        const items = (data.itens_pedido || []).map((it: any) => ({
+          id: it.id,
+          quantidade: it.quantidade ?? 1,
+          nome: it.produto?.nome || it.variacao?.nome || '—',
+          nomeVariacao: it.variacao?.nome ?? null,
+          img_url: it.variacao?.img_url || it.produto?.img_url || null,
+        }));
+        setPageSearchResult({
+          id_externo: data.id_externo,
+          pedido_id: data.id,
+          plataforma: data.plataforma?.nome ?? null,
+          plataforma_img: data.plataforma?.img_url ?? null,
+          isMl: !!data.etiqueta_ml,
+          items,
+        });
+      }
+    } catch {
+      setPageSearchResult('not_found');
+    } finally {
+      setPageSearchLoading(false);
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="space-y-6 p-4 md:p-6">
-        <div>
-          <h1 className="text-2xl font-bold">Produção</h1>
-          <p className="text-sm text-muted-foreground">Acompanhe volumes por plataforma e faixa de dias.</p>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Produção</h1>
+            <p className="text-sm text-muted-foreground">Acompanhe volumes por plataforma e faixa de dias.</p>
+          </div>
+
+          {/* Busca rápida por ID do pedido */}
+          <div className="flex flex-col gap-2 sm:w-80">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Buscar por ID do pedido..."
+                  value={pageSearchQuery}
+                  onChange={(e) => { setPageSearchQuery(e.target.value); setPageSearchResult(null); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') void handlePageSearch(); }}
+                  className="w-full rounded-md border bg-background pl-9 pr-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => void handlePageSearch()}
+                disabled={pageSearchLoading || !pageSearchQuery.trim()}
+                className="shrink-0"
+              >
+                {pageSearchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </Button>
+            </div>
+
+            {/* "Não encontrado" inline */}
+            {pageSearchResult === 'not_found' && (
+              <div className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+                Pedido não encontrado.
+              </div>
+            )}
+          </div>
         </div>
 
-        {loadingSummary && (
+        {/* Card de pedido encontrado — full width, igual à logística */}
+        {pageSearchResult && pageSearchResult !== 'not_found' && (
+          <Card className="w-full shadow-md">
+            {/* Cabeçalho */}
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  {pageSearchResult.plataforma_img ? (
+                    <img src={pageSearchResult.plataforma_img} alt={pageSearchResult.plataforma ?? ''} className="h-10 w-10 rounded-full border object-cover" />
+                  ) : (
+                    <div className="h-10 w-10 rounded-full border bg-muted flex items-center justify-center">
+                      <Printer className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-mono text-lg font-bold">{pageSearchResult.id_externo}</p>
+                    <p className="text-sm text-muted-foreground">{pageSearchResult.plataforma ?? 'Plataforma desconhecida'}</p>
+                  </div>
+                  {pageSearchResult.isMl && (
+                    <span className="rounded-full bg-yellow-100 border border-yellow-400 px-2 py-0.5 text-xs font-bold text-yellow-800 uppercase">ML</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPageSearchResult(null)}
+                  className="rounded-md p-1.5 hover:bg-muted transition-colors"
+                  aria-label="Fechar"
+                >
+                  <X className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+            </CardHeader>
+
+            {/* Itens do pedido */}
+            <CardContent className="space-y-3">
+              {pageSearchResult.items.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nenhum item encontrado.</p>
+              ) : (
+                pageSearchResult.items.map((it) => (
+                  <div key={it.id} className="flex items-center gap-3 rounded-lg border px-3 py-2.5">
+                    {it.img_url ? (
+                      <img src={it.img_url} alt={it.nome} className="h-12 w-12 rounded-full border-2 border-gray-200 object-cover flex-shrink-0" />
+                    ) : (
+                      <div className="h-12 w-12 rounded-full border-2 border-gray-200 bg-muted flex items-center justify-center flex-shrink-0">
+                        <Printer className="h-5 w-5 text-muted-foreground" />
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm">{it.nome}</p>
+                      {it.nomeVariacao && <p className="text-xs text-muted-foreground">{it.nomeVariacao}</p>}
+                    </div>
+                    <span className="text-sm font-semibold shrink-0">Qtd: {it.quantidade}</span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+
+            {/* Botão gerar etiqueta */}
+            <div className="px-6 pb-6 flex justify-center">
+              <button
+                type="button"
+                disabled={processingLabels.has(pageSearchResult.id_externo)}
+                onClick={() => void handleGenerateLabel(pageSearchResult!.id_externo)}
+                className={`flex items-center gap-2 px-8 py-3 rounded-md text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:opacity-60 disabled:cursor-wait ${
+                  pageSearchResult.isMl
+                    ? 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 focus:ring-yellow-400'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500'
+                }`}
+              >
+                {processingLabels.has(pageSearchResult.id_externo) ? (
+                  <><Loader2 className="h-4 w-4 animate-spin" />Gerando...</>
+                ) : pageSearchResult.isMl ? (
+                  <><Truck className="h-4 w-4" />Gerar Etiqueta Mercado Livre</>
+                ) : (
+                  <><Printer className="h-4 w-4" />GERAR ETIQUETA</>
+                )}
+              </button>
+            </div>
+          </Card>
+        )}
+
+        {loadingSummary && !(pageSearchResult && pageSearchResult !== 'not_found') && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Carregando totais de produção...
           </div>
         )}
 
-        {summaryError && <div className="text-sm text-red-600">{summaryError}</div>}
+        {summaryError && !(pageSearchResult && pageSearchResult !== 'not_found') && <div className="text-sm text-red-600">{summaryError}</div>}
 
-        {!loadingSummary && !summaryError && (
+        {!loadingSummary && !summaryError && !(pageSearchResult && pageSearchResult !== 'not_found') && (
           <div className="space-y-6">
             {SECTION_CONFIGS.map((section) => (
               <PlatformSection
