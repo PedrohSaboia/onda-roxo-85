@@ -1263,18 +1263,7 @@ export function Logistica() {
             <h1 className="text-2xl font-bold">Logística</h1>
             <p className="text-muted-foreground">Envio de pedidos</p>
           </div>
-          <div className="text-right">
-            <div className="text-sm text-muted-foreground">Saldo Melhor Envio</div>
-            <div className="text-2xl font-bold text-green-600">
-              {loadingSaldo ? (
-                <span className="text-base">Carregando...</span>
-              ) : saldoMelhorEnvio !== null ? (
-                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldoMelhorEnvio)
-              ) : (
-                <span className="text-base text-muted-foreground">--</span>
-              )}
-            </div>
-          </div>
+
         </div>
 
         <div className="mt-6">

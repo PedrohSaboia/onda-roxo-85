@@ -498,6 +498,8 @@ export function ProductionPage() {
   const [progressModalOpen, setProgressModalOpen] = useState(false);
   const [progressItems, setProgressItems] = useState<ProgressItem[]>([]);
   const [singleLabelProgress, setSingleLabelProgress] = useState<SingleLabelProgress | null>(null);
+  const [saldoMelhorEnvio, setSaldoMelhorEnvio] = useState<number | null>(null);
+  const [loadingSaldo, setLoadingSaldo] = useState(false);
 
   // Recarrega os itens da produção chamando a RPC `producao_get_itens` e limpa caches locais
   const reloadSummary = async () => {
@@ -624,8 +626,42 @@ export function ProductionPage() {
     }
   };
 
+  // Busca o saldo atual do Melhor Envio e atualiza o estado local.
+  // Retorna o saldo (número) ou null em caso de falha.
+  const fetchSaldoMelhorEnvio = async (): Promise<number | null> => {
+    setLoadingSaldo(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return null;
+      const resp = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json().catch(() => null);
+      const balance = data?.balance ?? null;
+      if (balance !== null) setSaldoMelhorEnvio(balance);
+      return balance;
+    } catch {
+      return null;
+    } finally {
+      setLoadingSaldo(false);
+    }
+  };
+
   const handleBatchGenerateLabels = async () => {
     if (selectedOrderIds.size === 0 || !empresaId) return;
+
+    // Verificar saldo antes de processar
+    const saldo = await fetchSaldoMelhorEnvio();
+    if (saldo !== null && saldo < 500) {
+      toast({
+        title: 'Saldo insuficiente',
+        description: `Saldo Melhor Envio: R$ ${saldo.toFixed(2)}. Mínimo de R$ 500,00 necessário para processar etiquetas.`,
+        variant: 'destructive',
+      });
+      return;
+    }
 
     const ids = Array.from(selectedOrderIds);
 
@@ -822,6 +858,12 @@ export function ProductionPage() {
       }
 
       // Caso padrão — edge function melhor envio
+      // Verificar saldo antes de chamar a edge function
+      const saldo = await fetchSaldoMelhorEnvio();
+      if (saldo !== null && saldo < 500) {
+        throw new Error(`Saldo Melhor Envio insuficiente: R$ ${saldo.toFixed(2)} (mínimo R$ 500,00)`);
+      }
+
       const { error: functionError } = await (supabase as any).functions.invoke('processar_etiqueta_em_envio_de_pedido', {
         body: { pedido_id: primaryPedidoId ?? pedidoId, empresa_id: empresaId },
       });
@@ -912,6 +954,9 @@ export function ProductionPage() {
     };
 
     void fetchPlataformas();
+
+    // Pré-carregar saldo para exibição/cache imediato
+    void fetchSaldoMelhorEnvio();
 
     return () => {
       mounted = false;
@@ -1139,6 +1184,20 @@ export function ProductionPage() {
           <div>
             <h1 className="text-2xl font-bold">Produção</h1>
             <p className="text-sm text-muted-foreground">Acompanhe volumes por plataforma e faixa de dias.</p>
+          </div>
+
+          {/* Saldo Melhor Envio */}
+          <div className="text-right">
+            <div className="text-sm text-muted-foreground">Saldo Melhor Envio</div>
+            <div className="text-2xl font-bold text-green-600">
+              {loadingSaldo ? (
+                <span className="text-base">Carregando...</span>
+              ) : saldoMelhorEnvio !== null ? (
+                new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(saldoMelhorEnvio)
+              ) : (
+                <span className="text-base text-muted-foreground">--</span>
+              )}
+            </div>
           </div>
 
           {/* Busca rápida por ID do pedido */}
