@@ -1,4 +1,4 @@
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert } from 'lucide-react';
 import { FaBoxesStacked } from 'react-icons/fa6';
@@ -145,15 +145,6 @@ export function Logistica() {
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const targetPedidoIdRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const savedScrollRef = useRef<number | null>(null);
-
-  // Restaura posição do scroll após qualquer re-render causado por paginação
-  useLayoutEffect(() => {
-    if (savedScrollRef.current !== null && scrollContainerRef.current) {
-      scrollContainerRef.current.scrollTop = savedScrollRef.current;
-      savedScrollRef.current = null;
-    }
-  });
 
   const pedidoTemItemPrioritario = (pedido: any) => {
     const itens = pedido?.itens_pedido || [];
@@ -1369,6 +1360,8 @@ export function Logistica() {
                 onBlur={() => setTimeout(() => {
                   if (showFilters) return;
                   if (filterDropdownRef.current?.contains(document.activeElement)) return;
+                  // Só re-foca automaticamente quando há um pedido ativo sendo processado
+                  if (!foundPedido) return;
                   // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
                   const items = foundPedido?.itens_pedido || [];
                   const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
@@ -1418,14 +1411,28 @@ export function Logistica() {
                     e.preventDefault();
                     e.stopPropagation();
                     if (page < 1 || page > totalPages) return;
-                    // Puramente síncrono — todos os itens já foram carregados ao abrir o card
                     setPlatformPage((s) => ({ ...s, [pc.id]: page }));
                   };
 
                   const isSyntheticCard = pc.id === 'urgentes' || pc.id === 'leads';
 
                   return (
-                  <Card key={pc.id} className="p-4 cursor-pointer">
+                  <Card
+                    key={pc.id}
+                    className="p-4 cursor-pointer select-none"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      const next = openPlatformId === pc.id ? null : pc.id;
+                      setOpenPlatformId(next);
+                      if (next) {
+                        setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
+                        try {
+                          const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                          if (ids.length > 0) await fetchItemsForPedidoIds(ids);
+                        } catch (err) { console.error(err); }
+                      }
+                    }}
+                  >
                     <CardContent className="flex items-center gap-4 p-0">
                       <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
                         {pc.img_url ? (
@@ -1447,7 +1454,6 @@ export function Logistica() {
                           type="button"
                           size="sm"
                           onClick={async (e) => {
-                            e.preventDefault();
                             e.stopPropagation();
                             setOpenPlatformId(null);
                             if (isSyntheticCard) {
@@ -1472,38 +1478,18 @@ export function Logistica() {
                               setFilterPlataformaId(pc.id);
                               try { await fetchPedidosPorPlataforma(pc.id); } catch (_) {}
                             }
-                            setTimeout(() => barcodeRef.current?.focus(), 50);
                           }}
                         >
                           Enviar
                         </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          onClick={async (e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                            const next = openPlatformId === pc.id ? null : pc.id;
-                            setOpenPlatformId(next);
-                            if (next) {
-                              setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
-                              try {
-                                // Carrega TODOS os itens do card de uma vez
-                                const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                if (ids.length > 0) await fetchItemsForPedidoIds(ids);
-                              } catch (err) { console.error(err); }
-                            }
-                          }}
-                          aria-label="Abrir pedidos"
-                        >
-                          <ChevronDown className="h-4 w-4" />
-                        </Button>
+                        <div className="p-1.5" aria-hidden>
+                          <ChevronDown className={`h-4 w-4 transition-transform ${openPlatformId === pc.id ? 'rotate-180' : ''}`} />
+                        </div>
                       </div>
                     </CardContent>
 
                     {openPlatformId === pc.id && (
-                      <div className="p-2 border-t">
+                      <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
                         {/* Paginação no topo */}
                         {totalPages > 1 && (
                           <div className="flex items-center justify-between mb-2 pb-2 border-b">
