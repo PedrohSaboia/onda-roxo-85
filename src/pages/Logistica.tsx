@@ -1712,7 +1712,7 @@ export function Logistica() {
                                 <div key={p.id} className="rounded border px-3 py-2.5">
                                   <div className="flex items-center justify-between gap-2">
                                     <div className="flex items-center gap-3 min-w-0">
-                                      <span className="font-mono text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                                      <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
                                       <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
                                     </div>
                                     <button
@@ -2256,7 +2256,7 @@ export function Logistica() {
                       )}
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="font-mono text-sm font-medium truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                          <span className="text-sm font-medium truncate max-w-[10rem]">{p.id_externo || p.id}</span>
                           <button
                             type="button"
                             onClick={() => handleCopyPedidoId(p.id_externo || p.id)}
