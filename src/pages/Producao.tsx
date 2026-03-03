@@ -3,7 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ChevronDown, Loader2, TriangleAlert, List, X, Search, Printer, Truck, PackageCheck, CheckSquare, Users, CheckCircle2, XCircle, Clock, Copy } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { ChevronDown, Loader2, TriangleAlert, List, X, Search, Printer, Truck, PackageCheck, CheckSquare, Users, CheckCircle2, XCircle, Clock, Copy, Check } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
@@ -643,6 +645,16 @@ export function ProductionPage() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [platformImages, setPlatformImages] = useState<Record<string, string | null>>({});
 
+  // Estados para a aba "Itens a produzir"
+  const [selectedItemProduzir, setSelectedItemProduzir] = useState<{
+    produtoId: string;
+    variacaoId?: string;
+    produtoNome: string;
+    variacaoNome?: string;
+  } | null>(null);
+  const [idExternosProduzir, setIdExternosProduzir] = useState<string[]>([]);
+  const [copiedIdsProduzir, setCopiedIdsProduzir] = useState<Set<string>>(new Set());
+
   const [expandedBySection, setExpandedBySection] = useState<Record<SectionKey, DateRangeKey | null>>({
     yampi: null,
     mercado_livre: null,
@@ -721,7 +733,7 @@ export function ProductionPage() {
       setLoadingSummary(true);
       setSummaryError(null);
       const now = new Date();
-      const end = endOfDay(subtractDays(now, 1));
+      const end = endOfDay(now);
       const [items, mlItems] = await Promise.all([
         fetchProducaoItens({ start: null, end }),
         fetchProducaoItensMl({ diasMin: 1, diasMax: null }),
@@ -1129,7 +1141,7 @@ export function ProductionPage() {
       try {
         const now = new Date();
         // start = null para incluir 31+ dias sem limite inferior
-        const end = endOfDay(subtractDays(now, 1));
+        const end = endOfDay(now);
         const items = await fetchProducaoItens({ start: null, end });
         if (mounted) setSummaryItems(items);
       } catch (err: any) {
@@ -1145,7 +1157,7 @@ export function ProductionPage() {
     const fetchMlSummary = async () => {
       try {
         const now = new Date();
-        const end = endOfDay(subtractDays(now, 1));
+        const end = endOfDay(now);
         const items = await fetchProducaoItensMl({ diasMin: 1, diasMax: null });
         if (mounted) setMlSummaryItems(items);
       } catch (err) {
@@ -1400,6 +1412,124 @@ export function ProductionPage() {
     }
   };
 
+  // ============================================
+  // FUNÇÕES PARA ABA "ITENS A PRODUZIR"
+  // ============================================
+  
+  type ItemAgrupado = {
+    produto_id: string | null;
+    variacao_id: string | null;
+    nome_produto: string;
+    nome_variacao: string | null;
+    img_url: string | null;
+    quantidade_total: number;
+  };
+
+  const getItensAgrupadosPorProduto = (): ItemAgrupado[] => {
+    // Combinar summaryItems e mlSummaryItems
+    const allItems = [...summaryItems, ...mlSummaryItems];
+    
+    const agrupamentoPorProduto = new Map<string, ItemAgrupado>();
+
+    for (const item of allItems) {
+      if (!item.produto_id) continue;
+      
+      const key = `${item.produto_id ?? 'null'}::${item.variacao_id ?? 'null'}`;
+      const qty = Number(item.quantidade || 0);
+      
+      const current = agrupamentoPorProduto.get(key);
+      if (current) {
+        current.quantidade_total += qty;
+      } else {
+        agrupamentoPorProduto.set(key, {
+          produto_id: item.produto_id,
+          variacao_id: item.variacao_id,
+          nome_produto: item.nome_produto || 'Produto sem nome',
+          nome_variacao: item.nome_variacao ?? null,
+          img_url: item.img_url_variacao || item.img_url_produto || null,
+          quantidade_total: qty,
+        });
+      }
+    }
+
+    return Array.from(agrupamentoPorProduto.values())
+      .sort((a, b) => b.quantidade_total - a.quantidade_total);
+  };
+
+  const handleItemClickProduzir = (item: {
+    produtoId: string;
+    produtoNome: string;
+    variacaoId?: string;
+    variacaoNome?: string;
+  }) => {
+    const allItems = [...summaryItems, ...mlSummaryItems];
+    
+    // Buscar todos os pedidos que contêm este item
+    const pedidosComItem = allItems.filter((i) => {
+      if (!i.produto_id) return false;
+      const matchProduto = i.produto_id === item.produtoId;
+      
+      if (item.variacaoId) {
+        return matchProduto && i.variacao_id === item.variacaoId;
+      } else {
+        return matchProduto && !i.variacao_id;
+      }
+    });
+
+    const ids = Array.from(
+      new Set(
+        pedidosComItem
+          .map((p) => p.id_externo)
+          .filter((id): id is string => !!id && id.trim().length > 0)
+      )
+    ).sort();
+
+    setIdExternosProduzir(ids);
+    setSelectedItemProduzir(item);
+    setCopiedIdsProduzir(new Set());
+  };
+
+  const copyToClipboardProduzir = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedIdsProduzir((prev) => new Set(prev).add(text));
+      setTimeout(() => {
+        setCopiedIdsProduzir((prev) => {
+          const newSet = new Set(prev);
+          newSet.delete(text);
+          return newSet;
+        });
+      }, 2000);
+      toast({
+        title: 'Copiado!',
+        description: `ID ${text} copiado para a área de transferência`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Não foi possível copiar o ID',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const copyAllIdsProduzir = async () => {
+    const allIds = idExternosProduzir.join('\n');
+    try {
+      await navigator.clipboard.writeText(allIds);
+      toast({
+        title: 'Copiado!',
+        description: `${idExternosProduzir.length} IDs copiados para a área de transferência`,
+      });
+    } catch (err) {
+      toast({
+        title: 'Erro ao copiar',
+        description: 'Não foi possível copiar os IDs',
+        variant: 'destructive',
+      });
+    }
+  };
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="space-y-6 p-4 md:p-6">
@@ -1422,7 +1552,15 @@ export function ProductionPage() {
               )}
             </div>
           </div>
+        </div>
 
+        <Tabs defaultValue="plataformas" className="space-y-4">
+          <TabsList className="grid w-full grid-cols-2 max-w-md">
+            <TabsTrigger value="plataformas">Pedidos Plataformas</TabsTrigger>
+            <TabsTrigger value="itens">Itens a produzir</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="plataformas" className="space-y-4">
           {/* Busca rápida por ID do pedido */}
           <div className="flex flex-col gap-2 sm:w-80">
             <div className="flex gap-2">
@@ -1461,7 +1599,6 @@ export function ProductionPage() {
               </div>
             )}
           </div>
-        </div>
 
         {/* Card de pedido encontrado — full width, igual à logística */}
         {pageSearchResult && pageSearchResult !== 'not_found' && pageSearchResult !== 'already_processed' && (
@@ -1597,6 +1734,59 @@ export function ProductionPage() {
             ))}
           </div>
         )}
+          </TabsContent>
+
+          <TabsContent value="itens" className="space-y-4">
+            {loadingSummary ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Carregando itens...
+              </div>
+            ) : summaryError ? (
+              <div className="text-sm text-red-600">{summaryError}</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {getItensAgrupadosPorProduto().map((item, idx) => (
+                  <Card 
+                    key={idx} 
+                    className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                    onClick={() => handleItemClickProduzir({
+                      produtoId: item.produto_id || '',
+                      produtoNome: item.nome_produto,
+                      variacaoId: item.variacao_id || undefined,
+                      variacaoNome: item.nome_variacao || undefined,
+                    })}
+                  >
+                    <CardHeader className="pb-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                          {item.img_url ? (
+                            <img 
+                              src={item.img_url} 
+                              alt={item.nome_produto}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Sem foto</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="font-semibold text-sm truncate">{item.nome_produto}</h3>
+                          {item.nome_variacao && (
+                            <p className="text-xs text-muted-foreground truncate">{item.nome_variacao}</p>
+                          )}
+                          <Badge variant="secondary" className="mt-1">
+                            {item.quantidade_total}×
+                          </Badge>
+                        </div>
+                      </div>
+                    </CardHeader>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={orderIdsModalOpen} onOpenChange={(open) => { setOrderIdsModalOpen(open); if (!open) { setModalProductFilter(null); setModalTab('only'); setSelectedOrderIds(new Set()); setOpenOrderIds(new Set()); setSearchTerm(''); } }}>
@@ -2030,6 +2220,69 @@ export function ProductionPage() {
               </Button>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal para exibir IDs Externos - Aba Itens a Produzir */}
+      <Dialog open={!!selectedItemProduzir} onOpenChange={(open) => !open && setSelectedItemProduzir(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex flex-col gap-1">
+              <span>{selectedItemProduzir?.produtoNome}</span>
+              {selectedItemProduzir?.variacaoNome && (
+                <span className="text-sm text-muted-foreground font-normal">
+                  {selectedItemProduzir.variacaoNome}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="flex-1 overflow-y-auto">
+            {idExternosProduzir.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                Nenhum pedido encontrado para este item
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between pb-2 border-b">
+                  <span className="text-sm text-muted-foreground">
+                    {idExternosProduzir.length} {idExternosProduzir.length === 1 ? 'pedido' : 'pedidos'}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={copyAllIdsProduzir}
+                  >
+                    <Copy className="h-4 w-4 mr-2" />
+                    Copiar Todos
+                  </Button>
+                </div>
+                
+                <div className="grid gap-2">
+                  {idExternosProduzir.map((id, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
+                    >
+                      <span className="font-mono text-sm">{id}</span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => copyToClipboardProduzir(id)}
+                        className="ml-2"
+                      >
+                        {copiedIdsProduzir.has(id) ? (
+                          <Check className="h-4 w-4 text-green-600" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 
