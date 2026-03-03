@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert } from 'lucide-react';
+import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert, Copy, Check } from 'lucide-react';
 import { FaBoxesStacked } from 'react-icons/fa6';
 import { HiFilter } from 'react-icons/hi';
 import { Button } from '@/components/ui/button';
@@ -145,6 +145,20 @@ export function Logistica() {
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const targetPedidoIdRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // Modal: Pedidos do Produto
+  type ProdutoModalItem = { produto_id: string | null; variacao_id: string | null; nomeProduto: string; nomeVariacao: string | null; imgUrl: string | null };
+  const [produtoPedidosModal, setProdutoPedidosModal] = useState<{ open: boolean; item: ProdutoModalItem | null; pedidos: any[]; loading: boolean }>({ open: false, item: null, pedidos: [], loading: false });
+  const [copiedPedidoId, setCopiedPedidoId] = useState<string | null>(null);
+
+  const handleCopyPedidoId = (id: string) => {
+    navigator.clipboard.writeText(id).then(() => {
+      setCopiedPedidoId(id);
+      setTimeout(() => setCopiedPedidoId(null), 2000);
+    }).catch(() => {
+      toast({ title: 'Erro', description: 'Não foi possível copiar o ID', variant: 'destructive' });
+    });
+  };
 
   const pedidoTemItemPrioritario = (pedido: any) => {
     const itens = pedido?.itens_pedido || [];
@@ -727,6 +741,69 @@ export function Logistica() {
       setPlatformOrderItems((prev) => ({ ...prev, ...grouped }));
     } catch (err) {
       console.error('Erro ao buscar itens para pedidos:', err);
+    }
+  };
+
+  const fetchPedidosDoProduto = async (item: ProdutoModalItem) => {
+    setProdutoPedidosModal({ open: true, item, pedidos: [], loading: true });
+    try {
+      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+
+      // 1. Busca pedidos já filtrados por status + etiqueta (mesma lógica do fetchLogItems)
+      let pedidosQuery: any = (supabase as any)
+        .from('pedidos')
+        .select('id, id_externo, criado_em, urgente, plataformas(id, nome, img_url)')
+        .eq('status_id', LOGISTICA_STATUS_ID)
+        .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
+      if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+
+      const { data: pedidosData, error: pedidosErr } = await pedidosQuery;
+      if (pedidosErr) throw pedidosErr;
+
+      const todosPedidoIds = (pedidosData || []).map((p: any) => p.id) as string[];
+      if (!todosPedidoIds.length) {
+        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+        return;
+      }
+
+      // 2. Busca itens desses pedidos filtrados pelo produto/variação específico
+      let itensQuery: any = (supabase as any)
+        .from('itens_pedido')
+        .select('pedido_id, quantidade')
+        .in('pedido_id', todosPedidoIds);
+
+      if (item.variacao_id) {
+        itensQuery = itensQuery.eq('variacao_id', item.variacao_id);
+      } else if (item.produto_id) {
+        itensQuery = itensQuery.eq('produto_id', item.produto_id).is('variacao_id', null);
+      }
+
+      const { data: itensData, error: itensErr } = await itensQuery;
+      if (itensErr) throw itensErr;
+
+      const pedidoIdsComItem = new Set((itensData || []).map((i: any) => i.pedido_id));
+      if (!pedidoIdsComItem.size) {
+        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+        return;
+      }
+
+      // 3. Monta mapa de quantidades e cruza com pedidos
+      const quantMap = new Map<string, number>();
+      (itensData || []).forEach((i: any) => {
+        quantMap.set(i.pedido_id, (quantMap.get(i.pedido_id) || 0) + Number(i.quantidade || 0));
+      });
+
+      const pedidosComQtd = (pedidosData || [])
+        .filter((p: any) => pedidoIdsComItem.has(p.id))
+        .map((p: any) => ({
+          ...p,
+          quantidade_item: quantMap.get(p.id) || 0,
+        }));
+
+      setProdutoPedidosModal((prev) => ({ ...prev, pedidos: pedidosComQtd, loading: false }));
+    } catch (err) {
+      console.error('Erro ao buscar pedidos do produto:', err);
+      setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
     }
   };
 
@@ -1436,7 +1513,8 @@ export function Logistica() {
                       return (
                         <div
                           key={`${item.produto_id}-${item.variacao_id}-${idx}`}
-                          className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-3 w-36 shadow-sm hover:shadow-md transition-shadow"
+                          className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-3 w-36 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => fetchPedidosDoProduto({ produto_id: item.produto_id, variacao_id: item.variacao_id, nomeProduto, nomeVariacao, imgUrl })}
                         >
                           {/* Badge de quantidade */}
                           <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-xs px-2 py-0.5 min-w-[1.5rem] shadow">
@@ -2118,6 +2196,90 @@ export function Logistica() {
             </Button>
             <Button onClick={handleConfirmarPedidoJaEnviado}>
               Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Pedidos do Produto */}
+      <Dialog open={produtoPedidosModal.open} onOpenChange={(open) => { if (!open) setProdutoPedidosModal((prev) => ({ ...prev, open: false })); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              <div className="flex items-center gap-3">
+                {produtoPedidosModal.item?.imgUrl ? (
+                  <img src={produtoPedidosModal.item.imgUrl} alt="" className="h-10 w-10 rounded-lg object-cover border flex-shrink-0" />
+                ) : (
+                  <div className="h-10 w-10 rounded-lg border bg-muted flex-shrink-0" />
+                )}
+                <div className="leading-tight">
+                  <div className="text-base font-semibold">{produtoPedidosModal.item?.nomeProduto}</div>
+                  {produtoPedidosModal.item?.nomeVariacao && (
+                    <div className="text-sm font-normal text-muted-foreground">{produtoPedidosModal.item.nomeVariacao}</div>
+                  )}
+                </div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-2">
+            {produtoPedidosModal.loading ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-12 rounded-lg bg-muted/40 animate-pulse" />
+                ))}
+              </div>
+            ) : produtoPedidosModal.pedidos.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhum pedido encontrado para este produto.</p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                <p className="text-xs text-muted-foreground mb-3">{produtoPedidosModal.pedidos.length} pedido(s) com este produto</p>
+                {produtoPedidosModal.pedidos.map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3">
+                      {p.plataformas?.img_url ? (
+                        <img src={p.plataformas.img_url} alt={p.plataformas.nome} className="h-6 w-6 rounded object-cover" />
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-muted" />
+                      )}
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-mono text-sm font-medium">{p.id_externo || p.id}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPedidoId(p.id_externo || p.id)}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Copiar ID"
+                          >
+                            {copiedPedidoId === (p.id_externo || p.id) ? (
+                              <Check className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                        {p.plataformas?.nome && (
+                          <div className="text-[10px] text-muted-foreground">{p.plataformas.nome}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {p.urgente && (
+                        <span className="text-[10px] font-semibold text-red-500 uppercase">Urgente</span>
+                      )}
+                      <span className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs px-2 py-0.5 min-w-[1.5rem]">
+                        ×{p.quantidade_item}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setProdutoPedidosModal((prev) => ({ ...prev, open: false }))}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>
