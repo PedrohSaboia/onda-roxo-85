@@ -280,12 +280,15 @@ export function Logistica() {
     try {
       let rows: Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }> = [];
 
+      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+
       if (filterPlataformaId) {
         const { data: pedidosData, error: pedidosError } = await (supabase as any)
           .from('pedidos')
           .select('id, status_id, plataforma_id, itens_pedido(produto_id, variacao_id, quantidade)')
           .eq('plataforma_id', filterPlataformaId)
-          .eq('status_id', LOGISTICA_STATUS_ID);
+          .eq('status_id', LOGISTICA_STATUS_ID)
+          .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
 
         if (pedidosError) throw pedidosError;
 
@@ -312,11 +315,36 @@ export function Logistica() {
 
         rows = Array.from(aggregate.values());
       } else {
-        const { data, error } = await (supabase as any)
-          .from('vw_itens_logistica')
-          .select('produto_id, variacao_id, quantidade_total');
-        if (error) throw error;
-        rows = (data ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }>;
+        // Busca pedidos com status logística E etiqueta disponível, depois agrega os itens
+        let pedidosQuery = (supabase as any)
+          .from('pedidos')
+          .select('itens_pedido(produto_id, variacao_id, quantidade)')
+          .eq('status_id', LOGISTICA_STATUS_ID)
+          .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
+        if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+
+        const { data: pedidosData, error: pedidosError } = await pedidosQuery;
+        if (pedidosError) throw pedidosError;
+
+        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number }>();
+        for (const pedido of (pedidosData ?? [])) {
+          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null }>;
+          for (const item of itens) {
+            const key = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
+            const quantidade = Number(item.quantidade ?? 0);
+            const existing = aggregate.get(key);
+            if (existing) {
+              existing.quantidade_total += quantidade;
+            } else {
+              aggregate.set(key, {
+                produto_id: item.produto_id ?? null,
+                variacao_id: item.variacao_id ?? null,
+                quantidade_total: quantidade,
+              });
+            }
+          }
+        }
+        rows = Array.from(aggregate.values());
       }
 
       // collect ids
@@ -1374,6 +1402,85 @@ export function Logistica() {
         {/* Cards: itens a enviar (view vw_itens_logistica) - show only when no pedido is active and no filtro por plataforma */}
         {!foundPedido && !modoListaPorPlataforma && (
           <div className="mt-4">
+
+            {/* Seção: Produtos a Embalar */}
+            <div className="mb-8">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>PRODUTOS A EMBALAR</h3>
+                <span className="text-sm text-muted-foreground">
+                  {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
+                </span>
+              </div>
+
+              {loadingLogItems ? (
+                <div className="flex gap-3 flex-wrap">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="flex-shrink-0 w-36 h-48 rounded-xl border bg-muted/40 animate-pulse" />
+                  ))}
+                </div>
+              ) : logItemsError ? (
+                <div className="text-sm text-red-500">Erro ao carregar produtos: {logItemsError}</div>
+              ) : filteredLogItems.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {filteredLogItems
+                    .slice()
+                    .sort((a, b) => b.quantidade_total - a.quantidade_total)
+                    .map((item, idx) => {
+                      const nomeProduto = item.produto?.nome || '—';
+                      const nomeVariacao = item.variacao?.nome || null;
+                      const sku = item.variacao?.sku || item.produto?.sku || null;
+                      const imgUrl = item.variacao?.img_url || item.produto?.img_url || null;
+
+                      return (
+                        <div
+                          key={`${item.produto_id}-${item.variacao_id}-${idx}`}
+                          className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-3 w-36 shadow-sm hover:shadow-md transition-shadow"
+                        >
+                          {/* Badge de quantidade */}
+                          <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-xs px-2 py-0.5 min-w-[1.5rem] shadow">
+                            ×{item.quantidade_total}
+                          </span>
+
+                          {/* Imagem */}
+                          {imgUrl ? (
+                            <img
+                              src={imgUrl}
+                              alt={nomeProduto}
+                              className="h-20 w-20 rounded-lg object-cover border"
+                            />
+                          ) : (
+                            <div className="h-20 w-20 rounded-lg border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                              sem foto
+                            </div>
+                          )}
+
+                          {/* Nome do produto */}
+                          <p className="text-xs font-semibold text-center leading-tight line-clamp-2 w-full">
+                            {nomeProduto}
+                          </p>
+
+                          {/* Variação */}
+                          {nomeVariacao && (
+                            <p className="text-[10px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-1">
+                              {nomeVariacao}
+                            </p>
+                          )}
+
+                          {/* SKU */}
+                          {sku && (
+                            <span className="text-[10px] font-mono text-muted-foreground/70 truncate w-full text-center">
+                              {sku}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>ITENS A ENVIAR</h3>
                       <div className="flex items-center gap-2">
@@ -1584,6 +1691,7 @@ export function Logistica() {
                 })}
               </div>
             )}
+
           </div>
         )}
 
