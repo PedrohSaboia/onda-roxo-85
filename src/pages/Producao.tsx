@@ -1425,6 +1425,36 @@ export function ProductionPage() {
     quantidade_total: number;
   };
 
+  type CategoriaItens = {
+    categoria: string;
+    itens: ItemAgrupado[];
+  };
+
+  const categorizarProduto = (nomeProduto: string): string => {
+    const nomeNormalizado = nomeProduto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    if (nomeNormalizado.includes('organizador') || nomeNormalizado.includes('adega')) {
+      return 'Organizadores';
+    }
+    if (nomeNormalizado.includes('livraria') || nomeNormalizado.includes('estante') || nomeNormalizado.includes('prateleira')) {
+      return 'Livrarias e Estantes';
+    }
+    if (nomeNormalizado.includes('suporte')) {
+      return 'Suportes';
+    }
+    if (nomeNormalizado.includes('sapateira')) {
+      return 'Sapateiras';
+    }
+    if (nomeNormalizado.includes('anel')) {
+      return 'Anéis de Leitura';
+    }
+    if (nomeNormalizado.includes('vitrine') || nomeNormalizado.includes('componente')) {
+      return 'Componentes';
+    }
+    
+    return 'Outros Produtos';
+  };
+
   const getItensAgrupadosPorProduto = (): ItemAgrupado[] => {
     // Combinar summaryItems e mlSummaryItems
     const allItems = [...summaryItems, ...mlSummaryItems];
@@ -1454,6 +1484,29 @@ export function ProductionPage() {
 
     return Array.from(agrupamentoPorProduto.values())
       .sort((a, b) => b.quantidade_total - a.quantidade_total);
+  };
+
+  const getItensAgrupadosPorCategoria = (): CategoriaItens[] => {
+    const itens = getItensAgrupadosPorProduto();
+    const categorias = new Map<string, ItemAgrupado[]>();
+
+    // Agrupar por categoria
+    for (const item of itens) {
+      const categoria = categorizarProduto(item.nome_produto);
+      const existing = categorias.get(categoria) ?? [];
+      existing.push(item);
+      categorias.set(categoria, existing);
+    }
+
+    // Converter para array e ordenar categorias
+    const ordensCategorias = ['Organizadores', 'Livrarias e Estantes', 'Suportes', 'Sapateiras', 'Anéis de Leitura', 'Componentes', 'Outros Produtos'];
+    
+    return ordensCategorias
+      .filter(cat => categorias.has(cat))
+      .map(cat => ({
+        categoria: cat,
+        itens: categorias.get(cat)!.sort((a, b) => b.quantidade_total - a.quantidade_total)
+      }));
   };
 
   const handleItemClickProduzir = (item: {
@@ -1736,7 +1789,7 @@ export function ProductionPage() {
         )}
           </TabsContent>
 
-          <TabsContent value="itens" className="space-y-4">
+          <TabsContent value="itens" className="space-y-6">
             {loadingSummary ? (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -1745,45 +1798,90 @@ export function ProductionPage() {
             ) : summaryError ? (
               <div className="text-sm text-red-600">{summaryError}</div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {getItensAgrupadosPorProduto().map((item, idx) => (
-                  <Card 
-                    key={idx} 
-                    className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                    onClick={() => handleItemClickProduzir({
-                      produtoId: item.produto_id || '',
-                      produtoNome: item.nome_produto,
-                      variacaoId: item.variacao_id || undefined,
-                      variacaoNome: item.nome_variacao || undefined,
-                    })}
-                  >
-                    <CardHeader className="pb-3">
-                      <div className="flex items-center gap-3">
-                        <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                          {item.img_url ? (
-                            <img 
-                              src={item.img_url} 
-                              alt={item.nome_produto}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">Sem foto</span>
-                          )}
+              <>
+                {(() => {
+                  const todasCategorias = getItensAgrupadosPorCategoria();
+                  const categoriasAgrupadas = ['Anéis de Leitura', 'Componentes', 'Outros Produtos'];
+                  const categoriasNormais = todasCategorias.filter(cat => !categoriasAgrupadas.includes(cat.categoria));
+                  const categoriasParaAgrupar = todasCategorias.filter(cat => categoriasAgrupadas.includes(cat.categoria));
+
+                  const renderProductCard = (item: ItemAgrupado, idx: number) => (
+                    <Card 
+                      key={idx} 
+                      className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
+                      onClick={() => handleItemClickProduzir({
+                        produtoId: item.produto_id || '',
+                        produtoNome: item.nome_produto,
+                        variacaoId: item.variacao_id || undefined,
+                        variacaoNome: item.nome_variacao || undefined,
+                      })}
+                    >
+                      <CardHeader className="pb-3">
+                        <div className="flex items-center gap-3">
+                          <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
+                            {item.img_url ? (
+                              <img 
+                                src={item.img_url} 
+                                alt={item.nome_produto}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <span className="text-xs text-muted-foreground">Sem foto</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="font-semibold text-sm truncate">{item.nome_produto}</h3>
+                            {item.nome_variacao && (
+                              <p className="text-xs text-muted-foreground truncate">{item.nome_variacao}</p>
+                            )}
+                            <Badge variant="secondary" className="mt-1">
+                              {item.quantidade_total}×
+                            </Badge>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm truncate">{item.nome_produto}</h3>
-                          {item.nome_variacao && (
-                            <p className="text-xs text-muted-foreground truncate">{item.nome_variacao}</p>
-                          )}
-                          <Badge variant="secondary" className="mt-1">
-                            {item.quantidade_total}×
-                          </Badge>
+                      </CardHeader>
+                    </Card>
+                  );
+
+                  return (
+                    <>
+                      {/* Categorias normais - cada uma em sua própria linha */}
+                      {categoriasNormais.map((categoriaData, catIdx) => (
+                        <div key={catIdx} className="space-y-3">
+                          <div className="flex items-center gap-2">
+                            <h3 className="font-bold text-lg text-foreground">{categoriaData.categoria}</h3>
+                            <Badge variant="outline" className="text-xs">
+                              {categoriaData.itens.reduce((acc, item) => acc + item.quantidade_total, 0)} unidades
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {categoriaData.itens.map((item, idx) => renderProductCard(item, idx))}
+                          </div>
                         </div>
-                      </div>
-                    </CardHeader>
-                  </Card>
-                ))}
-              </div>
+                      ))}
+
+                      {/* Categorias agrupadas - todas na mesma linha */}
+                      {categoriasParaAgrupar.length > 0 && (
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                          {categoriasParaAgrupar.map((categoriaData, catIdx) => (
+                            <div key={catIdx} className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <h3 className="font-bold text-base text-foreground">{categoriaData.categoria}</h3>
+                                <Badge variant="outline" className="text-xs">
+                                  {categoriaData.itens.reduce((acc, item) => acc + item.quantidade_total, 0)} un
+                                </Badge>
+                              </div>
+                              <div className="space-y-2">
+                                {categoriaData.itens.map((item, idx) => renderProductCard(item, idx))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </>
             )}
           </TabsContent>
         </Tabs>
