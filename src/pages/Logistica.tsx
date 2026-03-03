@@ -886,10 +886,10 @@ export function Logistica() {
                             && String(foundPedido.shipping_id).trim() !== '';
 
   const handleGerarEtiquetaML = async () => {
-    if (!foundPedido?.id) {
+    if (!foundPedido?.id_externo) {
       toast({ 
         title: 'Erro', 
-        description: 'O pedido não possui id primário definido',
+        description: 'O pedido não possui ID externo definido',
         variant: 'destructive'
       });
       return;
@@ -905,7 +905,7 @@ export function Logistica() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ pedido_id: foundPedido.id }),
+        body: JSON.stringify({ id_externo: foundPedido.id_externo }),
       });
 
       if (!response.ok) {
