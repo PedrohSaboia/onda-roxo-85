@@ -1698,10 +1698,10 @@ export function Logistica() {
                               const items = platformOrderItems[p.id] || [];
                               return (
                                 <div key={p.id} className="rounded border px-3 py-2.5">
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-3">
-                                      <span className="font-mono text-sm">{p.id_externo || p.id}</span>
-                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="font-mono text-sm truncate">{p.id_externo || p.id}</span>
+                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{items.length} itens</span>
                                     </div>
                                     <button
                                       type="button"
