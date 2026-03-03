@@ -812,6 +812,18 @@ export function Logistica() {
     setTimeout(() => barcodeRef.current?.focus(), 50);
     // buscar saldo ao carregar a página
     fetchSaldoMelhorEnvio();
+
+    // Injetar fonte Poppins somente nesta página
+    const link = document.createElement('link');
+    link.id = 'poppins-font-logistica';
+    link.rel = 'stylesheet';
+    link.href = 'https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap';
+    if (!document.getElementById('poppins-font-logistica')) {
+      document.head.appendChild(link);
+    }
+    return () => {
+      document.getElementById('poppins-font-logistica')?.remove();
+    };
   }, []);
 
   // Buscar userId da sessão
@@ -1334,10 +1346,10 @@ export function Logistica() {
   };
 
  return (
-    <div className="flex h-full">
+    <div className="flex h-full" style={{ fontFamily: "'Poppins', sans-serif" }}>
       <LogisticaSidebar />
       <div ref={scrollContainerRef} className="flex-1 h-full overflow-y-auto">
-        <div className="space-y-6 p-6">
+        <div className="space-y-4 p-4">
       <div>
         <div className="flex items-center justify-between">
           <div>
@@ -1365,20 +1377,20 @@ export function Logistica() {
                 </Button>
               </div>
             )}
-            <h1 className="text-2xl font-bold">Logística</h1>
-            <p className="text-muted-foreground">Envio de pedidos</p>
+            <h1 className="text-lg font-bold">Logística</h1>
+            <p className="text-xs text-muted-foreground">Envio de pedidos</p>
           </div>
 
         </div>
 
-        <div className="mt-6">
+        <div className="mt-3">
           <div className="flex items-center gap-2">
             <div className="relative" ref={filterDropdownRef}>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="h-12 px-4 bg-card rounded-[16px]"
+                className="h-9 px-3 bg-card rounded-[12px]"
                 onClick={() => {
                   setTempFilterPlataformaId(filterPlataformaId);
                   setTempFilterProdutos(filterProdutos);
@@ -1387,7 +1399,7 @@ export function Logistica() {
                   setShowFilters((s) => !s);
                 }}
               >
-                <HiFilter className="h-8 w-8" />
+                <HiFilter className="h-5 w-5" />
               </Button>
 
               {showFilters && (
@@ -1461,7 +1473,7 @@ export function Logistica() {
                   const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
                   if (!hasMissing) barcodeRef.current?.focus();
                 }, 0)}
-                className="w-full text-2xl py-2 pl-3 pr-24 border-2 rounded-[16px] bg-white focus:outline-none focus:ring-0 focus:border-custom-600 transition-colors"
+                className="w-full text-base py-1.5 pl-3 pr-20 border-2 rounded-[12px] bg-white focus:outline-none focus:ring-0 focus:border-custom-600 transition-colors"
                 placeholder="Pesquisar pelo ID do pedido"
                 aria-label="Leitor de código"
               />
@@ -1481,18 +1493,18 @@ export function Logistica() {
           <div className="mt-4">
 
             {/* Seção: Produtos a Embalar */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>PRODUTOS A EMBALAR</h3>
+            <div className="mb-5">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PRODUTOS A EMBALAR</h3>
                 <span className="text-sm text-muted-foreground">
                   {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
                 </span>
               </div>
 
               {loadingLogItems ? (
-                <div className="flex gap-3 flex-wrap">
+                <div className="flex gap-2 flex-wrap">
                   {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex-shrink-0 w-36 h-48 rounded-xl border bg-muted/40 animate-pulse" />
+                    <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
                   ))}
                 </div>
               ) : logItemsError ? (
@@ -1500,7 +1512,7 @@ export function Logistica() {
               ) : filteredLogItems.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
               ) : (
-                <div className="flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-2">
                   {filteredLogItems
                     .slice()
                     .sort((a, b) => b.quantidade_total - a.quantidade_total)
@@ -1513,11 +1525,11 @@ export function Logistica() {
                       return (
                         <div
                           key={`${item.produto_id}-${item.variacao_id}-${idx}`}
-                          className="relative flex flex-col items-center gap-2 rounded-xl border bg-card p-3 w-36 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                          className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                           onClick={() => fetchPedidosDoProduto({ produto_id: item.produto_id, variacao_id: item.variacao_id, nomeProduto, nomeVariacao, imgUrl })}
                         >
                           {/* Badge de quantidade */}
-                          <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-xs px-2 py-0.5 min-w-[1.5rem] shadow">
+                          <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
                             ×{item.quantidade_total}
                           </span>
 
@@ -1526,29 +1538,29 @@ export function Logistica() {
                             <img
                               src={imgUrl}
                               alt={nomeProduto}
-                              className="h-20 w-20 rounded-lg object-cover border"
+                              className="h-14 w-14 rounded-md object-cover border"
                             />
                           ) : (
-                            <div className="h-20 w-20 rounded-lg border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                            <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
                               sem foto
                             </div>
                           )}
 
                           {/* Nome do produto */}
-                          <p className="text-xs font-semibold text-center leading-tight line-clamp-2 w-full">
+                          <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
                             {nomeProduto}
                           </p>
 
                           {/* Variação */}
                           {nomeVariacao && (
-                            <p className="text-[10px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-1">
+                            <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
                               {nomeVariacao}
                             </p>
                           )}
 
                           {/* SKU */}
                           {sku && (
-                            <span className="text-[10px] font-mono text-muted-foreground/70 truncate w-full text-center">
+                            <span className="text-[9px] font-mono text-muted-foreground/70 truncate w-full text-center">
                               {sku}
                             </span>
                           )}
@@ -1559,8 +1571,8 @@ export function Logistica() {
               )}
             </div>
 
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>ITENS A ENVIAR</h3>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>ITENS A ENVIAR</h3>
                       <div className="flex items-center gap-2">
                         <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
                           <RefreshCw className="h-4 w-4" />
@@ -1574,7 +1586,7 @@ export function Logistica() {
             ) : plataformasCards.length === 0 ? (
               <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full mx-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full mx-auto">
                 {plataformasCards.map((pc) => {
                   const currentPage = platformPage[pc.id] ?? 1;
                   const totalPages = Math.max(1, Math.ceil((pc.pedidos?.length ?? 0) / PLATFORM_PAGE_SIZE));
@@ -1593,7 +1605,7 @@ export function Logistica() {
                   return (
                   <Card
                     key={pc.id}
-                    className="p-4 cursor-pointer select-none"
+                    className="p-3 cursor-pointer select-none"
                     onClick={async (e) => {
                       e.preventDefault();
                       const next = openPlatformId === pc.id ? null : pc.id;
@@ -1607,21 +1619,21 @@ export function Logistica() {
                       }
                     }}
                   >
-                    <CardContent className="flex items-center gap-4 p-0">
-                      <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                    <CardContent className="flex items-center gap-3 p-0">
+                      <div className="w-7 h-7 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
                         {pc.img_url ? (
-                          <img src={pc.img_url} alt={pc.nome} className="w-9 h-9 object-cover" />
+                          <img src={pc.img_url} alt={pc.nome} className="w-7 h-7 object-cover" />
                         ) : pc.id === 'urgentes' ? (
-                          <TriangleAlert className="w-5 h-5 text-red-500" />
+                          <TriangleAlert className="w-4 h-4 text-red-500" />
                         ) : pc.id === 'leads' ? (
-                          <Users className="w-5 h-5 text-gray-600" />
+                          <Users className="w-4 h-4 text-gray-600" />
                         ) : (
-                          <FaBoxesStacked className="w-5 h-5 text-gray-500" />
+                          <FaBoxesStacked className="w-4 h-4 text-gray-500" />
                         )}
                       </div>
                       <div className="flex-1">
-                        <div className="font-semibold text-base">{pc.nome}</div>
-                        <div className="text-sm text-muted-foreground">{pc.count} pedido(s)</div>
+                        <div className="font-semibold text-sm">{pc.nome}</div>
+                        <div className="text-xs text-muted-foreground">{pc.count} pedido(s)</div>
                       </div>
                       <div className="flex items-center gap-2">
                         <Button
@@ -1699,9 +1711,9 @@ export function Logistica() {
                               return (
                                 <div key={p.id} className="rounded border px-3 py-2.5">
                                   <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-2 min-w-0">
-                                      <span className="font-mono text-sm truncate">{p.id_externo || p.id}</span>
-                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{items.length} itens</span>
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <span className="font-mono text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
                                     </div>
                                     <button
                                       type="button"
@@ -2236,15 +2248,15 @@ export function Logistica() {
                 <p className="text-xs text-muted-foreground mb-3">{produtoPedidosModal.pedidos.length} pedido(s) com este produto</p>
                 {produtoPedidosModal.pedidos.map((p: any) => (
                   <div key={p.id} className="flex items-center justify-between rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       {p.plataformas?.img_url ? (
-                        <img src={p.plataformas.img_url} alt={p.plataformas.nome} className="h-6 w-6 rounded object-cover" />
+                        <img src={p.plataformas.img_url} alt={p.plataformas.nome} className="h-6 w-6 rounded object-cover flex-shrink-0" />
                       ) : (
-                        <div className="h-6 w-6 rounded bg-muted" />
+                        <div className="h-6 w-6 rounded bg-muted flex-shrink-0" />
                       )}
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-sm font-medium">{p.id_externo || p.id}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-mono text-sm font-medium truncate max-w-[10rem]">{p.id_externo || p.id}</span>
                           <button
                             type="button"
                             onClick={() => handleCopyPedidoId(p.id_externo || p.id)}
