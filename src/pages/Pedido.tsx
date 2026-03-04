@@ -230,6 +230,9 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
 }
 
 export default function Pedido() {
+  const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
+  const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -957,16 +960,56 @@ export default function Pedido() {
     if (!id) return;
     setSavingLink(true);
     try {
+      const linkNormalizado = (linkEtiqueta || '').trim();
+      const updateData: any = {
+        link_etiqueta: linkNormalizado || null,
+        atualizado_em: new Date().toISOString(),
+      };
+
+      if (linkNormalizado) {
+        updateData.status_id = LOGISTICA_STATUS_ID;
+        updateData.etiqueta_envio_id = ETIQUETA_DISPONIVEL_ID;
+      }
+
       const { error } = await supabase
         .from('pedidos')
-        .update({ link_etiqueta: linkEtiqueta || null } as any)
+        .update(updateData)
         .eq('id', id);
 
       if (error) throw error;
-      await registrarHistoricoMovimentacao(id, 'Link da etiqueta salvo');
-      toast({ title: 'Link salvo', description: 'Link da etiqueta salvo com sucesso' });
-      // refresh to show updated value if needed
-      navigate(0);
+
+      const statusLogistica = statuses.find((status: any) => status.id === LOGISTICA_STATUS_ID);
+      const etiquetaDisponivel = etiquetas.find((etiqueta: any) => etiqueta.id === ETIQUETA_DISPONIVEL_ID);
+
+      setPedido((prev: any) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          link_etiqueta: linkNormalizado || null,
+          ...(linkNormalizado
+            ? {
+                status_id: LOGISTICA_STATUS_ID,
+                etiqueta_envio_id: ETIQUETA_DISPONIVEL_ID,
+                status: statusLogistica || prev.status,
+                etiqueta: etiquetaDisponivel || prev.etiqueta,
+              }
+            : {}),
+        };
+      });
+
+      if (linkNormalizado) {
+        await registrarHistoricoMovimentacao(
+          id,
+          'Link da etiqueta salvo e pedido movido para Logística com etiqueta Disponível'
+        );
+        toast({
+          title: 'Etiqueta gerada',
+          description: 'Link salvo, status alterado para Logística e etiqueta para Disponível',
+        });
+      } else {
+        await registrarHistoricoMovimentacao(id, 'Link da etiqueta removido');
+        toast({ title: 'Link atualizado', description: 'Link da etiqueta atualizado com sucesso' });
+      }
     } catch (err) {
       console.error('Erro ao salvar link_etiqueta:', err);
       toast({ title: 'Erro', description: 'Não foi possível salvar o link da etiqueta', variant: 'destructive' });
@@ -2249,6 +2292,32 @@ export default function Pedido() {
                           Gerenciar
                         </Button>
                       </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="mb-6">
+                <CardContent className="pt-6">
+                  <div className="space-y-2">
+                    <div className="text-sm text-muted-foreground">Link da etiqueta</div>
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Cole aqui o link da etiqueta"
+                        value={linkEtiqueta}
+                        onChange={(e) => setLinkEtiqueta(e.target.value)}
+                        disabled={readonly || savingLink}
+                      />
+                      <Button
+                        onClick={saveLinkEtiqueta}
+                        disabled={readonly || savingLink}
+                        className="whitespace-nowrap"
+                      >
+                        {savingLink ? 'Salvando...' : 'Salvar link'}
+                      </Button>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Ao salvar com um link válido, o pedido vai para Logística e a etiqueta é marcada como Disponível.
                     </div>
                   </div>
                 </CardContent>
