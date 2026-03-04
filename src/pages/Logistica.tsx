@@ -807,6 +807,37 @@ export function Logistica() {
     }
   };
 
+  const iniciarSequenciaPorProduto = async () => {
+    if (!produtoPedidosModal.pedidos.length) {
+      toast({ title: 'Sem pedidos', description: 'Nenhum pedido disponível para iniciar a sequência', variant: 'destructive' });
+      return;
+    }
+
+    setLoadingPedidosFiltrados(true);
+    try {
+      const ids = produtoPedidosModal.pedidos.map((p: any) => p.id).filter(Boolean);
+      const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+
+      setProdutoPedidosModal((prev) => ({ ...prev, open: false }));
+      setOpenPlatformId(null);
+      setModoListaPorPlataforma(true);
+      setFilterPlataformaId('');
+      setPedidosFiltrados(fullList);
+      setPedidoAtualIndex(0);
+      setFoundPedido(fullList[0] || null);
+      setFoundItemIds([]);
+      setItemInputs({});
+      setItemStatus({});
+
+      setTimeout(() => barcodeRef.current?.focus(), 50);
+    } catch (err) {
+      console.error('Erro ao iniciar sequência por produto:', err);
+      toast({ title: 'Erro', description: 'Não foi possível iniciar a sequência por produto', variant: 'destructive' });
+    } finally {
+      setLoadingPedidosFiltrados(false);
+    }
+  };
+
   useEffect(() => {
     // focus on mount
     setTimeout(() => barcodeRef.current?.focus(), 50);
@@ -1073,8 +1104,9 @@ export function Logistica() {
 
   // note: botão "Enviar por pedido" removido — pesquisa agora é feita diretamente pelo input principal
 
-  const handleBuscarPedidoPorId = async (pedidoIdParam?: string) => {
-    const pedidoId = (pedidoIdParam ?? pedidoIdInput).trim();
+  const handleBuscarPedidoPorId = async (pedidoIdParam?: string | Event) => {
+    const pedidoIdRaw = typeof pedidoIdParam === 'string' ? pedidoIdParam : pedidoIdInput;
+    const pedidoId = (pedidoIdRaw ?? '').trim();
     if (!pedidoId) {
       toast({ 
         title: 'ID inválido', 
@@ -2174,7 +2206,7 @@ export function Logistica() {
             <Button variant="outline" onClick={() => setPedidoIdModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleBuscarPedidoPorId} disabled={loadingPedidoManual}>
+            <Button onClick={() => void handleBuscarPedidoPorId()} disabled={loadingPedidoManual}>
               {loadingPedidoManual ? 'Buscando...' : 'Buscar'}
             </Button>
           </DialogFooter>
@@ -2290,6 +2322,11 @@ export function Logistica() {
           </div>
 
           <DialogFooter>
+            {produtoPedidosModal.pedidos.length > 0 && !produtoPedidosModal.loading && (
+              <Button onClick={() => void iniciarSequenciaPorProduto()}>
+                Iniciar sequência por produto
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setProdutoPedidosModal((prev) => ({ ...prev, open: false }))}>
               Fechar
             </Button>
