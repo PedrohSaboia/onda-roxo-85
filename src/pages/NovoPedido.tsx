@@ -49,6 +49,18 @@ export default function NovoPedido() {
   const [remetentes, setRemetentes] = useState<any[]>([]);
   const [selectedRemetente, setSelectedRemetente] = useState<string>('');
   const [loadingRemetentes, setLoadingRemetentes] = useState(false);
+  const [prazoEnvio, setPrazoEnvio] = useState<string>(''); // data YYYY-MM-DD
+  const [etiquetaFiles, setEtiquetaFiles] = useState<Array<{ file: File; customName: string }>>([]);
+  const etiquetaInputRef = useRef<HTMLInputElement>(null);
+
+  // IDs (UUID) das plataformas que exigem prazo de envio (Shopee, TikTok, Magalu)
+  // Seguindo o mesmo padrão de LEADS_PLATFORM_IDS em Producao.tsx
+  const PLATAFORMAS_COM_PRAZO_IDS = new Set([
+   'c22b2def-47fc-4fbb-aab1-660c951734c7', // Shopee
+   '637d146f-d552-4f1a-aab0-1b40cf983a2d', // TikTok
+   'e8396155-0fdc-4992-b872-18387e6c16a3' // Magalu
+  ]);
+  const showPrazoEnvio = PLATAFORMAS_COM_PRAZO_IDS.has(plataforma);
 
   const parsePtBR = (v: string) => {
     if (!v) return 0;
@@ -229,6 +241,24 @@ export default function NovoPedido() {
       return;
     }
 
+    if (showPrazoEnvio && !prazoEnvio) {
+      toast({
+        title: 'Erro',
+        description: 'Para esta plataforma, o campo "Prazo de envio" é obrigatório.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (showPrazoEnvio && etiquetaFiles.length === 0) {
+      toast({
+        title: 'Erro',
+        description: 'Para esta plataforma, é obrigatório subir ao menos uma etiqueta em PDF.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSaving(true);
     try {
       // insert pedido
@@ -259,7 +289,8 @@ export default function NovoPedido() {
         pagamento: formaPagamento || null,
         criado_em: criadoEm,
         empresa_id: empresaId || null,
-        remetente_id: selectedRemetente || null
+        remetente_id: selectedRemetente || null,
+        ...(showPrazoEnvio && prazoEnvio ? { tempo_ganho: new Date(prazoEnvio).toISOString() } : {})
       };
 
       const { data: pedidoData, error: pedidoError } = await supabase.from('pedidos').insert(pedidoPayload).select('id').single();
@@ -415,6 +446,62 @@ export default function NovoPedido() {
 
       const { error: itensError } = await supabase.from('itens_pedido').insert(itens as any);
       if (itensError) throw itensError;
+
+      // Upload de etiquetas (somente para plataformas com prazo) quando houver arquivos selecionados
+      if (showPrazoEnvio && etiquetaFiles.length > 0) {
+        try {
+          const uploadedUrls: string[] = [];
+
+          for (const item of etiquetaFiles) {
+            const customBase = String(item.customName || '').trim() || `${pedidoId}-${Date.now()}`;
+            const safeBase = customBase.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const fileName = `${safeBase}.pdf`;
+            const filePath = `etiquetas/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+              .from('documentos')
+              .upload(filePath, item.file, {
+                contentType: item.file.type || 'application/pdf',
+                upsert: false,
+              });
+
+            if (uploadError) throw uploadError;
+
+            const { data: urlData } = supabase.storage
+              .from('documentos')
+              .getPublicUrl(filePath);
+
+            if (!urlData?.publicUrl) {
+              throw new Error('Não foi possível obter URL pública da etiqueta enviada.');
+            }
+
+            uploadedUrls.push(urlData.publicUrl);
+          }
+
+          const { error: updateEtiquetaError } = await supabase
+            .from('pedidos')
+            .update({
+              etiquetas_uploads: uploadedUrls,
+              atualizado_em: new Date().toISOString(),
+            } as any)
+            .eq('id', pedidoId);
+
+          if (updateEtiquetaError) throw updateEtiquetaError;
+
+          await registrarHistoricoMovimentacao(
+            pedidoId,
+            `Upload de ${uploadedUrls.length} etiqueta(s) no cadastro do pedido`,
+            user?.id
+          );
+        } catch (uploadErr: any) {
+          console.error('Erro ao subir etiqueta(s) no novo pedido:', uploadErr);
+          toast({
+            title: 'Aviso',
+            description: 'Pedido criado, mas houve falha no upload da etiqueta.',
+            variant: 'destructive',
+          });
+        }
+      }
 
       // Registrar cada item no histórico
       try {
@@ -611,6 +698,114 @@ export default function NovoPedido() {
                   )}
                 </select>
               </div>
+
+              {/* Prazo de envio – visível apenas para Shopee, TikTok e Magalu */}
+              {showPrazoEnvio ? (
+                <div>
+                  <label className="text-sm">Prazo de envio *</label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      type="date"
+                      className="flex-1"
+                      value={prazoEnvio}
+                      min={new Date().toISOString().slice(0, 10)}
+                      onChange={(e) => setPrazoEnvio(e.target.value)}
+                    />
+                    {prazoEnvio && (
+                      <button
+                        type="button"
+                        className="text-xs text-muted-foreground hover:text-destructive px-2"
+                        onClick={() => setPrazoEnvio('')}
+                        title="Limpar prazo"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+                  {prazoEnvio && (() => {
+                    const diff = Math.ceil((new Date(prazoEnvio).getTime() - new Date().setHours(0,0,0,0)) / 86400000);
+                    return (
+                      <p className={`text-xs mt-1 ${diff <= 1 ? 'text-red-500 font-semibold' : 'text-muted-foreground'}`}>
+                        {diff > 0 ? `${diff} dia${diff !== 1 ? 's' : ''} restante${diff !== 1 ? 's' : ''}` : 'Prazo vencido'}
+                      </p>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div />
+              )}
+
+              {showPrazoEnvio ? (
+                <div>
+                  <label className="text-sm">Subir etiqueta (PDF) *</label>
+                  <Input
+                    ref={etiquetaInputRef}
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    multiple
+                    onChange={(e) => {
+                      const files = Array.from(e.target.files || []);
+                      if (files.length === 0) return;
+
+                      const invalidFiles = files.filter((f) => f.type !== 'application/pdf');
+                      if (invalidFiles.length > 0) {
+                        toast({
+                          title: 'Erro',
+                          description: 'Apenas arquivos PDF são permitidos',
+                          variant: 'destructive',
+                        });
+                        e.target.value = '';
+                        return;
+                      }
+
+                      const baseId = idExterno?.trim() || 'novo-pedido';
+                      const newFiles = files.map((file) => {
+                        const nameWithoutExt = file.name.replace(/\.pdf$/i, '');
+                        const customName = `${nameWithoutExt}-${baseId}`;
+                        return { file, customName };
+                      });
+
+                      setEtiquetaFiles((prev) => [...prev, ...newFiles]);
+                      e.target.value = '';
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {etiquetaFiles.length > 0
+                      ? `${etiquetaFiles.length} arquivo(s) selecionado(s)`
+                      : 'Selecione um ou mais PDFs de etiqueta'}
+                  </p>
+                  {etiquetaFiles.length > 0 && (
+                    <div className="mt-2 space-y-2 max-h-40 overflow-y-auto">
+                      {etiquetaFiles.map((item, index) => (
+                        <div key={`${item.file.name}-${index}`} className="border rounded p-2 space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs text-muted-foreground truncate">{item.file.name}</p>
+                            <button
+                              type="button"
+                              className="text-red-600 hover:text-red-800 text-xs"
+                              onClick={() => setEtiquetaFiles((prev) => prev.filter((_, i) => i !== index))}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          <Input
+                            value={item.customName}
+                            onChange={(e) => {
+                              const next = [...etiquetaFiles];
+                              next[index].customName = e.target.value;
+                              setEtiquetaFiles(next);
+                            }}
+                            placeholder="nome-do-arquivo"
+                          />
+                          <p className="text-xs text-muted-foreground">Será salvo como: {item.customName || 'arquivo'}.pdf</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div />
+              )}
 
               {/* Currency inputs e formas de pagamento na mesma linha */}
               <div className="col-span-3 flex gap-4 items-start">
