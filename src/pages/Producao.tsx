@@ -108,10 +108,10 @@ const LEADS_PLATFORM_IDS = new Set([
 ]);
 
 const SECTION_CONFIGS: SectionConfig[] = [
-  { key: 'yampi', label: 'YAMPI' },
-  { key: 'mercado_livre', label: 'MERCADO LIVRE' },
-  { key: 'leads', label: 'LEADS' },
   { key: 'urgentes', label: 'URGENTES' },
+  { key: 'mercado_livre', label: 'MERCADO LIVRE' },
+  { key: 'leads', label: 'COMERCIAL' },
+  { key: 'yampi', label: 'YAMPI' },
 ];
 
 const DATE_RANGES: DateRangeConfig[] = [
@@ -119,6 +119,13 @@ const DATE_RANGES: DateRangeConfig[] = [
   { key: 'r11_20', label: '(11 A 20 DIAS)', minDaysAgo: 11, maxDaysAgo: 20 },
   { key: 'r21_30', label: '(21 A 30 DIAS)', minDaysAgo: 21, maxDaysAgo: 30 },
   { key: 'r31_plus', label: '(31+ DIAS)', minDaysAgo: 31, maxDaysAgo: null },
+];
+
+const URGENTES_DATE_RANGES: DateRangeConfig[] = [
+  { key: 'r1_10', label: '(HOJE)', minDaysAgo: 0, maxDaysAgo: 0 },
+  { key: 'r11_20', label: '(AMANHÃ)', minDaysAgo: 1, maxDaysAgo: 1 },
+  { key: 'r21_30', label: '(DEPOIS DE AMANHÃ)', minDaysAgo: 2, maxDaysAgo: 2 },
+  { key: 'r31_plus', label: '(TODOS 0-2)', minDaysAgo: 0, maxDaysAgo: 2 },
 ];
 
 const ML_DATE_RANGES: DateRangeConfig[] = [
@@ -134,6 +141,7 @@ const ECOMMERCE_SUB_TABS = [
   { key: 'shopee', label: 'Shopee' },
   { key: 'tiktok', label: 'TikTok Shop' },
   { key: 'magalu', label: 'Magalu' },
+  { key: 'ml', label: 'ML' },
   { key: 'ml_org', label: 'ML Organizador' },
 ] as const;
 
@@ -142,6 +150,11 @@ const ML_KEYWORD = 'organizador de relogio';
 const SPECIAL_URGENT_PRODUCT_ID = 'ab8a89a1-aa95-4a98-99c2-eaa3de670462';
 const SPECIAL_URGENT_PLATFORM_ID = '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec';
 const ORDER_IDS_PAGE_SIZE = 20;
+const URGENTES_DAY_BY_RANGE: Partial<Record<DateRangeKey, 0 | 1 | 2>> = {
+  r1_10: 0,
+  r11_20: 1,
+  r21_30: 2,
+};
 
 // ---------------------------------------------------------------------------
 // RPC call — status é filtro primário dentro da função SQL
@@ -165,6 +178,16 @@ const fetchProducaoItensMl = async (opts: {
   const { data, error } = await (supabase as any).rpc('producao_get_itens_ml', {
     p_dias_min: opts.diasMin,
     p_dias_max: opts.diasMax ?? 9999,
+  });
+  if (error) throw error;
+  return (data || []) as ProducaoItem[];
+};
+
+const fetchProducaoItensUrgentes = async (opts: {
+  diasParaEnvio: 0 | 1 | 2;
+}): Promise<ProducaoItem[]> => {
+  const { data, error } = await (supabase as any).rpc('producao_get_itens_urgentes', {
+    p_dias_para_envio: opts.diasParaEnvio,
   });
   if (error) throw error;
   return (data || []) as ProducaoItem[];
@@ -340,7 +363,7 @@ function filterUrgentesItems(
         pn.includes('tiktok') ||
         pn.includes('magalu') ||
         pn.includes('magazine') ||
-        (pn === 'mercado_livre' && (pd.includes(normalize(ML_KEYWORD)) || pd.includes('organizador') && pd.includes('relogio')))
+        pn === 'mercado_livre'
       );
     });
     if (!subTab) return withEco;
@@ -353,6 +376,7 @@ function filterUrgentesItems(
       if (subTab === 'shopee') return pn.includes('shopee');
       if (subTab === 'tiktok') return pn.includes('tiktok');
       if (subTab === 'magalu') return pn.includes('magalu') || pn.includes('magazine');
+      if (subTab === 'ml') return pn === 'mercado_livre';
       if (subTab === 'ml_org')
         return isSpecial || (pn === 'mercado_livre' && (pd.includes(normalize(ML_KEYWORD)) || (pd.includes('organizador') && pd.includes('relogio'))));
       return true;
@@ -641,6 +665,7 @@ function PlatformSection({
 export function ProductionPage() {
   const [summaryItems, setSummaryItems] = useState<ProducaoItem[]>([]);
   const [mlSummaryItems, setMlSummaryItems] = useState<ProducaoItem[]>([]);
+  const [urgentesSummaryByRange, setUrgentesSummaryByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [platformImages, setPlatformImages] = useState<Record<string, string | null>>({});
@@ -705,6 +730,7 @@ export function ProductionPage() {
   const [orderIdsModalOpen, setOrderIdsModalOpen] = useState(false);
   const [orderIdsModalData, setOrderIdsModalData] = useState<string[]>([]);
   const [orderIdsModalTitle, setOrderIdsModalTitle] = useState('');
+  const [modalItemsByExternalId, setModalItemsByExternalId] = useState<Map<string, ProducaoItem[]>>(new Map());
   const [orderIdsPage, setOrderIdsPage] = useState(1);
   const [openOrderIds, setOpenOrderIds] = useState<Set<string>>(new Set());
   const [modalProductFilter, setModalProductFilter] = useState<ProductFilter | null>(null);
@@ -734,12 +760,21 @@ export function ProductionPage() {
       setSummaryError(null);
       const now = new Date();
       const end = endOfDay(now);
-      const [items, mlItems] = await Promise.all([
+      const [items, mlItems, urg0, urg1, urg2] = await Promise.all([
         fetchProducaoItens({ start: null, end }),
         fetchProducaoItensMl({ diasMin: 1, diasMax: null }),
+        fetchProducaoItensUrgentes({ diasParaEnvio: 0 }),
+        fetchProducaoItensUrgentes({ diasParaEnvio: 1 }),
+        fetchProducaoItensUrgentes({ diasParaEnvio: 2 }),
       ]);
       setSummaryItems(items);
       setMlSummaryItems(mlItems);
+      setUrgentesSummaryByRange({
+        r1_10: urg0,
+        r11_20: urg1,
+        r21_30: urg2,
+        r31_plus: [...urg0, ...urg1, ...urg2],
+      });
       // limpar caches para garantir que os próximos acessos peguem dados atualizados
       setItemsCache({ yampi: {}, mercado_livre: {}, leads: {}, urgentes: {} });
       setOrderIdsCache({ yampi: {}, mercado_livre: {}, leads: {}, urgentes: {} });
@@ -767,7 +802,11 @@ export function ProductionPage() {
     const only: string[] = [];
     const mixed: string[] = [];
     for (const orderId of orderIdsModalData) {
-      const items = itemsByExternalId.get(orderId) ?? [];
+      const items = modalItemsByExternalId.get(orderId) ?? itemsByExternalId.get(orderId) ?? [];
+      if (items.length === 0) {
+        only.push(orderId);
+        continue;
+      }
       const hasTarget = items.some((i) =>
         modalProductFilter.variacao_id
           ? i.variacao_id === modalProductFilter.variacao_id
@@ -783,7 +822,7 @@ export function ProductionPage() {
       else only.push(orderId);
     }
     return { only, mixed };
-  }, [modalProductFilter, orderIdsModalData, itemsByExternalId]);
+  }, [modalProductFilter, orderIdsModalData, itemsByExternalId, modalItemsByExternalId]);
 
   const activeOrderIds = modalProductFilter ? filteredByTab[modalTab] : orderIdsModalData;
 
@@ -834,6 +873,69 @@ export function ProductionPage() {
       mounted = false;
     };
   }, [orderIdsModalData]);
+
+  useEffect(() => {
+    if (!orderIdsModalOpen || orderIdsModalData.length === 0) {
+      setModalItemsByExternalId(new Map());
+      return;
+    }
+
+    let mounted = true;
+    (async () => {
+      try {
+        const { data, error } = await (supabase as any)
+          .from('pedidos')
+          .select(`
+            id_externo,
+            itens_pedido(
+              quantidade,
+              produto_id,
+              variacao_id,
+              produto:produtos(nome, img_url),
+              variacao:variacoes_produto(nome, img_url)
+            )
+          `)
+          .in('id_externo', orderIdsModalData);
+
+        if (error) throw error;
+        if (!mounted) return;
+
+        const map = new Map<string, ProducaoItem[]>();
+        (data || []).forEach((row: any) => {
+          const externalId = row?.id_externo;
+          if (!externalId) return;
+
+          const items: ProducaoItem[] = (row?.itens_pedido || []).map((it: any) => ({
+            quantidade: Number(it?.quantidade || 0),
+            pedido_id: null,
+            produto_id: it?.produto_id ?? null,
+            variacao_id: it?.variacao_id ?? null,
+            nome_produto: it?.produto?.nome ?? null,
+            img_url_produto: it?.produto?.img_url ?? null,
+            nome_variacao: it?.variacao?.nome ?? null,
+            img_url_variacao: it?.variacao?.img_url ?? null,
+            criado_em: null,
+            id_externo: externalId,
+            status_id: null,
+            urgente: null,
+            plataforma_id: null,
+            plataforma_nome: null,
+          }));
+
+          map.set(externalId, items);
+        });
+
+        setModalItemsByExternalId(map);
+      } catch (err) {
+        console.warn('Erro ao buscar itens dos pedidos do popup:', err);
+        if (mounted) setModalItemsByExternalId(new Map());
+      }
+    })();
+
+    return () => {
+      mounted = false;
+    };
+  }, [orderIdsModalOpen, orderIdsModalData]);
 
   const toggleSelectOrder = (orderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -1142,8 +1244,21 @@ export function ProductionPage() {
         const now = new Date();
         // start = null para incluir 31+ dias sem limite inferior
         const end = endOfDay(now);
-        const items = await fetchProducaoItens({ start: null, end });
-        if (mounted) setSummaryItems(items);
+        const [items, urg0, urg1, urg2] = await Promise.all([
+          fetchProducaoItens({ start: null, end }),
+          fetchProducaoItensUrgentes({ diasParaEnvio: 0 }),
+          fetchProducaoItensUrgentes({ diasParaEnvio: 1 }),
+          fetchProducaoItensUrgentes({ diasParaEnvio: 2 }),
+        ]);
+        if (mounted) {
+          setSummaryItems(items);
+          setUrgentesSummaryByRange({
+            r1_10: urg0,
+            r11_20: urg1,
+            r21_30: urg2,
+            r31_plus: [...urg0, ...urg1, ...urg2],
+          });
+        }
       } catch (err: any) {
         if (mounted) setSummaryError(err?.message || String(err));
       } finally {
@@ -1211,8 +1326,8 @@ export function ProductionPage() {
       urgentes:       { ...standardEmpty },
     };
 
-    // Seções não-ML: usar summaryItems + DATE_RANGES
-    for (const section of SECTION_CONFIGS.filter((s) => s.key !== 'mercado_livre')) {
+    // Seções não-ML/urgentes: usar summaryItems + DATE_RANGES
+    for (const section of SECTION_CONFIGS.filter((s) => s.key !== 'mercado_livre' && s.key !== 'urgentes')) {
       for (const range of DATE_RANGES) {
         const filtered = summaryItems.filter(
           (item) => itemMatchesSection(item, section.key) && itemInRange(item, range, now),
@@ -1221,6 +1336,14 @@ export function ProductionPage() {
           (sum, item) => sum + Number(item.quantidade || 0), 0,
         );
       }
+    }
+
+    // Urgentes: usar RPC dedicada por dias para envio
+    for (const range of URGENTES_DATE_RANGES) {
+      const filtered = urgentesSummaryByRange[range.key] || [];
+      base.urgentes[range.key] = filtered.reduce(
+        (sum, item) => sum + Number(item.quantidade || 0), 0,
+      );
     }
 
     // Mercado Livre: usar mlSummaryItems + ML_DATE_RANGES
@@ -1232,7 +1355,7 @@ export function ProductionPage() {
     }
 
     return base;
-  }, [summaryItems, mlSummaryItems]);
+  }, [summaryItems, mlSummaryItems, urgentesSummaryByRange]);
 
   const loadDropdownItems = async (section: SectionKey, range: DateRangeConfig) => {
     setLoadingByCard((prev) => ({
@@ -1247,12 +1370,32 @@ export function ProductionPage() {
       const now = new Date();
       const bounds = getRangeBounds(range, now);
 
-      // Mercado Livre usa RPC dedicada — sem necessidade de filtrar por plataforma
+      // Mercado Livre e Urgentes usam RPC dedicada
       const isMlSection = section === 'mercado_livre';
-      const rawItems = isMlSection
-        ? await fetchProducaoItensMl({ diasMin: range.minDaysAgo, diasMax: range.maxDaysAgo })
-        : await fetchProducaoItens({ start: bounds.start, end: bounds.end });
-      const filteredRows = isMlSection ? rawItems : rawItems.filter((item) => itemMatchesSection(item, section));
+      const isUrgentesSection = section === 'urgentes';
+      let filteredRows: ProducaoItem[] = [];
+
+      if (isMlSection) {
+        filteredRows = await fetchProducaoItensMl({ diasMin: range.minDaysAgo, diasMax: range.maxDaysAgo });
+      } else if (isUrgentesSection) {
+        if (range.key === 'r31_plus') {
+          const [urg0, urg1, urg2] = await Promise.all([
+            fetchProducaoItensUrgentes({ diasParaEnvio: 0 }),
+            fetchProducaoItensUrgentes({ diasParaEnvio: 1 }),
+            fetchProducaoItensUrgentes({ diasParaEnvio: 2 }),
+          ]);
+          filteredRows = [...urg0, ...urg1, ...urg2];
+        } else {
+          const day = URGENTES_DAY_BY_RANGE[range.key];
+          if (day !== undefined) {
+            filteredRows = await fetchProducaoItensUrgentes({ diasParaEnvio: day });
+          }
+        }
+      } else {
+        const rawItems = await fetchProducaoItens({ start: bounds.start, end: bounds.end });
+        filteredRows = rawItems.filter((item) => itemMatchesSection(item, section));
+      }
+
       // Armazenar itens brutos para urgentes (necessário para filtragem por abas de plataforma)
       if (section === 'urgentes') {
         setUrgentesRawByRange((prev) => ({ ...prev, [range.key]: filteredRows }));
@@ -1319,7 +1462,7 @@ export function ProductionPage() {
 
     setExpandedBySection((prev) => ({ ...prev, [section]: rangeKey }));
 
-    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES;
+    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : section === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES;
     const range = allRanges.find((r) => r.key === rangeKey);
     if (!range) return;
 
@@ -1331,7 +1474,7 @@ export function ProductionPage() {
 
     const orderIds = orderIdsCache[section]?.[rangeKey] || [];
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
-    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES;
+    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : section === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES;
     const rangeLabel = allRanges.find((item) => item.key === rangeKey)?.label || rangeKey;
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel}`);
@@ -1347,7 +1490,7 @@ export function ProductionPage() {
 
     const orderIds = overrideOrderIds ?? orderIdsCache[section]?.[rangeKey] ?? [];
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
-    const allRangesForProduct = section === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES;
+    const allRangesForProduct = section === 'mercado_livre' ? ML_DATE_RANGES : section === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES;
     const rangeLabel = allRangesForProduct.find((item) => item.key === rangeKey)?.label || rangeKey;
     const productLabel = filter.nomeVariacao ? `${filter.nome} — ${filter.nomeVariacao}` : filter.nome;
 
@@ -1749,7 +1892,7 @@ export function ProductionPage() {
               <PlatformSection
                 key={section.key}
                 section={section}
-                ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : DATE_RANGES}
+                ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : section.key === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES}
                 totals={totalsBySection[section.key]}
                 expandedKey={expandedBySection[section.key]}
                 loadingByRange={loadingByCard[section.key]}
@@ -1967,7 +2110,7 @@ export function ProductionPage() {
                   const isOpen = openOrderIds.has(orderId);
                   const isSelected = selectedOrderIds.has(orderId);
                   const hasSelection = selectedOrderIds.size > 0;
-                  const allProducts = itemsByExternalId.get(orderId) ?? [];
+                  const allProducts = modalItemsByExternalId.get(orderId) ?? itemsByExternalId.get(orderId) ?? [];
                   const products = isOpen ? allProducts : [];
                   const isProcessing = processingLabels.has(orderId);
                   const isMl = !!mlEtiquetaMap[orderId];
