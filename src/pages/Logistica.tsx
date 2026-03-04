@@ -107,7 +107,7 @@ export function Logistica() {
   const { toast } = useToast();
   const [loadingScan, setLoadingScan] = useState(false);
   const [foundPedido, setFoundPedido] = useState<any | null>(null);
-  const [foundItemIds, setFoundItemIds] = useState<string[]>([]);
+  const [foundItemScans, setFoundItemScans] = useState<Record<string, number>>({});
   const [itemInputs, setItemInputs] = useState<Record<string, string>>({});
   const itemRefs = useRef<Record<string, HTMLInputElement | null>>({});
   const [itemStatus, setItemStatus] = useState<Record<string, 'idle' | 'success' | 'error'>>({});
@@ -482,7 +482,7 @@ export function Logistica() {
 
       setPedidosFiltrados(priorizados);
       setPedidoAtualIndex(startIdx);
-      setFoundItemIds([]);
+      setFoundItemScans({});
       setItemInputs({});
       setItemStatus({});
       setFoundPedido(priorizados[startIdx] || null);
@@ -500,7 +500,7 @@ export function Logistica() {
     if (nextIndex < 0 || nextIndex >= pedidosFiltrados.length) return;
     setPedidoAtualIndex(nextIndex);
     setFoundPedido(pedidosFiltrados[nextIndex]);
-    setFoundItemIds([]);
+    setFoundItemScans({});
     setItemInputs({});
     setItemStatus({});
     setTimeout(() => barcodeRef.current?.focus(), 50);
@@ -509,7 +509,7 @@ export function Logistica() {
   const avancarParaProximoPedidoAposConclusao = (pedidoConcluidoId?: string) => {
     if (!modoListaPorPlataforma) {
       setFoundPedido(null);
-      setFoundItemIds([]);
+      setFoundItemScans({});
       setItemInputs({});
       setItemStatus({});
       setTimeout(() => barcodeRef.current?.focus(), 0);
@@ -525,7 +525,7 @@ export function Logistica() {
       if (listaSemConcluido.length === 0) {
         setPedidoAtualIndex(0);
         setFoundPedido(null);
-        setFoundItemIds([]);
+        setFoundItemScans({});
         setItemInputs({});
         setItemStatus({});
         setTimeout(() => barcodeRef.current?.focus(), 0);
@@ -535,7 +535,7 @@ export function Logistica() {
       // após imprimir etiqueta, volta sempre ao primeiro da lista
       setPedidoAtualIndex(0);
       setFoundPedido(listaSemConcluido[0]);
-      setFoundItemIds([]);
+      setFoundItemScans({});
       setItemInputs({});
       setItemStatus({});
       setTimeout(() => barcodeRef.current?.focus(), 50);
@@ -553,7 +553,7 @@ export function Logistica() {
     if (!filterPlataformaId) {
       if (modoListaPorPlataforma) {
         setFoundPedido(null);
-        setFoundItemIds([]);
+        setFoundItemScans({});
         setItemInputs({});
         setItemStatus({});
       }
@@ -825,7 +825,7 @@ export function Logistica() {
       setPedidosFiltrados(fullList);
       setPedidoAtualIndex(0);
       setFoundPedido(fullList[0] || null);
-      setFoundItemIds([]);
+      setFoundItemScans({});
       setItemInputs({});
       setItemStatus({});
 
@@ -904,9 +904,30 @@ export function Logistica() {
     }
   };
 
+  const getRequiredQty = (item: any) => Math.max(1, Number(item?.quantidade ?? 1));
+  const getScannedQty = (itemId: string) => Number(foundItemScans[itemId] ?? 0);
+  const isItemFullyScanned = (item: any, scans: Record<string, number> = foundItemScans) => {
+    if (item?.bipado) return true;
+    const required = getRequiredQty(item);
+    const scanned = Number(scans[item?.id] ?? 0);
+    return scanned >= required;
+  };
+  const getUnitKey = (itemId: string, unitIndex: number) => `${itemId}__${unitIndex}`;
+
+  const getNextPendingUnit = (pedidoItems: any[], scans: Record<string, number>) => {
+    for (const item of pedidoItems || []) {
+      const required = getRequiredQty(item);
+      const scanned = Number(scans[item.id] ?? 0);
+      if (scanned < required) {
+        return { item, unitIndex: scanned };
+      }
+    }
+    return null;
+  };
+
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
-  const allItemsBipado = items.length > 0 && items.every((it: any) => (foundItemIds || []).includes(it.id));
+  const allItemsBipado = items.length > 0 && items.every((it: any) => isItemFullyScanned(it));
   const filteredLogItems = logItems;
   
   // Verifica se deve mostrar o botão da etiqueta ML
@@ -1019,7 +1040,7 @@ export function Logistica() {
       if (!data || (Array.isArray(data) && data.length === 0)) {
         toast({ title: 'Não encontrado', description: 'Nenhum item encontrado para esse código', variant: 'destructive' });
         setFoundPedido(null);
-        setFoundItemIds([]);
+        setFoundItemScans({});
         return;
       }
 
@@ -1058,19 +1079,25 @@ export function Logistica() {
         );
       }
       
-      // merge the newly found id into existing state and focus next missing item based on the merged list
-      setFoundItemIds((prev) => {
-        const merged = Array.from(new Set([...(prev || []), row.item_pedido_id]));
+      // incrementa a quantidade escaneada do item e foca a próxima unidade pendente
+      setFoundItemScans((prev) => {
+        const nextScans = { ...prev };
+        const itemsForFocus: any[] = pedidoRow?.itens_pedido || [];
+        const targetItem = itemsForFocus.find((it: any) => it.id === row.item_pedido_id);
+        if (targetItem) {
+          const required = getRequiredQty(targetItem);
+          const current = Number(nextScans[targetItem.id] ?? 0);
+          if (current < required) nextScans[targetItem.id] = current + 1;
+        }
+
         // clear input for next scan
         setBarcode('');
 
-        // decide next focus using the merged ids
-        const itemsForFocus: any[] = pedidoRow?.itens_pedido || [];
-        const next = itemsForFocus.find((it: any) => !merged.includes(it.id));
-        if (next) {
+        const pending = getNextPendingUnit(itemsForFocus, nextScans);
+        if (pending) {
           const start = Date.now();
           const tryFocus = () => {
-            const el = itemRefs.current[next.id];
+            const el = itemRefs.current[getUnitKey(pending.item.id, pending.unitIndex)];
             if (el) {
               el.focus();
               return;
@@ -1086,7 +1113,7 @@ export function Logistica() {
           setTimeout(() => barcodeRef.current?.focus(), 0);
         }
 
-        return merged;
+        return nextScans;
       });
       // refresh cards after marking an item on the server
       try {
@@ -1164,7 +1191,7 @@ export function Logistica() {
       }
 
       setFoundPedido(pedidoRow2);
-      setFoundItemIds([]);
+      setFoundItemScans({});
       setPedidoIdModalOpen(false);
       setPedidoIdInput('');
 
@@ -1360,8 +1387,11 @@ export function Logistica() {
 
     // Carregar o pedido e marcar todos os itens como já bipados
     setFoundPedido(pedidoJaEnviado);
-    const todosIds = (pedidoJaEnviado.itens_pedido || []).map((item: any) => item.id);
-    setFoundItemIds(todosIds);
+    const scansCompletos: Record<string, number> = {};
+    (pedidoJaEnviado.itens_pedido || []).forEach((item: any) => {
+      scansCompletos[item.id] = Math.max(1, Number(item.quantidade ?? 1));
+    });
+    setFoundItemScans(scansCompletos);
     
     // Fechar modais e limpar estados
     setPedidoJaEnviadoModalOpen(false);
@@ -1393,7 +1423,7 @@ export function Logistica() {
                   className="-ml-1"
                   onClick={() => {
                     setFoundPedido(null);
-                    setFoundItemIds([]);
+                    setFoundItemScans({});
                     setFilterPlataformaId('');
                     setModoListaPorPlataforma(false);
                     setPedidosFiltrados([]);
@@ -1502,7 +1532,7 @@ export function Logistica() {
                   if (!foundPedido) return;
                   // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
                   const items = foundPedido?.itens_pedido || [];
-                  const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
+                  const hasMissing = items.some((it: any) => !isItemFullyScanned(it));
                   if (!hasMissing) barcodeRef.current?.focus();
                 }, 0)}
                 className="w-full text-base py-1.5 pl-3 pr-20 border-2 rounded-[12px] bg-white focus:outline-none focus:ring-0 focus:border-custom-600 transition-colors"
@@ -1511,7 +1541,7 @@ export function Logistica() {
               />
               <Button
                 variant="ghost"
-                onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); }}
+                onClick={() => { setFoundPedido(null); setFoundItemScans({}); setItemInputs({}); setItemStatus({}); setBarcode(''); }}
                 className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-3 text-sm"
               >
                 Limpar
@@ -1684,7 +1714,7 @@ export function Logistica() {
                                 setPedidosFiltrados(fullList);
                                 setPedidoAtualIndex(0);
                                 setFoundPedido(fullList[0] || null);
-                                setFoundItemIds([]);
+                                setFoundItemScans({});
                                 setItemInputs({});
                                 setItemStatus({});
                               } catch (err) {
@@ -1765,7 +1795,7 @@ export function Logistica() {
                                             setPedidosFiltrados(fullList);
                                             setPedidoAtualIndex(startIdx);
                                             setFoundPedido(fullList[startIdx] || null);
-                                            setFoundItemIds([]);
+                                            setFoundItemScans({});
                                             setItemInputs({});
                                             setItemStatus({});
                                             setTimeout(() => barcodeRef.current?.focus(), 50);
@@ -1930,17 +1960,30 @@ export function Logistica() {
                   <div className="space-y-3">
                     {(() => {
                       const items = foundPedido.itens_pedido || [];
-                      console.log('Logística - Items with pintado:', items.map(it => ({ 
+                      const expandedItems = items.flatMap((it: any) => {
+                        const qty = Math.max(1, Number(it.quantidade ?? 1));
+                        return Array.from({ length: qty }, (_, idx) => ({
+                          ...it,
+                          __unitIndex: idx,
+                          __unitKey: getUnitKey(it.id, idx),
+                        }));
+                      });
+
+                      console.log('Logística - Items with pintado:', items.map((it: any) => ({ 
                         nome: it.produto?.nome, 
                         pintado: it.pintado,
                         item: it 
                       })));
                       
-                      // Renderizar apenas os itens (sem badges)
-                      return items.map((it: any) => {
+                      // Renderizar itens expandidos por quantidade (1 linha por unidade)
+                      return expandedItems.map((it: any) => {
+                        const unitKey = it.__unitKey as string;
+                        const unitIndex = it.__unitIndex as number;
+                        const scannedQty = getScannedQty(it.id);
+                        const isUnitScanned = unitIndex < scannedQty;
                         return (
-                          <div key={it.id}>
-                            <div className={`relative border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
+                          <div key={unitKey}>
+                            <div className={`relative border rounded p-3 flex items-center justify-between ${isUnitScanned ? 'border-red-500' : 'border-gray-200'}`}>
                               {it.pintado === true && (
                                 <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
                                   <Badge 
@@ -1970,54 +2013,58 @@ export function Logistica() {
                         </div>
 
                         <div className="flex items-center gap-3">
-                          <div className="text-sm">Qtd: {it.quantidade}</div>
-                          {foundItemIds.includes(it.id) ? (
+                          <div className="text-sm">Unid: {unitIndex + 1}/{getRequiredQty(it)}</div>
+                          {isUnitScanned ? (
                             <div className="px-3 py-1 border border-red-500 rounded text-sm font-medium text-red-700">{it.codigo_barras}</div>
                           ) : (
                             <div className="flex items-center gap-2">
                               <input
-                                ref={(el) => (itemRefs.current[it.id] = el)}
-                                className={`border rounded px-2 py-1 text-sm ${itemStatus[it.id] === 'success' ? 'border-green-600' : ''} ${itemStatus[it.id] === 'error' ? 'border-red-600' : ''}`}
+                                ref={(el) => (itemRefs.current[unitKey] = el)}
+                                className={`border rounded px-2 py-1 text-sm ${itemStatus[unitKey] === 'success' ? 'border-green-600' : ''} ${itemStatus[unitKey] === 'error' ? 'border-red-600' : ''}`}
                                 placeholder="Código"
-                                value={itemInputs[it.id] || ''}
-                                onChange={(e) => setItemInputs(prev => ({ ...prev, [it.id]: e.target.value }))}
+                                value={itemInputs[unitKey] || ''}
+                                onChange={(e) => setItemInputs(prev => ({ ...prev, [unitKey]: e.target.value }))}
                                 onKeyDown={async (e) => {
                                   if (e.key === 'Enter') {
                                     e.preventDefault();
-                                    const val = (itemInputs[it.id] || '').trim();
+                                    const val = (itemInputs[unitKey] || '').trim();
                                     if (!val) return;
 
                                     // immediate local comparison
                                     if (val === it.codigo_barras) {
                                       // success UI
-                                      setItemStatus(prev => ({ ...prev, [it.id]: 'success' }));
-                                      setFoundItemIds(prev => Array.from(new Set([...(prev || []), it.id])));
-                                      setItemInputs(prev => ({ ...prev, [it.id]: '' }));
+                                      setItemStatus(prev => ({ ...prev, [unitKey]: 'success' }));
+                                      setFoundItemScans((prev) => {
+                                        const next = { ...prev };
+                                        const required = getRequiredQty(it);
+                                        const current = Number(next[it.id] ?? 0);
+                                        if (current < required) next[it.id] = current + 1;
 
-                                      // focus next missing item if present
-                                      const items = foundPedido?.itens_pedido || [];
-                                      const next = items.find((x: any) => x.id !== it.id && !((x.bipado === true) || (foundItemIds || []).includes(x.id)));
-                                      if (next) {
-                                        setTimeout(() => itemRefs.current[next.id]?.focus(), 0);
-                                      } else {
-                                        // Todos os itens foram bipados - não foca no input principal
-                                        // O botão de imprimir etiqueta será habilitado automaticamente
-                                      }
+                                        const pedidoItems = foundPedido?.itens_pedido || [];
+                                        const pending = getNextPendingUnit(pedidoItems, next);
+                                        if (pending) {
+                                          setTimeout(() => itemRefs.current[getUnitKey(pending.item.id, pending.unitIndex)]?.focus(), 0);
+                                        }
+                                        return next;
+                                      });
+                                      setItemInputs(prev => ({ ...prev, [unitKey]: '' }));
+
+                                      // Todos os itens bipados -> botão de imprimir será habilitado
                                     } else {
                                       // error UI: clear the input but keep focus so the user can bip again
-                                      setItemStatus(prev => ({ ...prev, [it.id]: 'error' }));
-                                      setItemInputs(prev => ({ ...prev, [it.id]: '' }));
+                                      setItemStatus(prev => ({ ...prev, [unitKey]: 'error' }));
+                                      setItemInputs(prev => ({ ...prev, [unitKey]: '' }));
                                       // ensure focus stays on this input for immediate re-scan
-                                      setTimeout(() => itemRefs.current[it.id]?.focus(), 0);
-                                      setTimeout(() => setItemStatus(prev => ({ ...prev, [it.id]: 'idle' })), 2000);
+                                      setTimeout(() => itemRefs.current[unitKey]?.focus(), 0);
+                                      setTimeout(() => setItemStatus(prev => ({ ...prev, [unitKey]: 'idle' })), 2000);
                                     }
                                   }
                                 }}
                               />
-                              {itemStatus[it.id] === 'success' && (
+                              {itemStatus[unitKey] === 'success' && (
                                 <CheckCircle className="text-green-600" />
                               )}
-                              {itemStatus[it.id] === 'error' && (
+                              {itemStatus[unitKey] === 'error' && (
                                 <XCircle className="text-red-600" />
                               )}
                             </div>
