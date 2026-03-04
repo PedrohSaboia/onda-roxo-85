@@ -309,6 +309,8 @@ export default function Pedido() {
   const [showCartaoDropdownWizard, setShowCartaoDropdownWizard] = useState(false);
   const [wizardPaymentValues, setWizardPaymentValues] = useState<Record<string, string>>({});
   const [wizardSaving, setWizardSaving] = useState(false);
+  const wizardSubmitLockRef = useRef(false);
+  const lastWizardSubmitRef = useRef<{ fingerprint: string; at: number } | null>(null);
   const [tempoGanho, setTempoGanho] = useState<Date | undefined>(undefined);
   const [savingTempoGanho, setSavingTempoGanho] = useState(false);
   // Ref para o dropdown de cartões
@@ -366,6 +368,23 @@ export default function Pedido() {
     // format integer part with thousand separators
     const intFormatted = Number(intPart).toLocaleString('pt-BR');
     return `${intFormatted},${cents}`;
+  };
+
+  const buildWizardSubmissionFingerprint = () => {
+    const cartSignature = (modalCart || [])
+      .map((it: any) => {
+        const [produtoId, variacaoId] = String(it.id || '').split(':');
+        return `${it.produtoId || produtoId}:${variacaoId || 'null'}:${Number(it.quantidade || 1)}:${Number(it.preco || 0)}`;
+      })
+      .sort()
+      .join('|');
+
+    const paymentsSignature = (selectedPaymentIds || [])
+      .map((id) => `${id}:${wizardPaymentValues[id] || '0,00'}`)
+      .sort()
+      .join('|');
+
+    return `${pedido?.id || 'no-pedido'}::${wizardDate}::${cartSignature}::${paymentsSignature}`;
   };
 
   // Function to check if all up_cell products are resolved and auto-liberate the order
@@ -3374,9 +3393,42 @@ export default function Pedido() {
                     setWizardStep(s => s + 1);
                   }}>Próxima etapa</Button>
                 ) : (
-                  <Button className="bg-custom-700 text-white" onClick={async () => {
+                  <Button className="bg-custom-700 text-white" disabled={wizardSaving} onClick={async () => {
                     // finalize: persist itens_pedido and add value to pedido.valor_total
                     if (!pedido) return;
+
+                    if (wizardSubmitLockRef.current || wizardSaving) {
+                      toast({
+                        title: 'Processando requisição',
+                        description: 'Aguarde a conclusão para evitar itens duplicados.',
+                        variant: 'destructive',
+                      });
+                      return;
+                    }
+
+                    const fingerprint = buildWizardSubmissionFingerprint();
+                    const lastSubmission = lastWizardSubmitRef.current;
+                    const isSameRecentSubmission =
+                      !!lastSubmission &&
+                      lastSubmission.fingerprint === fingerprint &&
+                      (Date.now() - lastSubmission.at) < 120000;
+
+                    if (isSameRecentSubmission) {
+                      const confirmarDuplicidade = window.confirm(
+                        'Detectamos uma tentativa idêntica recente. Isso pode duplicar itens por instabilidade de rede. Deseja continuar mesmo assim?'
+                      );
+                      if (!confirmarDuplicidade) return;
+                    }
+
+                    const totalUnidades = (modalCart || []).reduce((acc: number, it: any) => acc + Number(it.quantidade || 1), 0);
+                    if (totalUnidades >= 8) {
+                      const confirmarLoteGrande = window.confirm(
+                        `Você está prestes a adicionar ${totalUnidades} unidades. Confirme para evitar duplicidade acidental.`
+                      );
+                      if (!confirmarLoteGrande) return;
+                    }
+
+                    wizardSubmitLockRef.current = true;
                     setWizardSaving(true);
                     try {
                       // Get "Aguardando aumento" status ID
@@ -3576,6 +3628,8 @@ export default function Pedido() {
                         }
                       }
 
+                      lastWizardSubmitRef.current = { fingerprint, at: Date.now() };
+
                       toast({ title: 'Itens adicionados', description: 'Produtos adicionados, valor atualizado e formas de pagamento registradas' });
                       setWizardOpen(false);
                       // refresh page
@@ -3584,9 +3638,10 @@ export default function Pedido() {
                       console.error('Erro ao persistir itens do modal (wizard):', err);
                       toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
                     } finally {
+                      wizardSubmitLockRef.current = false;
                       setWizardSaving(false);
                     }
-                  }}>Adicionar ({modalCart.length})</Button>
+                  }}>{wizardSaving ? 'Adicionando...' : `Adicionar (${modalCart.length})`}</Button>
                 )}
               </div>
             </div>
