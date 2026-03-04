@@ -129,7 +129,6 @@ export function Logistica() {
   const [platformOrderItems, setPlatformOrderItems] = useState<Record<string, any[]>>({});
   const PLATFORM_PAGE_SIZE = 4;
   const [platformPage, setPlatformPage] = useState<Record<string, number>>({});
-  const [selectedPackageType, setSelectedPackageType] = useState<Record<string, 'todos' | 'comum' | 'incomum'>>({});
   const [topSectionTab, setTopSectionTab] = useState<'produtos' | 'incomuns'>('produtos');
   const [incomumPedidos, setIncomumPedidos] = useState<any[]>([]);
   const [filterPlataformaId, setFilterPlataformaId] = useState('');
@@ -683,7 +682,7 @@ export function Logistica() {
         },
         {
           id: 'leads',
-          nome: 'Leads',
+          nome: 'Comercial',
           img_url: null,
           count: leadsPedidos.length,
           pedidos: sortPedidos(leadsPedidos),
@@ -958,12 +957,6 @@ export function Logistica() {
     const maisDeDoisItens = totalUnidades > 2;
     const doisIguais = totalUnidades === 2 && referencias.size === 1;
     return (maisDeDoisItens || doisIguais) ? 'incomum' : 'comum';
-  };
-
-  // Filtra pedidos baseado no tipo selecionado (comum/incomum/todos)
-  const filterPedidosByType = (pedidos: any[], tipo: 'todos' | 'comum' | 'incomum'): any[] => {
-    if (tipo === 'todos') return pedidos;
-    return pedidos.filter((p) => getPedidoType(p) === tipo);
   };
 
   const getPedidoCaseItems = (pedido: any): Array<{ key: string; nome: string; quantidade: number; imgUrl: string | null }> => {
@@ -1895,97 +1888,52 @@ export function Logistica() {
 
                     {openPlatformId === pc.id && (
                       <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
-                        {/* Abas para Pacotes Comuns/Incomuns */}
-                        <div className="flex gap-1 mb-3 border-b">
-                          {(['todos', 'comum', 'incomum'] as const).map((tipo) => {
-                            const filteredCount = filterPedidosByType(pc.pedidos || [], tipo).length;
-                            const isSelected = (selectedPackageType[pc.id] || 'todos') === tipo;
-                            const tipoLabel = tipo === 'todos' ? 'Todos' : tipo === 'comum' ? 'Pacotes Comuns' : 'Pacotes Incomuns';
-                            
-                            return (
+                        {totalPages > 1 && (
+                          <div className="flex items-center justify-between mb-2 pb-2 border-b">
+                            <span className="text-sm text-muted-foreground">
+                              {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
+                            </span>
+                            <div className="flex items-center gap-2">
                               <button
-                                key={tipo}
                                 type="button"
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setSelectedPackageType((prev) => ({ ...prev, [pc.id]: tipo }));
-                                  setPlatformPage((prev) => ({ ...prev, [pc.id]: 1 }));
-                                }}
-                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                                  isSelected
-                                    ? 'bg-primary text-white'
-                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                                }`}
+                                disabled={currentPage <= 1}
+                                onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
                               >
-                                {tipoLabel} ({filteredCount})
+                                ‹
                               </button>
-                            );
-                          })}
-                        </div>
-
-                        {/* Paginação e lista de pedidos com filtro aplicado */}
-                        {(() => {
-                          const selectedType = (selectedPackageType[pc.id] || 'todos') as 'todos' | 'comum' | 'incomum';
-                          const filteredPedidos = filterPedidosByType(pc.pedidos || [], selectedType);
-                          const totalPagesFiltered = Math.max(1, Math.ceil(filteredPedidos.length / PLATFORM_PAGE_SIZE));
-                          const sliceStartFiltered = (currentPage - 1) * PLATFORM_PAGE_SIZE;
-                          const pedidosPaginaFiltered = filteredPedidos.slice(sliceStartFiltered, sliceStartFiltered + PLATFORM_PAGE_SIZE);
-
-                          return (
-                            <>
-                              {/* Paginação no topo */}
-                              {totalPagesFiltered > 1 && (
-                                <div className="flex items-center justify-between mb-2 pb-2 border-b">
-                                  <span className="text-sm text-muted-foreground">
-                                    {filteredPedidos.length} pedidos • {currentPage}/{totalPagesFiltered}
-                                  </span>
-                                  <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                disabled={currentPage >= totalPages}
+                                onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                              >
+                                ›
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                        {pedidosPagina.length === 0 ? (
+                          <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {pedidosPagina.map((p: any) => {
+                              const items = platformOrderItems[p.id] || [];
+                              return (
+                                <div key={p.id} className="rounded border px-3 py-2.5">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-3 min-w-0">
+                                      <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
+                                    </div>
                                     <button
                                       type="button"
-                                      disabled={currentPage <= 1}
-                                      onClick={(e) => handleGoToPage(e, currentPage - 1)}
-                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                                    >
-                                      ‹
-                                    </button>
-                                    <button
-                                      type="button"
-                                      disabled={currentPage >= totalPagesFiltered}
-                                      onClick={(e) => handleGoToPage(e, currentPage + 1)}
-                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                                    >
-                                      ›
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
-                              {pedidosPaginaFiltered.length === 0 ? (
-                                <div className="text-sm text-muted-foreground">Nenhum pedido disponível nesta categoria.</div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {pedidosPaginaFiltered.map((p: any) => {
-                                    const items = platformOrderItems[p.id] || [];
-                                    const pedidoType = getPedidoType(p);
-                                    return (
-                                      <div key={p.id} className="rounded border px-3 py-2.5">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-3 min-w-0">
-                                            <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
-                                            <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
-                                            <span className={`text-xs px-1.5 py-0.5 rounded ${pedidoType === 'comum' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                                              {pedidoType === 'comum' ? 'Comum' : 'Incomum'}
-                                            </span>
-                                          </div>
-                                          <button
-                                            type="button"
-                                            className="text-sm text-primary underline-offset-4 hover:underline"
-                                            onClick={async (e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              setOpenPlatformId(null);
-                                              if (isSyntheticCard) {
-                                          // card sintético: buscar dados completos por IDs
+                                      className="text-sm text-primary underline-offset-4 hover:underline"
+                                      onClick={async (e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        setOpenPlatformId(null);
+                                        if (isSyntheticCard) {
                                           try {
                                             const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
                                             const fullList = sortPedidos(await fetchPedidosPorIds(ids));
@@ -2003,7 +1951,6 @@ export function Logistica() {
                                             console.error('Erro ao buscar pedidos do card:', err);
                                           }
                                         } else {
-                                          // plataforma real: buscar lista completa e navegar ao pedido específico
                                           targetPedidoIdRef.current = p.id;
                                           setFilterPlataformaId(pc.id);
                                         }
@@ -2029,14 +1976,11 @@ export function Logistica() {
                                       ))}
                                     </div>
                                   )}
-                                        </div>
-                                      );
-                                    })}
                                 </div>
-                              )}
-                            </>
-                          );
-                        })()}
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
                     )}
                   </Card>
