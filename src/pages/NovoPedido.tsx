@@ -20,6 +20,8 @@ export default function NovoPedido() {
   const [statuses, setStatuses] = useState<any[]>([]);
   const [loadingStatuses, setLoadingStatuses] = useState(false);
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
+  const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
+  const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
   const [plataformas, setPlataformas] = useState<any[]>([]);
   const [loadingPlataformas, setLoadingPlataformas] = useState(false);
   const [plataformasError, setPlataformasError] = useState<string | null>(null);
@@ -280,7 +282,8 @@ export default function NovoPedido() {
         // send only digits for contato to the backend
         contato: contato ? String(contato).replace(/\D/g, '') : null,
         plataforma_id: plataforma,
-        status_id: status || null,
+        status_id: showPrazoEnvio ? LOGISTICA_STATUS_ID : (status || null),
+        ...(showPrazoEnvio ? { etiqueta_envio_id: ETIQUETA_DISPONIVEL_ID, urgente: true } : {}),
         responsavel_id: user?.id || null,
         // valor_total é o valor investido (já inclui o frete)
         valor_total: parsePtBR(valorInvestidoStr),
@@ -547,24 +550,21 @@ export default function NovoPedido() {
       });
 
       for (const [productId, count] of Object.entries(productCounts)) {
-        await (supabase as any).rpc('increment', {
-          row_id: productId,
-          x: count
-        }).eq('id', productId);
-        
-        // Fallback: se a função RPC não existir, usar update direto
-        const { data: currentProduct } = await supabase
+        const { data: currentProduct, error: currentProductError } = await supabase
           .from('produtos')
           .select('contagem')
           .eq('id', productId)
           .single();
-        
-        if (currentProduct) {
-          await supabase
-            .from('produtos')
-            .update({ contagem: (currentProduct.contagem || 0) + count })
-            .eq('id', productId);
+
+        if (currentProductError) {
+          console.error('Erro ao buscar contagem atual do produto:', currentProductError);
+          continue;
         }
+
+        await supabase
+          .from('produtos')
+          .update({ contagem: (currentProduct?.contagem || 0) + count })
+          .eq('id', productId);
       }
 
       toast({ title: 'Pedido criado', description: 'Pedido e itens salvos com sucesso' });

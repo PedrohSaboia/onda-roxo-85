@@ -129,6 +129,9 @@ export function Logistica() {
   const [platformOrderItems, setPlatformOrderItems] = useState<Record<string, any[]>>({});
   const PLATFORM_PAGE_SIZE = 4;
   const [platformPage, setPlatformPage] = useState<Record<string, number>>({});
+  const [selectedPackageType, setSelectedPackageType] = useState<Record<string, 'todos' | 'comum' | 'incomum'>>({});
+  const [topSectionTab, setTopSectionTab] = useState<'produtos' | 'incomuns'>('produtos');
+  const [incomumPedidos, setIncomumPedidos] = useState<any[]>([]);
   const [filterPlataformaId, setFilterPlataformaId] = useState('');
   const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState('');
   const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
@@ -628,7 +631,7 @@ export function Logistica() {
       // buscar pedidos com status LOGISTICA e etiqueta_envio_id exatos (filtros aplicados no servidor)
       let pedidosQuery = (supabase as any)
         .from('pedidos')
-        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id')
+        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id,itens_pedido(produto_id,variacao_id,quantidade)')
         .eq('status_id', LOGISTICA_STATUS_ID)
         .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
       if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
@@ -693,6 +696,23 @@ export function Logistica() {
           pedidos: sortPedidos(urgentesPedidos),
         },
       ];
+
+      const pedidoIds = (pedidosComEtiqueta || []).map((p: any) => p.id).filter(Boolean);
+      let pedidosDetalhados: any[] = [];
+      if (pedidoIds.length > 0) {
+        pedidosDetalhados = await fetchPedidosPorIds(pedidoIds);
+      }
+      const pedidosIncomuns = sortPedidos(
+        (pedidosDetalhados || []).filter((p: any) => getPedidoType(p) === 'incomum'),
+      );
+      setIncomumPedidos(pedidosIncomuns);
+      if (pedidosIncomuns.length > 0) {
+        try {
+          await fetchItemsForPedidoIds(pedidosIncomuns.map((p: any) => p.id).filter(Boolean));
+        } catch (e) {
+          console.error('Erro ao pré-carregar itens dos pedidos incomuns:', e);
+        }
+      }
 
       setPlataformasCards(cards);
     } catch (err) {
@@ -925,10 +945,71 @@ export function Logistica() {
     return null;
   };
 
+  // Classifica um pedido como comum ou incomum
+  const getPedidoType = (pedido: any): 'comum' | 'incomum' => {
+    const itens = pedido?.itens_pedido || [];
+    if (!itens.length) return 'comum';
+
+    const totalUnidades = itens.reduce((acc: number, it: any) => acc + Math.max(1, Number(it?.quantidade ?? 1)), 0);
+    const referencias = new Set(
+      itens.map((it: any) => String(it?.variacao_id || it?.produto_id || it?.id || 'sem-ref')),
+    );
+
+    const maisDeDoisItens = totalUnidades > 2;
+    const doisIguais = totalUnidades === 2 && referencias.size === 1;
+    return (maisDeDoisItens || doisIguais) ? 'incomum' : 'comum';
+  };
+
+  // Filtra pedidos baseado no tipo selecionado (comum/incomum/todos)
+  const filterPedidosByType = (pedidos: any[], tipo: 'todos' | 'comum' | 'incomum'): any[] => {
+    if (tipo === 'todos') return pedidos;
+    return pedidos.filter((p) => getPedidoType(p) === tipo);
+  };
+
+  const getPedidoCaseItems = (pedido: any): Array<{ key: string; nome: string; quantidade: number; imgUrl: string | null }> => {
+    const grouped = new Map<string, { key: string; nome: string; quantidade: number; imgUrl: string | null }>();
+    (pedido?.itens_pedido || []).forEach((it: any) => {
+      const refKey = String(it?.variacao_id || it?.produto_id || it?.id || 'sem-ref');
+      const nome = it?.variacao?.nome || it?.produto?.nome || 'Produto';
+      const imgUrl = it?.variacao?.img_url || it?.produto?.img_url || null;
+      const qtd = Math.max(1, Number(it?.quantidade ?? 1));
+      const existing = grouped.get(refKey);
+      if (existing) {
+        existing.quantidade += qtd;
+      } else {
+        grouped.set(refKey, { key: refKey, nome, quantidade: qtd, imgUrl });
+      }
+    });
+    return Array.from(grouped.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+  };
+
+  const getPedidoCaseSignature = (pedido: any) => {
+    return getPedidoCaseItems(pedido)
+      .map((item) => `${item.quantidade}x ${item.nome}`)
+      .join(' | ');
+  };
+
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
   const allItemsBipado = items.length > 0 && items.every((it: any) => isItemFullyScanned(it));
   const filteredLogItems = logItems;
+  const incomumCaseGroups = (() => {
+    const groups = new Map<string, { signature: string; pedidos: any[]; label: string; totalUnidades: number; imgUrl: string | null }>();
+    (incomumPedidos || []).forEach((pedido: any) => {
+      const caseItems = getPedidoCaseItems(pedido);
+      const signature = getPedidoCaseSignature(pedido);
+      const label = caseItems.map((it) => `${it.quantidade}x ${it.nome}`).join(' + ') || 'Caso incomum';
+      const totalUnidades = caseItems.reduce((acc, it) => acc + it.quantidade, 0);
+      const imgUrl = caseItems[0]?.imgUrl || null;
+      const existing = groups.get(signature);
+      if (existing) {
+        existing.pedidos.push(pedido);
+      } else {
+        groups.set(signature, { signature, pedidos: [pedido], label, totalUnidades, imgUrl });
+      }
+    });
+    return Array.from(groups.values()).sort((a, b) => b.pedidos.length - a.pedidos.length);
+  })();
   
   // Verifica se deve mostrar o botão da etiqueta ML
   // Prioridade: shipping_id deve ter valor (não null, não vazio)
@@ -1557,23 +1638,48 @@ export function Logistica() {
             {/* Seção: Produtos a Embalar */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PRODUTOS A EMBALAR</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTopSectionTab('produtos')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                      topSectionTab === 'produtos'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    Produtos a embalar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTopSectionTab('incomuns')}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                      topSectionTab === 'incomuns'
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    }`}
+                  >
+                    Pacotes incomuns
+                  </button>
+                </div>
                 <span className="text-sm text-muted-foreground">
-                  {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
+                  {topSectionTab === 'produtos'
+                    ? (loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`)
+                    : `${incomumCaseGroups.length} caso(s) incomum(ns)`}
                 </span>
               </div>
 
-              {loadingLogItems ? (
+              {topSectionTab === 'produtos' && loadingLogItems ? (
                 <div className="flex gap-2 flex-wrap">
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
                   ))}
                 </div>
-              ) : logItemsError ? (
+              ) : topSectionTab === 'produtos' && logItemsError ? (
                 <div className="text-sm text-red-500">Erro ao carregar produtos: {logItemsError}</div>
-              ) : filteredLogItems.length === 0 ? (
+              ) : topSectionTab === 'produtos' && filteredLogItems.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
-              ) : (
+              ) : topSectionTab === 'produtos' ? (
                 <div className="flex flex-wrap gap-2">
                   {filteredLogItems
                     .slice()
@@ -1629,6 +1735,57 @@ export function Logistica() {
                         </div>
                       );
                     })}
+                </div>
+              ) : incomumCaseGroups.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Nenhum pedido incomum encontrado.</div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {incomumCaseGroups.map((caseGroup: any) => {
+                    const nomePreview = caseGroup.label;
+                    const imgPreview = caseGroup.imgUrl;
+
+                    return (
+                      <div
+                        key={caseGroup.signature}
+                        className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => {
+                          const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
+                          setModoListaPorPlataforma(true);
+                          setFilterPlataformaId('');
+                          setPedidosFiltrados(groupedPedidos);
+                          setPedidoAtualIndex(0);
+                          setFoundPedido(groupedPedidos[0] || null);
+                          setFoundItemScans({});
+                          setItemInputs({});
+                          setItemStatus({});
+                          setTimeout(() => barcodeRef.current?.focus(), 50);
+                        }}
+                      >
+                        <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                          ×{caseGroup.pedidos.length}
+                        </span>
+
+                        {imgPreview ? (
+                          <img
+                            src={imgPreview}
+                            alt={nomePreview}
+                            className="h-14 w-14 rounded-md object-cover border"
+                          />
+                        ) : (
+                          <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                            sem foto
+                          </div>
+                        )}
+
+                        <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                          {nomePreview}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                          {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                        </p>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1738,53 +1895,96 @@ export function Logistica() {
 
                     {openPlatformId === pc.id && (
                       <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
-                        {/* Paginação no topo */}
-                        {totalPages > 1 && (
-                          <div className="flex items-center justify-between mb-2 pb-2 border-b">
-                            <span className="text-sm text-muted-foreground">
-                              {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
-                            </span>
-                            <div className="flex items-center gap-2">
+                        {/* Abas para Pacotes Comuns/Incomuns */}
+                        <div className="flex gap-1 mb-3 border-b">
+                          {(['todos', 'comum', 'incomum'] as const).map((tipo) => {
+                            const filteredCount = filterPedidosByType(pc.pedidos || [], tipo).length;
+                            const isSelected = (selectedPackageType[pc.id] || 'todos') === tipo;
+                            const tipoLabel = tipo === 'todos' ? 'Todos' : tipo === 'comum' ? 'Pacotes Comuns' : 'Pacotes Incomuns';
+                            
+                            return (
                               <button
+                                key={tipo}
                                 type="button"
-                                disabled={currentPage <= 1}
-                                onClick={(e) => handleGoToPage(e, currentPage - 1)}
-                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setSelectedPackageType((prev) => ({ ...prev, [pc.id]: tipo }));
+                                  setPlatformPage((prev) => ({ ...prev, [pc.id]: 1 }));
+                                }}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                  isSelected
+                                    ? 'bg-primary text-white'
+                                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                                }`}
                               >
-                                ‹
+                                {tipoLabel} ({filteredCount})
                               </button>
-                              <button
-                                type="button"
-                                disabled={currentPage >= totalPages}
-                                onClick={(e) => handleGoToPage(e, currentPage + 1)}
-                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                              >
-                                ›
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        {pedidosPagina.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
-                        ) : (
-                          <div className="space-y-2">
-                            {pedidosPagina.map((p: any) => {
-                              const items = platformOrderItems[p.id] || [];
-                              return (
-                                <div key={p.id} className="rounded border px-3 py-2.5">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
-                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
-                                    </div>
+                            );
+                          })}
+                        </div>
+
+                        {/* Paginação e lista de pedidos com filtro aplicado */}
+                        {(() => {
+                          const selectedType = (selectedPackageType[pc.id] || 'todos') as 'todos' | 'comum' | 'incomum';
+                          const filteredPedidos = filterPedidosByType(pc.pedidos || [], selectedType);
+                          const totalPagesFiltered = Math.max(1, Math.ceil(filteredPedidos.length / PLATFORM_PAGE_SIZE));
+                          const sliceStartFiltered = (currentPage - 1) * PLATFORM_PAGE_SIZE;
+                          const pedidosPaginaFiltered = filteredPedidos.slice(sliceStartFiltered, sliceStartFiltered + PLATFORM_PAGE_SIZE);
+
+                          return (
+                            <>
+                              {/* Paginação no topo */}
+                              {totalPagesFiltered > 1 && (
+                                <div className="flex items-center justify-between mb-2 pb-2 border-b">
+                                  <span className="text-sm text-muted-foreground">
+                                    {filteredPedidos.length} pedidos • {currentPage}/{totalPagesFiltered}
+                                  </span>
+                                  <div className="flex items-center gap-2">
                                     <button
                                       type="button"
-                                      className="text-sm text-primary underline-offset-4 hover:underline"
-                                      onClick={async (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setOpenPlatformId(null);
-                                        if (isSyntheticCard) {
+                                      disabled={currentPage <= 1}
+                                      onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                    >
+                                      ‹
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={currentPage >= totalPagesFiltered}
+                                      onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                    >
+                                      ›
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              {pedidosPaginaFiltered.length === 0 ? (
+                                <div className="text-sm text-muted-foreground">Nenhum pedido disponível nesta categoria.</div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {pedidosPaginaFiltered.map((p: any) => {
+                                    const items = platformOrderItems[p.id] || [];
+                                    const pedidoType = getPedidoType(p);
+                                    return (
+                                      <div key={p.id} className="rounded border px-3 py-2.5">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-3 min-w-0">
+                                            <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                                            <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
+                                            <span className={`text-xs px-1.5 py-0.5 rounded ${pedidoType === 'comum' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                                              {pedidoType === 'comum' ? 'Comum' : 'Incomum'}
+                                            </span>
+                                          </div>
+                                          <button
+                                            type="button"
+                                            className="text-sm text-primary underline-offset-4 hover:underline"
+                                            onClick={async (e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              setOpenPlatformId(null);
+                                              if (isSyntheticCard) {
                                           // card sintético: buscar dados completos por IDs
                                           try {
                                             const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
@@ -1829,13 +2029,14 @@ export function Logistica() {
                                       ))}
                                     </div>
                                   )}
+                                        </div>
+                                      );
+                                    })}
                                 </div>
-                              );
-                            })}
-
-
-                          </div>
-                        )}
+                              )}
+                            </>
+                          );
+                        })()}
                       </div>
                     )}
                   </Card>
