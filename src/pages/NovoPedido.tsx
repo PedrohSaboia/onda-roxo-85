@@ -22,6 +22,7 @@ export default function NovoPedido() {
   const COMERCIAL_STATUS_ID = '3ca23a64-cb1e-480c-8efa-0468ebc18097';
   const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
   const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+  const SHOPEE_PLATAFORMA_ID = 'c22b2def-47fc-4fbb-aab1-660c951734c7';
   const [plataformas, setPlataformas] = useState<any[]>([]);
   const [loadingPlataformas, setLoadingPlataformas] = useState(false);
   const [plataformasError, setPlataformasError] = useState<string | null>(null);
@@ -63,6 +64,7 @@ export default function NovoPedido() {
    'e8396155-0fdc-4992-b872-18387e6c16a3' // Magalu
   ]);
   const showPrazoEnvio = PLATAFORMAS_COM_PRAZO_IDS.has(plataforma);
+  const isShopeePedido = plataforma === SHOPEE_PLATAFORMA_ID;
 
   const parsePtBR = (v: string) => {
     if (!v) return 0;
@@ -252,10 +254,10 @@ export default function NovoPedido() {
       return;
     }
 
-    if (showPrazoEnvio && etiquetaFiles.length === 0) {
+    if (isShopeePedido && etiquetaFiles.length === 0) {
       toast({
         title: 'Erro',
-        description: 'Para esta plataforma, é obrigatório subir ao menos uma etiqueta em PDF.',
+        description: 'Para Shopee, é obrigatório subir ao menos uma etiqueta em PDF.',
         variant: 'destructive',
       });
       return;
@@ -276,14 +278,16 @@ export default function NovoPedido() {
       } else {
         criadoEm = now.toISOString();
       }
+      const deveEntrarLogisticaNoCadastro = showPrazoEnvio && !isShopeePedido;
+
       const pedidoPayload: any = {
         id_externo: idExterno || `PED-${Date.now()}`,
         cliente_nome: nome || null,
         // send only digits for contato to the backend
         contato: contato ? String(contato).replace(/\D/g, '') : null,
         plataforma_id: plataforma,
-        status_id: showPrazoEnvio ? LOGISTICA_STATUS_ID : (status || null),
-        ...(showPrazoEnvio ? { etiqueta_envio_id: ETIQUETA_DISPONIVEL_ID, urgente: true } : {}),
+        status_id: deveEntrarLogisticaNoCadastro ? LOGISTICA_STATUS_ID : (status || null),
+        ...(deveEntrarLogisticaNoCadastro ? { etiqueta_envio_id: ETIQUETA_DISPONIVEL_ID, urgente: true } : {}),
         responsavel_id: user?.id || null,
         // valor_total é o valor investido (já inclui o frete)
         valor_total: parsePtBR(valorInvestidoStr),
@@ -481,19 +485,30 @@ export default function NovoPedido() {
             uploadedUrls.push(urlData.publicUrl);
           }
 
+          const updateEtiquetaPayload: any = {
+            etiquetas_uploads: uploadedUrls,
+            atualizado_em: new Date().toISOString(),
+          };
+
+          // Shopee: ao enviar etiqueta, mover para Logística + Etiqueta Disponível
+          if (isShopeePedido) {
+            updateEtiquetaPayload.status_id = LOGISTICA_STATUS_ID;
+            updateEtiquetaPayload.etiqueta_envio_id = ETIQUETA_DISPONIVEL_ID;
+            updateEtiquetaPayload.urgente = true;
+          }
+
           const { error: updateEtiquetaError } = await supabase
             .from('pedidos')
-            .update({
-              etiquetas_uploads: uploadedUrls,
-              atualizado_em: new Date().toISOString(),
-            } as any)
+            .update(updateEtiquetaPayload as any)
             .eq('id', pedidoId);
 
           if (updateEtiquetaError) throw updateEtiquetaError;
 
           await registrarHistoricoMovimentacao(
             pedidoId,
-            `Upload de ${uploadedUrls.length} etiqueta(s) no cadastro do pedido`,
+            isShopeePedido
+              ? `Upload de ${uploadedUrls.length} etiqueta(s) no cadastro do pedido e envio para Logística (Etiqueta Disponível)`
+              : `Upload de ${uploadedUrls.length} etiqueta(s) no cadastro do pedido`,
             user?.id
           );
         } catch (uploadErr: any) {

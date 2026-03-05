@@ -20,6 +20,7 @@ import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 export function Logistica() {
   const MERCADO_LIVRE_PLATAFORMA_ID = '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec';
+  const SHOPEE_PLATAFORMA_ID = 'c22b2def-47fc-4fbb-aab1-660c951734c7';
   const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
   const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
   const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
@@ -412,7 +413,7 @@ export function Logistica() {
     }
   };
 
-  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
 
   const fetchPedidosPorIds = async (ids: string[]): Promise<any[]> => {
     if (!ids.length) return [];
@@ -646,9 +647,15 @@ export function Logistica() {
       // identificar plataformas principais
       const yampiPlatform = (plataformas || []).find((p: any) => /yampi/i.test(p.nome));
       const mlPlatform = (plataformas || []).find((p: any) => p.id === MERCADO_LIVRE_PLATAFORMA_ID || /mercado livre/i.test(p.nome));
+      const shopeePlatform = (plataformas || []).find((p: any) => p.id === SHOPEE_PLATAFORMA_ID || /shopee/i.test(p.nome));
 
-      // nomes de plataformas urgentes (exceto ML e Yampi)
-      const urgentPlatformNames = ['shopee', 'tiktok', 'magalu'];
+      // nomes de plataformas urgentes (Shopee fica em aba própria)
+      const urgentPlatformNames = ['tiktok', 'magalu'];
+
+      const isShopeePedido = (p: any) => {
+        const pname = String(platformMap.get(p.plataforma_id)?.nome || '').toLowerCase();
+        return p.plataforma_id === shopeePlatform?.id || p.plataforma_id === SHOPEE_PLATAFORMA_ID || pname.includes('shopee');
+      };
 
       const yampiPedidos = pedidosComEtiqueta.filter((p: any) =>
         p.plataforma_id === yampiPlatform?.id && !p.urgente,
@@ -656,11 +663,13 @@ export function Logistica() {
       const mlPedidos = pedidosComEtiqueta.filter((p: any) =>
         p.plataforma_id === mlPlatform?.id && !p.etiqueta_ml && !p.urgente,
       );
+      const shopeePedidos = pedidosComEtiqueta.filter((p: any) => isShopeePedido(p));
       const leadsPedidos = pedidosComEtiqueta.filter((p: any) =>
         LEADS_PLATFORM_IDS.has(p.plataforma_id),
       );
       const urgentesPedidos = pedidosComEtiqueta.filter((p: any) => {
         const pname = String(platformMap.get(p.plataforma_id)?.nome || '').toLowerCase();
+        if (isShopeePedido(p)) return false;
         const isUrgentPlatform = urgentPlatformNames.some((n) => pname.includes(n));
         const isMLComEtiquetaML = p.plataforma_id === mlPlatform?.id && !!p.etiqueta_ml;
         const isUrgente = !!p.urgente;
@@ -681,6 +690,13 @@ export function Logistica() {
           img_url: mlPlatform?.img_url,
           count: mlPedidos.length,
           pedidos: sortPedidos(mlPedidos),
+        },
+        {
+          id: shopeePlatform?.id || SHOPEE_PLATAFORMA_ID,
+          nome: shopeePlatform?.nome || 'Shopee',
+          img_url: shopeePlatform?.img_url,
+          count: shopeePedidos.length,
+          pedidos: sortPedidos(shopeePedidos),
         },
         {
           id: 'leads',
@@ -1125,7 +1141,7 @@ export function Logistica() {
       // fetch pedido details (responsável, plataforma, itens)
       const { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(`id,id_externo,plataforma_id,urgente,remetente_id,status_id,etiqueta_envio_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
+        .select(`id,id_externo,plataforma_id,urgente,remetente_id,status_id,etiqueta_envio_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
         .eq('id', row.pedido_id)
         .single();
 
@@ -1232,7 +1248,7 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,etiqueta_envio_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,etiqueta_envio_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pedidoId);
 
       // Tentar buscar por id_externo primeiro
@@ -1341,6 +1357,27 @@ export function Logistica() {
   const handleImprimirEtiqueta = async () => {
     try {
       setLoadingScan(true);
+
+      const etiquetasUploads = Array.isArray((foundPedido as any)?.etiquetas_uploads)
+        ? ((foundPedido as any).etiquetas_uploads as string[]).filter((url) => !!url)
+        : [];
+
+      // Atalho: pedido já tem PDF(s) de etiqueta uploadados
+      if (etiquetasUploads.length > 0) {
+        const pdfUrl = String(etiquetasUploads[0]);
+        window.open(pdfUrl, '_blank');
+        setConfirmEnvioModal({
+          open: true,
+          link: pdfUrl,
+          pedidoId: foundPedido.id,
+          pedidoIdExterno: foundPedido.id_externo ?? null,
+          updatePayload: {
+            status_id: ENVIADO_STATUS_ID,
+            data_enviado: new Date().toISOString(),
+          },
+        });
+        return;
+      }
 
       // Atalho: pedido já tem link_etiqueta
       if (foundPedido?.link_etiqueta && String(foundPedido.link_etiqueta).trim() !== '') {
@@ -1827,7 +1864,7 @@ export function Logistica() {
             ) : plataformasCards.length === 0 ? (
               <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 w-full mx-auto">
+              <div className={`grid grid-cols-1 sm:grid-cols-2 ${plataformasCards.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 w-full mx-auto`}>
                 {plataformasCards.map((pc) => {
                   const currentPage = platformPage[pc.id] ?? 1;
                   const totalPages = Math.max(1, Math.ceil((pc.pedidos?.length ?? 0) / PLATFORM_PAGE_SIZE));

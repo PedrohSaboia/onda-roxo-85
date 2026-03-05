@@ -233,6 +233,7 @@ export default function Pedido() {
   const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
   const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
   const ETIQUETA_PENDENTE_ID = '0c0ff1fc-1c3b-4eff-9dec-a505d33f3e18';
+  const SHOPEE_PLATAFORMA_ID = 'c22b2def-47fc-4fbb-aab1-660c951734c7';
 
   const { id } = useParams();
   const navigate = useNavigate();
@@ -1408,9 +1409,9 @@ export default function Pedido() {
       }
 
       // Buscar etiquetas existentes
-      const { data: pedidoData } = await supabase
+      const { data: pedidoData } = await (supabase as any)
         .from('pedidos')
-        .select('etiquetas_uploads')
+        .select('*')
         .eq('id', pedido.id)
         .single();
 
@@ -1418,28 +1419,44 @@ export default function Pedido() {
       let allEtiquetas: string[] = [];
       
       // Verificar se já existe etiquetas_uploads
-      if (pedidoData?.etiquetas_uploads && Array.isArray(pedidoData.etiquetas_uploads)) {
-        allEtiquetas = [...pedidoData.etiquetas_uploads];
-      }
+      const etiquetasExistentes = (pedidoData as any)?.etiquetas_uploads;
+      if (Array.isArray(etiquetasExistentes)) allEtiquetas = [...etiquetasExistentes];
 
       // Adicionar novas URLs
       allEtiquetas = [...allEtiquetas, ...uploadedUrls];
 
+      const isShopeePedido =
+        pedido?.plataforma_id === SHOPEE_PLATAFORMA_ID ||
+        String(pedido?.plataforma?.nome || '').toLowerCase().includes('shopee');
+
       // Salvar no banco
+      const updatePayload: any = {
+        etiquetas_uploads: allEtiquetas,
+        atualizado_em: new Date().toISOString(),
+      };
+      if (isShopeePedido) {
+        updatePayload.status_id = LOGISTICA_STATUS_ID;
+        updatePayload.etiqueta_envio_id = ETIQUETA_DISPONIVEL_ID;
+      }
+
       const { error: updateError } = await supabase
         .from('pedidos')
-        .update({ 
-          etiquetas_uploads: allEtiquetas,
-          atualizado_em: new Date().toISOString()
-        } as any)
+        .update(updatePayload)
         .eq('id', pedido.id);
 
       if (updateError) throw updateError;
 
-      await registrarHistoricoMovimentacao(pedido.id, `Upload de ${uploadedUrls.length} etiqueta(s)`);
+      await registrarHistoricoMovimentacao(
+        pedido.id,
+        isShopeePedido
+          ? `Upload de ${uploadedUrls.length} etiqueta(s) e envio para Logística (Etiqueta Disponível)`
+          : `Upload de ${uploadedUrls.length} etiqueta(s)`
+      );
       toast({
         title: 'Etiquetas enviadas',
-        description: `${uploadedUrls.length} etiqueta(s) foram carregadas e salvas com sucesso`
+        description: isShopeePedido
+          ? `${uploadedUrls.length} etiqueta(s) salvas. Pedido movido para Logística com etiqueta Disponível.`
+          : `${uploadedUrls.length} etiqueta(s) foram carregadas e salvas com sucesso`
       });
 
       // Limpar seleção e recarregar
