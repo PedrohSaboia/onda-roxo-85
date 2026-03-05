@@ -1145,7 +1145,10 @@ export function ProductionPage() {
         const resp = await fetch(mlEndpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${supabaseKey}` },
-          body: JSON.stringify({ pedido_id: primaryPedidoId ?? pedidoId }),
+          body: JSON.stringify({
+            pedido_id: primaryPedidoId ?? pedidoId,
+            id_externo: pedidoId,
+          }),
         });
 
         if (!resp.ok) {
