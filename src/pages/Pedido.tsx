@@ -396,6 +396,7 @@ export default function Pedido() {
     if (!pedido || pedido.pedido_liberado) return;
     
     try {
+      const statusAtualId = pedido?.status?.id || pedido?.status_id || null;
       // Get count of items in this order
       const totalItens = (pedido.itens || []).length;
       
@@ -410,6 +411,14 @@ export default function Pedido() {
             .eq('id', pedido.id);
           
           if (error) throw error;
+
+          if (statusAtualId) {
+            const { error: keepStatusError } = await supabase
+              .from('pedidos')
+              .update({ status_id: statusAtualId, atualizado_em: new Date().toISOString() } as any)
+              .eq('id', pedido.id);
+            if (keepStatusError) throw keepStatusError;
+          }
           
           await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (up-sell resolvido)');
           toast({ title: 'Pedido liberado automaticamente', description: 'Produto de up-sell foi resolvido' });
@@ -456,6 +465,14 @@ export default function Pedido() {
             .eq('id', pedido.id);
           
           if (error) throw error;
+
+          if (statusAtualId) {
+            const { error: keepStatusError } = await supabase
+              .from('pedidos')
+              .update({ status_id: statusAtualId, atualizado_em: new Date().toISOString() } as any)
+              .eq('id', pedido.id);
+            if (keepStatusError) throw keepStatusError;
+          }
           
           await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (todos up-sell resolvidos)');
           toast({ title: 'Pedido liberado automaticamente', description: 'Todos os produtos de up-sell foram resolvidos' });
@@ -1511,21 +1528,21 @@ export default function Pedido() {
               ) : null}
               <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
               {pedido?.tempo_ganho && pedido?.criado_em && (() => {
-                const criadoEm = new Date(pedido.criado_em);
                 const tempoGanho = new Date(pedido.tempo_ganho);
                 const hoje = new Date();
                 
-                // Resetar horas para comparação apenas de datas
-                criadoEm.setHours(0, 0, 0, 0);
-                tempoGanho.setHours(0, 0, 0, 0);
-                hoje.setHours(0, 0, 0, 0);
+                // Formatar como strings YYYY-MM-DD para comparação apenas de datas (ignora timezone)
+                const tempoGanhoDate = tempoGanho.toISOString().split('T')[0];
+                const hojeDate = hoje.toISOString().split('T')[0];
                 
-                // Calcular dias restantes
-                const diasRestantes = Math.ceil((tempoGanho.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+                // Calcular dias restantes usando timestamps
+                const tempoGanhoMidnight = new Date(tempoGanhoDate + 'T00:00:00Z').getTime();
+                const hojeMidnight = new Date(hojeDate + 'T00:00:00Z').getTime();
+                const diasRestantes = Math.floor((tempoGanhoMidnight - hojeMidnight) / (1000 * 60 * 60 * 24));
                 
                 return (
                   <span className="text-red-600 font-semibold text-lg">
-                    {diasRestantes > 0 ? `${diasRestantes} ${diasRestantes === 1 ? 'dia' : 'dias'} para o envio` : 'Prazo vencido'}
+                    {diasRestantes > 0 ? `${diasRestantes} ${diasRestantes === 1 ? 'dia' : 'dias'} para o envio` : (diasRestantes === 0 ? 'Prazo para o dia atual' : 'Prazo vencido')}
                   </span>
                 );
               })()}
@@ -1614,6 +1631,7 @@ export default function Pedido() {
             <Button
               onClick={async () => {
                 if (!pedido) return;
+                const statusAtualId = pedido?.status?.id || pedido?.status_id || null;
                 
                 // Check for pending up-sell products (status_up_sell === 1 or null for up_cell products)
                 const pendingProducts = (pedido.itens || []).filter((it: any) => {
@@ -1634,6 +1652,15 @@ export default function Pedido() {
                     .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() } as any)
                     .eq('id', pedido.id);
                   if (error) throw error;
+
+                  if (statusAtualId) {
+                    const { error: keepStatusError } = await supabase
+                      .from('pedidos')
+                      .update({ status_id: statusAtualId, atualizado_em: new Date().toISOString() } as any)
+                      .eq('id', pedido.id);
+                    if (keepStatusError) throw keepStatusError;
+                  }
+
                   await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado manualmente');
                   // update local state so button disappears
                   setPedido((p: any) => ({ ...p, pedido_liberado: true }));
