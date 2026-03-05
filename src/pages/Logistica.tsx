@@ -22,6 +22,7 @@ export function Logistica() {
   const MERCADO_LIVRE_PLATAFORMA_ID = '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec';
   const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
   const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
+  const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
   const ITEM_PRIORITARIO_ML_ID = 'ab8a89a1-aa95-4a98-99c2-eaa3de670462';
 
   type ProdutoFiltro = { id: string; nome: string; tipo: 'produto' | 'variacao'; variacaoNome?: string };
@@ -418,7 +419,8 @@ export function Logistica() {
     const { data, error } = await (supabase as any)
       .from('pedidos')
       .select(FULL_PEDIDO_SELECT)
-      .in('id', ids);
+      .in('id', ids)
+      .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID);
     if (error) throw error;
     return data || [];
   };
@@ -461,7 +463,7 @@ export function Logistica() {
         .select(selectQuery)
         .eq('plataforma_id', plataformaId)
         .eq('status_id', LOGISTICA_STATUS_ID)
-        .eq('etiqueta_envio_id', '466958dd-e525-4e8d-95f1-067124a5ea7f');
+        .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID);
 
       if (pedidoIdsFiltroProduto && pedidoIdsFiltroProduto.length > 0) {
         query = query.in('id', pedidoIdsFiltroProduto);
@@ -1123,12 +1125,23 @@ export function Logistica() {
       // fetch pedido details (responsável, plataforma, itens)
       const { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(`id,id_externo,plataforma_id,urgente,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
+        .select(`id,id_externo,plataforma_id,urgente,remetente_id,status_id,etiqueta_envio_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
         .eq('id', row.pedido_id)
         .single();
 
       if (pedErr) throw pedErr;
       const pedidoRow = pedidoData as any;
+
+      if (pedidoRow?.etiqueta_envio_id !== ETIQUETA_DISPONIVEL_ID) {
+        toast({
+          title: 'Pedido fora do filtro',
+          description: 'Este pedido não está com etiqueta disponível.',
+          variant: 'destructive',
+        });
+        setFoundPedido(null);
+        setFoundItemScans({});
+        return;
+      }
 
       console.log('Pedido encontrado:', pedidoRow);
       console.log('Itens do pedido:', pedidoRow?.itens_pedido?.map((it: any) => ({ 
@@ -1219,21 +1232,24 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,etiqueta_envio_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(pedidoId);
 
       // Tentar buscar por id_externo primeiro
       let { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
         .select(selectQuery)
         .eq('id_externo', pedidoId)
+        .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID)
         .maybeSingle();
 
       // Se não encontrou por id_externo, tenta por id
-      if (!pedidoData) {
+      if (!pedidoData && isUuid) {
         const res = await supabase
           .from('pedidos')
           .select(selectQuery)
           .eq('id', pedidoId)
+          .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID)
           .maybeSingle();
         
         pedidoData = res.data;
@@ -1243,7 +1259,12 @@ export function Logistica() {
       if (pedErr) throw pedErr;
 
       if (!pedidoData) {
-        throw new Error('Pedido não encontrado');
+        toast({
+          title: 'Pedido não permitido pelo filtro',
+          description: 'O pedido não foi encontrado com etiqueta disponível. Verifique se ele está com etiqueta Disponível.',
+          variant: 'destructive',
+        });
+        return;
       }
 
       const pedidoRow2 = pedidoData as any;
@@ -1296,9 +1317,17 @@ export function Logistica() {
 
     } catch (err: any) {
       console.error('Erro ao buscar pedido:', err);
+      const message = String(err?.message || err || '');
+      const isSyntaxUuidError =
+        message.toLowerCase().includes('invalid input syntax for type uuid') ||
+        message.toLowerCase().includes('erro de sintaxe') ||
+        message.toLowerCase().includes('sintaxe inválida');
+
       toast({ 
-        title: 'Erro ao buscar pedido', 
-        description: err.message || String(err), 
+        title: isSyntaxUuidError ? 'Pedido não permitido pelo filtro' : 'Erro ao buscar pedido', 
+        description: isSyntaxUuidError
+          ? 'Este identificador não pode ser usado nessa busca ou o pedido não está com etiqueta disponível.'
+          : (err.message || String(err)), 
         variant: 'destructive' 
       });
     } finally {
