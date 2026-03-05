@@ -12,7 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
 type SectionKey = 'yampi' | 'mercado_livre' | 'leads' | 'urgentes';
-type DateRangeKey = 'r1_10' | 'r11_20' | 'r21_30' | 'r31_plus' | 'ml_r1_5' | 'ml_r6_11' | 'ml_r11_20' | 'ml_r20_plus';
+type DateRangeKey = 'r1_10' | 'r11_20' | 'r21_30' | 'r31_plus' | 'ml_r1_5' | 'ml_r6_11' | 'ml_r11_20' | 'ml_r20_plus'; // r31_plus mantido para yampi/leads
 
 type DateRangeConfig = {
   key: DateRangeKey;
@@ -121,21 +121,26 @@ const DATE_RANGES: DateRangeConfig[] = [
   { key: 'r31_plus', label: '(31+ DIAS)', minDaysAgo: 31, maxDaysAgo: null },
 ];
 
+const COMERCIAL_DATE_RANGES: DateRangeConfig[] = [
+  { key: 'r1_10', label: '(1 A 3 DIAS)', minDaysAgo: 1, maxDaysAgo: 3 },
+  { key: 'r11_20', label: '(3 A 5 DIAS)', minDaysAgo: 3, maxDaysAgo: 5 },
+  { key: 'r21_30', label: '(5+ DIAS)', minDaysAgo: 5, maxDaysAgo: null },
+];
+
 const URGENTES_DATE_RANGES: DateRangeConfig[] = [
   { key: 'r1_10', label: '(HOJE)', minDaysAgo: 0, maxDaysAgo: 0 },
   { key: 'r11_20', label: '(AMANHÃ)', minDaysAgo: 1, maxDaysAgo: 1 },
   { key: 'r21_30', label: '(DEPOIS DE AMANHÃ)', minDaysAgo: 2, maxDaysAgo: 2 },
-  { key: 'r31_plus', label: '(TODOS 0-2)', minDaysAgo: 0, maxDaysAgo: 2 },
 ];
 
 const ML_DATE_RANGES: DateRangeConfig[] = [
-  { key: 'ml_r1_5',    label: '(1 A 5 DIAS)',   minDaysAgo: 1,  maxDaysAgo: 5  },
+  { key: 'ml_r1_5',    label: '(1 A 5 DIAS)',   minDaysAgo: 1,  maxDaysAgo: 5 },
   { key: 'ml_r6_11',   label: '(6 A 11 DIAS)',  minDaysAgo: 6,  maxDaysAgo: 11 },
   { key: 'ml_r11_20',  label: '(11 A 20 DIAS)', minDaysAgo: 11, maxDaysAgo: 20 },
   { key: 'ml_r20_plus', label: '(20+ DIAS)',     minDaysAgo: 20, maxDaysAgo: null },
 ];
 
-type UrgenteMainTab = 'todos' | 'comercial' | 'yampi' | 'ecommerce';
+type UrgenteMainTab = 'comercial' | 'yampi' | 'ecommerce';
 
 const ECOMMERCE_SUB_TABS = [
   { key: 'shopee', label: 'Shopee' },
@@ -154,6 +159,12 @@ const URGENTES_DAY_BY_RANGE: Partial<Record<DateRangeKey, 0 | 1 | 2>> = {
   r1_10: 0,
   r11_20: 1,
   r21_30: 2,
+};
+
+const COMERCIAL_FAIXA_BY_RANGE: Partial<Record<DateRangeKey, 'r1_3' | 'r3_5' | 'r5_plus'>> = {
+  r1_10: 'r1_3',
+  r11_20: 'r3_5',
+  r21_30: 'r5_plus',
 };
 
 // ---------------------------------------------------------------------------
@@ -188,6 +199,16 @@ const fetchProducaoItensUrgentes = async (opts: {
 }): Promise<ProducaoItem[]> => {
   const { data, error } = await (supabase as any).rpc('producao_get_itens_urgentes', {
     p_dias_para_envio: opts.diasParaEnvio,
+  });
+  if (error) throw error;
+  return (data || []) as ProducaoItem[];
+};
+
+const fetchProducaoItensComercial = async (opts: {
+  faixa: 'r1_3' | 'r3_5' | 'r5_plus';
+}): Promise<ProducaoItem[]> => {
+  const { data, error } = await (supabase as any).rpc('producao_get_itens_comercial', {
+    p_faixa: opts.faixa,
   });
   if (error) throw error;
   return (data || []) as ProducaoItem[];
@@ -338,8 +359,6 @@ function filterUrgentesItems(
   mainTab: UrgenteMainTab,
   subTab: string,
 ): ProducaoItem[] {
-  if (mainTab === 'todos') return rawItems;
-
   if (mainTab === 'comercial') {
     const withLeads = rawItems.filter((item) => LEADS_PLATFORM_IDS.has(item.plataforma_id ?? ''));
     if (!subTab) return withLeads;
@@ -414,12 +433,10 @@ function UrgentesItemsDropdown({
   }, [rawItems]);
 
   const filteredGrouped = useMemo(() => {
-    if (mainTab === 'todos') return allGroupedItems;
     return groupItems(filterUrgentesItems(rawItems, mainTab, subTab));
-  }, [rawItems, allGroupedItems, mainTab, subTab]);
+  }, [rawItems, mainTab, subTab]);
 
   const MAIN_TABS: { key: UrgenteMainTab; label: string }[] = [
-    { key: 'todos', label: 'Todos' },
     { key: 'comercial', label: 'Comercial' },
     { key: 'yampi', label: 'Yampi' },
     { key: 'ecommerce', label: 'Marketplace' },
@@ -565,7 +582,7 @@ function PlatformSection({
       : section.key === 'urgentes'
       ? { backgroundColor: '#ff00000e', borderColor: '#ff0000' }
       : section.key === 'leads'
-      ? { backgroundColor: '#ffffff0e', borderColor: '#929292' }
+      ? { backgroundColor: '#00a86b0e', borderColor: '#00a86b' }
       : undefined;
 
   return (
@@ -599,7 +616,7 @@ function PlatformSection({
         {/* header right (previously had a button) - intentionally left empty */}
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className={`grid grid-cols-1 gap-3 ${ranges.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
           {ranges.map((range) => (
             <DateRangeCard
               key={`${section.key}-${range.key}`}
@@ -643,7 +660,7 @@ function PlatformSection({
               <UrgentesItemsDropdown
                 rawItems={urgentesRawItems}
                 allGroupedItems={itemsByRange[expandedKey] || []}
-                mainTab={urgentesMainTab ?? 'todos'}
+                mainTab={urgentesMainTab ?? 'comercial'}
                 subTab={urgentesSubTab ?? ''}
                 onSetMainTab={(tab) => onUrgentesMainTabChange?.(tab)}
                 onSetSubTab={(sub) => onUrgentesSubTabChange?.(sub)}
@@ -665,6 +682,7 @@ function PlatformSection({
 export function ProductionPage() {
   const [summaryItems, setSummaryItems] = useState<ProducaoItem[]>([]);
   const [mlSummaryItems, setMlSummaryItems] = useState<ProducaoItem[]>([]);
+  const [comercialSummaryByRange, setComercialSummaryByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
   const [urgentesSummaryByRange, setUrgentesSummaryByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -693,7 +711,7 @@ export function ProductionPage() {
     yampi:          { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
     mercado_livre:  { ml_r1_5: false, ml_r6_11: false, ml_r11_20: false, ml_r20_plus: false },
     leads:          { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
-    urgentes:       { r1_10: false, r11_20: false, r21_30: false, r31_plus: false },
+    urgentes:       { r1_10: false, r11_20: false, r21_30: false },
   });
 
   const [itemsCache, setItemsCache] = useState<
@@ -748,6 +766,11 @@ export function ProductionPage() {
   const [saldoMelhorEnvio, setSaldoMelhorEnvio] = useState<number | null>(null);
   const [loadingSaldo, setLoadingSaldo] = useState(false);
 
+  // Modal de Pedidos do Produto (relação de pedidos)
+  type ProdutoModalItem = { produto_id: string | null; variacao_id: string | null; nomeProduto: string; nomeVariacao: string | null; imgUrl: string | null };
+  const [produtoPedidosModal, setProdutoPedidosModal] = useState<{ open: boolean; item: ProdutoModalItem | null; pedidos: any[]; loading: boolean }>({ open: false, item: null, pedidos: [], loading: false });
+  const [copiedPedidoId, setCopiedPedidoId] = useState<string | null>(null);
+
   // Urgentes: raw items por range para filtragem por aba de plataforma
   const [urgentesRawByRange, setUrgentesRawByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
   const [urgentesMainTabByRange, setUrgentesMainTabByRange] = useState<Partial<Record<DateRangeKey, UrgenteMainTab>>>({});
@@ -760,20 +783,27 @@ export function ProductionPage() {
       setSummaryError(null);
       const now = new Date();
       const end = endOfDay(now);
-      const [items, mlItems, urg0, urg1, urg2] = await Promise.all([
+      const [items, mlItems, com1_3, com3_5, com5plus, urg0, urg1, urg2] = await Promise.all([
         fetchProducaoItens({ start: null, end }),
         fetchProducaoItensMl({ diasMin: 1, diasMax: null }),
+        fetchProducaoItensComercial({ faixa: 'r1_3' }),
+        fetchProducaoItensComercial({ faixa: 'r3_5' }),
+        fetchProducaoItensComercial({ faixa: 'r5_plus' }),
         fetchProducaoItensUrgentes({ diasParaEnvio: 0 }),
         fetchProducaoItensUrgentes({ diasParaEnvio: 1 }),
         fetchProducaoItensUrgentes({ diasParaEnvio: 2 }),
       ]);
       setSummaryItems(items);
       setMlSummaryItems(mlItems);
+      setComercialSummaryByRange({
+        r1_10: com1_3,
+        r11_20: com3_5,
+        r21_30: com5plus,
+      });
       setUrgentesSummaryByRange({
         r1_10: urg0,
         r11_20: urg1,
         r21_30: urg2,
-        r31_plus: [...urg0, ...urg1, ...urg2],
       });
       // limpar caches para garantir que os próximos acessos peguem dados atualizados
       setItemsCache({ yampi: {}, mercado_livre: {}, leads: {}, urgentes: {} });
@@ -784,6 +814,78 @@ export function ProductionPage() {
     } finally {
       setLoadingSummary(false);
     }
+  };
+
+  const fetchPedidosDoProduto = async (item: ProdutoModalItem) => {
+    setProdutoPedidosModal({ open: true, item, pedidos: [], loading: true });
+    try {
+      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+
+      // 1. Busca pedidos filtrados por status + etiqueta (status de produção)
+      let pedidosQuery: any = (supabase as any)
+        .from('pedidos')
+        .select('id, id_externo, criado_em, urgente, plataformas(id, nome, img_url)')
+        .neq('status_id', 'fa6b38ba-1d67-4bc3-821e-ab089d641a25')  // Excludes "Enviado"
+        .neq('status_id', '09ddb68a-cff3-4a69-a120-7459642cca6f'); // Excludes "Cancelado"
+      if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+
+      const { data: pedidosData, error: pedidosErr } = await pedidosQuery;
+      if (pedidosErr) throw pedidosErr;
+
+      const todosPedidoIds = (pedidosData || []).map((p: any) => p.id) as string[];
+      if (!todosPedidoIds.length) {
+        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+        return;
+      }
+
+      // 2. Busca itens desses pedidos filtrados pelo produto/variação específico
+      let itensQuery: any = (supabase as any)
+        .from('itens_pedido')
+        .select('pedido_id, quantidade')
+        .in('pedido_id', todosPedidoIds);
+
+      if (item.variacao_id) {
+        itensQuery = itensQuery.eq('variacao_id', item.variacao_id);
+      } else if (item.produto_id) {
+        itensQuery = itensQuery.eq('produto_id', item.produto_id).is('variacao_id', null);
+      }
+
+      const { data: itensData, error: itensErr } = await itensQuery;
+      if (itensErr) throw itensErr;
+
+      const pedidoIdsComItem = new Set((itensData || []).map((i: any) => i.pedido_id));
+      if (!pedidoIdsComItem.size) {
+        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+        return;
+      }
+
+      // 3. Monta mapa de quantidades e cruza com pedidos
+      const quantMap = new Map<string, number>();
+      (itensData || []).forEach((i: any) => {
+        quantMap.set(i.pedido_id, (quantMap.get(i.pedido_id) || 0) + Number(i.quantidade || 0));
+      });
+
+      const pedidosComQtd = (pedidosData || [])
+        .filter((p: any) => pedidoIdsComItem.has(p.id))
+        .map((p: any) => ({
+          ...p,
+          quantidade_item: quantMap.get(p.id) || 0,
+        }));
+
+      setProdutoPedidosModal((prev) => ({ ...prev, pedidos: pedidosComQtd, loading: false }));
+    } catch (err) {
+      console.error('Erro ao buscar pedidos do produto:', err);
+      setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+    }
+  };
+
+  const handleCopyPedidoId = (id: string) => {
+    navigator.clipboard.writeText(id).then(() => {
+      setCopiedPedidoId(id);
+      setTimeout(() => setCopiedPedidoId(null), 2000);
+    }).catch(() => {
+      toast({ title: 'Erro', description: 'Não foi possível copiar o ID', variant: 'destructive' });
+    });
   };
 
   const itemsByExternalId = useMemo(() => {
@@ -1247,19 +1349,26 @@ export function ProductionPage() {
         const now = new Date();
         // start = null para incluir 31+ dias sem limite inferior
         const end = endOfDay(now);
-        const [items, urg0, urg1, urg2] = await Promise.all([
+        const [items, com1_3, com3_5, com5plus, urg0, urg1, urg2] = await Promise.all([
           fetchProducaoItens({ start: null, end }),
+          fetchProducaoItensComercial({ faixa: 'r1_3' }),
+          fetchProducaoItensComercial({ faixa: 'r3_5' }),
+          fetchProducaoItensComercial({ faixa: 'r5_plus' }),
           fetchProducaoItensUrgentes({ diasParaEnvio: 0 }),
           fetchProducaoItensUrgentes({ diasParaEnvio: 1 }),
           fetchProducaoItensUrgentes({ diasParaEnvio: 2 }),
         ]);
         if (mounted) {
           setSummaryItems(items);
+          setComercialSummaryByRange({
+            r1_10: com1_3,
+            r11_20: com3_5,
+            r21_30: com5plus,
+          });
           setUrgentesSummaryByRange({
             r1_10: urg0,
             r11_20: urg1,
             r21_30: urg2,
-            r31_plus: [...urg0, ...urg1, ...urg2],
           });
         }
       } catch (err: any) {
@@ -1325,12 +1434,12 @@ export function ProductionPage() {
     const base: Record<SectionKey, Partial<Record<DateRangeKey, number>>> = {
       yampi:          { ...standardEmpty },
       mercado_livre:  { ...mlEmpty },
-      leads:          { ...standardEmpty },
-      urgentes:       { ...standardEmpty },
+      leads:          { r1_10: 0, r11_20: 0, r21_30: 0 },
+      urgentes:       { r1_10: 0, r11_20: 0, r21_30: 0 },
     };
 
     // Seções não-ML/urgentes: usar summaryItems + DATE_RANGES
-    for (const section of SECTION_CONFIGS.filter((s) => s.key !== 'mercado_livre' && s.key !== 'urgentes')) {
+    for (const section of SECTION_CONFIGS.filter((s) => s.key !== 'mercado_livre' && s.key !== 'urgentes' && s.key !== 'leads')) {
       for (const range of DATE_RANGES) {
         const filtered = summaryItems.filter(
           (item) => itemMatchesSection(item, section.key) && itemInRange(item, range, now),
@@ -1339,6 +1448,14 @@ export function ProductionPage() {
           (sum, item) => sum + Number(item.quantidade || 0), 0,
         );
       }
+    }
+
+    // Comercial: usar RPC dedicada por faixa
+    for (const range of COMERCIAL_DATE_RANGES) {
+      const filtered = comercialSummaryByRange[range.key] || [];
+      base.leads[range.key] = filtered.reduce(
+        (sum, item) => sum + Number(item.quantidade || 0), 0,
+      );
     }
 
     // Urgentes: usar RPC dedicada por dias para envio
@@ -1358,7 +1475,7 @@ export function ProductionPage() {
     }
 
     return base;
-  }, [summaryItems, mlSummaryItems, urgentesSummaryByRange]);
+  }, [summaryItems, mlSummaryItems, comercialSummaryByRange, urgentesSummaryByRange]);
 
   const loadDropdownItems = async (section: SectionKey, range: DateRangeConfig) => {
     setLoadingByCard((prev) => ({
@@ -1375,24 +1492,21 @@ export function ProductionPage() {
 
       // Mercado Livre e Urgentes usam RPC dedicada
       const isMlSection = section === 'mercado_livre';
+      const isComercialSection = section === 'leads';
       const isUrgentesSection = section === 'urgentes';
       let filteredRows: ProducaoItem[] = [];
 
       if (isMlSection) {
         filteredRows = await fetchProducaoItensMl({ diasMin: range.minDaysAgo, diasMax: range.maxDaysAgo });
+      } else if (isComercialSection) {
+        const faixa = COMERCIAL_FAIXA_BY_RANGE[range.key];
+        if (faixa) {
+          filteredRows = await fetchProducaoItensComercial({ faixa });
+        }
       } else if (isUrgentesSection) {
-        if (range.key === 'r31_plus') {
-          const [urg0, urg1, urg2] = await Promise.all([
-            fetchProducaoItensUrgentes({ diasParaEnvio: 0 }),
-            fetchProducaoItensUrgentes({ diasParaEnvio: 1 }),
-            fetchProducaoItensUrgentes({ diasParaEnvio: 2 }),
-          ]);
-          filteredRows = [...urg0, ...urg1, ...urg2];
-        } else {
-          const day = URGENTES_DAY_BY_RANGE[range.key];
-          if (day !== undefined) {
-            filteredRows = await fetchProducaoItensUrgentes({ diasParaEnvio: day });
-          }
+        const day = URGENTES_DAY_BY_RANGE[range.key];
+        if (day !== undefined) {
+          filteredRows = await fetchProducaoItensUrgentes({ diasParaEnvio: day });
         }
       } else {
         const rawItems = await fetchProducaoItens({ start: bounds.start, end: bounds.end });
@@ -1465,7 +1579,13 @@ export function ProductionPage() {
 
     setExpandedBySection((prev) => ({ ...prev, [section]: rangeKey }));
 
-    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : section === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES;
+    const allRanges = section === 'mercado_livre'
+      ? ML_DATE_RANGES
+      : section === 'urgentes'
+      ? URGENTES_DATE_RANGES
+      : section === 'leads'
+      ? COMERCIAL_DATE_RANGES
+      : DATE_RANGES;
     const range = allRanges.find((r) => r.key === rangeKey);
     if (!range) return;
 
@@ -1477,7 +1597,13 @@ export function ProductionPage() {
 
     const orderIds = orderIdsCache[section]?.[rangeKey] || [];
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
-    const allRanges = section === 'mercado_livre' ? ML_DATE_RANGES : section === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES;
+    const allRanges = section === 'mercado_livre'
+      ? ML_DATE_RANGES
+      : section === 'urgentes'
+      ? URGENTES_DATE_RANGES
+      : section === 'leads'
+      ? COMERCIAL_DATE_RANGES
+      : DATE_RANGES;
     const rangeLabel = allRanges.find((item) => item.key === rangeKey)?.label || rangeKey;
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel}`);
@@ -1493,7 +1619,13 @@ export function ProductionPage() {
 
     const orderIds = overrideOrderIds ?? orderIdsCache[section]?.[rangeKey] ?? [];
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
-    const allRangesForProduct = section === 'mercado_livre' ? ML_DATE_RANGES : section === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES;
+    const allRangesForProduct = section === 'mercado_livre'
+      ? ML_DATE_RANGES
+      : section === 'urgentes'
+      ? URGENTES_DATE_RANGES
+      : section === 'leads'
+      ? COMERCIAL_DATE_RANGES
+      : DATE_RANGES;
     const rangeLabel = allRangesForProduct.find((item) => item.key === rangeKey)?.label || rangeKey;
     const productLabel = filter.nomeVariacao ? `${filter.nome} — ${filter.nomeVariacao}` : filter.nome;
 
@@ -1686,6 +1818,15 @@ export function ProductionPage() {
     setIdExternosProduzir(ids);
     setSelectedItemProduzir(item);
     setCopiedIdsProduzir(new Set());
+
+    // Abrir modal com relação de pedidos
+    fetchPedidosDoProduto({
+      produto_id: item.produtoId,
+      variacao_id: item.variacaoId || null,
+      nomeProduto: item.produtoNome,
+      nomeVariacao: item.variacaoNome || null,
+      imgUrl: pedidosComItem[0]?.img_url_variacao || pedidosComItem[0]?.img_url_produto || null,
+    });
   };
 
   const copyToClipboardProduzir = async (text: string) => {
@@ -1895,7 +2036,7 @@ export function ProductionPage() {
               <PlatformSection
                 key={section.key}
                 section={section}
-                ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : section.key === 'urgentes' ? URGENTES_DATE_RANGES : DATE_RANGES}
+                ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : section.key === 'urgentes' ? URGENTES_DATE_RANGES : section.key === 'leads' ? COMERCIAL_DATE_RANGES : DATE_RANGES}
                 totals={totalsBySection[section.key]}
                 expandedKey={expandedBySection[section.key]}
                 loadingByRange={loadingByCard[section.key]}
@@ -1914,7 +2055,7 @@ export function ProductionPage() {
                 {...(section.key === 'urgentes'
                   ? {
                       urgentesRawItems: urgentesRawByRange[expandedBySection['urgentes'] as DateRangeKey] ?? [],
-                      urgentesMainTab: urgentesMainTabByRange[expandedBySection['urgentes'] as DateRangeKey] ?? 'todos',
+                      urgentesMainTab: urgentesMainTabByRange[expandedBySection['urgentes'] as DateRangeKey] ?? 'comercial',
                       urgentesSubTab: urgentesSubTabByRange[expandedBySection['urgentes'] as DateRangeKey] ?? '',
                       onUrgentesMainTabChange: (tab: UrgenteMainTab) => {
                         const rk = expandedBySection['urgentes'];
@@ -1937,94 +2078,65 @@ export function ProductionPage() {
 
           <TabsContent value="itens" className="space-y-6">
             {loadingSummary ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Carregando itens...
+              <div className="flex gap-2 flex-wrap">
+                {[...Array(8)].map((_, i) => (
+                  <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
+                ))}
               </div>
             ) : summaryError ? (
               <div className="text-sm text-red-600">{summaryError}</div>
             ) : (
               <>
                 {(() => {
-                  const todasCategorias = getItensAgrupadosPorCategoria();
-                  const categoriasAgrupadas = ['Anéis de Leitura', 'Componentes', 'Outros Produtos'];
-                  const categoriasNormais = todasCategorias.filter(cat => !categoriasAgrupadas.includes(cat.categoria));
-                  const categoriasParaAgrupar = todasCategorias.filter(cat => categoriasAgrupadas.includes(cat.categoria));
-
-                  const renderProductCard = (item: ItemAgrupado, idx: number) => (
-                    <Card 
-                      key={idx} 
-                      className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
-                      onClick={() => handleItemClickProduzir({
-                        produtoId: item.produto_id || '',
-                        produtoNome: item.nome_produto,
-                        variacaoId: item.variacao_id || undefined,
-                        variacaoNome: item.nome_variacao || undefined,
-                      })}
-                    >
-                      <CardHeader className="pb-3">
-                        <div className="flex items-center gap-3">
-                          <div className="w-16 h-16 rounded-md bg-muted flex items-center justify-center overflow-hidden flex-shrink-0">
-                            {item.img_url ? (
-                              <img 
-                                src={item.img_url} 
-                                alt={item.nome_produto}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <span className="text-xs text-muted-foreground">Sem foto</span>
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <h3 className="font-semibold text-sm truncate">{item.nome_produto}</h3>
-                            {item.nome_variacao && (
-                              <p className="text-xs text-muted-foreground truncate">{item.nome_variacao}</p>
-                            )}
-                            <Badge variant="secondary" className="mt-1">
-                              {item.quantidade_total}×
-                            </Badge>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    </Card>
-                  );
-
+                  const todos = getItensAgrupadosPorProduto();
+                  if (todos.length === 0) {
+                    return <div className="text-sm text-muted-foreground">Nenhum item encontrado.</div>;
+                  }
                   return (
-                    <>
-                      {/* Categorias normais - cada uma em sua própria linha */}
-                      {categoriasNormais.map((categoriaData, catIdx) => (
-                        <div key={catIdx} className="space-y-3">
-                          <div className="flex items-center gap-2">
-                            <h3 className="font-bold text-lg text-foreground">{categoriaData.categoria}</h3>
-                            <Badge variant="outline" className="text-xs">
-                              {categoriaData.itens.reduce((acc, item) => acc + item.quantidade_total, 0)} unidades
-                            </Badge>
-                          </div>
-                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                            {categoriaData.itens.map((item, idx) => renderProductCard(item, idx))}
-                          </div>
+                    <div className="flex flex-wrap gap-2">
+                      {todos.map((item, idx) => (
+                        <div
+                          key={`${item.produto_id}-${item.variacao_id}-${idx}`}
+                          className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => handleItemClickProduzir({
+                            produtoId: item.produto_id || '',
+                            produtoNome: item.nome_produto,
+                            variacaoId: item.variacao_id || undefined,
+                            variacaoNome: item.nome_variacao || undefined,
+                          })}
+                        >
+                          {/* Badge de quantidade */}
+                          <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                            ×{item.quantidade_total}
+                          </span>
+
+                          {/* Imagem */}
+                          {item.img_url ? (
+                            <img
+                              src={item.img_url}
+                              alt={item.nome_produto}
+                              className="h-14 w-14 rounded-md object-cover border"
+                            />
+                          ) : (
+                            <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                              sem foto
+                            </div>
+                          )}
+
+                          {/* Nome do produto */}
+                          <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                            {item.nome_produto}
+                          </p>
+
+                          {/* Variação */}
+                          {item.nome_variacao && (
+                            <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
+                              {item.nome_variacao}
+                            </p>
+                          )}
                         </div>
                       ))}
-
-                      {/* Categorias agrupadas - todas na mesma linha */}
-                      {categoriasParaAgrupar.length > 0 && (
-                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                          {categoriasParaAgrupar.map((categoriaData, catIdx) => (
-                            <div key={catIdx} className="space-y-3">
-                              <div className="flex items-center gap-2">
-                                <h3 className="font-bold text-base text-foreground">{categoriaData.categoria}</h3>
-                                <Badge variant="outline" className="text-xs">
-                                  {categoriaData.itens.reduce((acc, item) => acc + item.quantidade_total, 0)} un
-                                </Badge>
-                              </div>
-                              <div className="space-y-2">
-                                {categoriaData.itens.map((item, idx) => renderProductCard(item, idx))}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </>
+                    </div>
                   );
                 })()}
               </>
@@ -2524,6 +2636,84 @@ export function ProductionPage() {
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Pedidos do Produto (relação) */}
+      <Dialog open={produtoPedidosModal.open} onOpenChange={(open) => { if (!open) setProdutoPedidosModal((prev) => ({ ...prev, open: false })); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              <div className="flex items-center gap-3">
+                {produtoPedidosModal.item?.imgUrl ? (
+                  <img src={produtoPedidosModal.item.imgUrl} alt="" className="h-10 w-10 rounded-lg object-cover border flex-shrink-0" />
+                ) : (
+                  <div className="h-10 w-10 rounded-lg border bg-muted flex-shrink-0" />
+                )}
+                <div className="leading-tight">
+                  <div className="text-base font-semibold">{produtoPedidosModal.item?.nomeProduto}</div>
+                  {produtoPedidosModal.item?.nomeVariacao && (
+                    <div className="text-sm font-normal text-muted-foreground">{produtoPedidosModal.item.nomeVariacao}</div>
+                  )}
+                </div>
+              </div>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="py-2">
+            {produtoPedidosModal.loading ? (
+              <div className="space-y-2">
+                {[...Array(3)].map((_, i) => (
+                  <div key={i} className="h-12 rounded-lg bg-muted/40 animate-pulse" />
+                ))}
+              </div>
+            ) : produtoPedidosModal.pedidos.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">Nenhum pedido encontrado para este produto.</p>
+            ) : (
+              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                <p className="text-xs text-muted-foreground mb-3">{produtoPedidosModal.pedidos.length} pedido(s) com este produto</p>
+                {produtoPedidosModal.pedidos.map((p: any) => (
+                  <div key={p.id} className="flex items-center justify-between rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {p.plataformas?.img_url ? (
+                        <img src={p.plataformas.img_url} alt={p.plataformas.nome} className="h-6 w-6 rounded object-cover flex-shrink-0" />
+                      ) : (
+                        <div className="h-6 w-6 rounded bg-muted flex-shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-sm font-medium truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPedidoId(p.id_externo || p.id)}
+                            className="text-muted-foreground hover:text-foreground transition-colors"
+                            title="Copiar ID"
+                          >
+                            {copiedPedidoId === (p.id_externo || p.id) ? (
+                              <Check className="h-3.5 w-3.5 text-green-500" />
+                            ) : (
+                              <Copy className="h-3.5 w-3.5" />
+                            )}
+                          </button>
+                        </div>
+                        {p.plataformas?.nome && (
+                          <div className="text-[10px] text-muted-foreground">{p.plataformas.nome}</div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {p.urgente && (
+                        <span className="text-[10px] font-semibold text-red-500 uppercase">Urgente</span>
+                      )}
+                      <span className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs px-2 py-0.5 min-w-[1.5rem]">
+                        ×{p.quantidade_item}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>
