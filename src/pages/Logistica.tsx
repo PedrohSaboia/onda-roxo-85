@@ -131,7 +131,7 @@ export function Logistica() {
   const [platformOrderItems, setPlatformOrderItems] = useState<Record<string, any[]>>({});
   const PLATFORM_PAGE_SIZE = 4;
   const [platformPage, setPlatformPage] = useState<Record<string, number>>({});
-  const [topSectionTab, setTopSectionTab] = useState<'produtos' | 'incomuns'>('produtos');
+  const [comumPedidos, setComumPedidos] = useState<any[]>([]);
   const [incomumPedidos, setIncomumPedidos] = useState<any[]>([]);
   const [filterPlataformaId, setFilterPlataformaId] = useState('');
   const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState('');
@@ -719,9 +719,13 @@ export function Logistica() {
       if (pedidoIds.length > 0) {
         pedidosDetalhados = await fetchPedidosPorIds(pedidoIds);
       }
+      const pedidosComuns = sortPedidos(
+        (pedidosDetalhados || []).filter((p: any) => getPedidoType(p) === 'comum'),
+      );
       const pedidosIncomuns = sortPedidos(
         (pedidosDetalhados || []).filter((p: any) => getPedidoType(p) === 'incomum'),
       );
+      setComumPedidos(pedidosComuns);
       setIncomumPedidos(pedidosIncomuns);
       if (pedidosIncomuns.length > 0) {
         try {
@@ -968,13 +972,7 @@ export function Logistica() {
     if (!itens.length) return 'comum';
 
     const totalUnidades = itens.reduce((acc: number, it: any) => acc + Math.max(1, Number(it?.quantidade ?? 1)), 0);
-    const referencias = new Set(
-      itens.map((it: any) => String(it?.variacao_id || it?.produto_id || it?.id || 'sem-ref')),
-    );
-
-    const maisDeDoisItens = totalUnidades > 2;
-    const doisIguais = totalUnidades === 2 && referencias.size === 1;
-    return (maisDeDoisItens || doisIguais) ? 'incomum' : 'comum';
+    return totalUnidades > 2 ? 'incomum' : 'comum';
   };
 
   const getPedidoCaseItems = (pedido: any): Array<{ key: string; nome: string; quantidade: number; imgUrl: string | null }> => {
@@ -1004,6 +1002,24 @@ export function Logistica() {
   const items = foundPedido?.itens_pedido || [];
   const allItemsBipado = items.length > 0 && items.every((it: any) => isItemFullyScanned(it));
   const filteredLogItems = logItems;
+  const comumCaseGroups = (() => {
+    const groups = new Map<string, { signature: string; pedidos: any[]; label: string; totalUnidades: number; imgUrl: string | null }>();
+    (comumPedidos || []).forEach((pedido: any) => {
+      const caseItems = getPedidoCaseItems(pedido);
+      const signature = getPedidoCaseSignature(pedido);
+      const label = caseItems.map((it) => `${it.quantidade}x ${it.nome}`).join(' + ') || 'Caso comum';
+      const totalUnidades = caseItems.reduce((acc, it) => acc + it.quantidade, 0);
+      const imgUrl = caseItems[0]?.imgUrl || null;
+      const existing = groups.get(signature);
+      if (existing) {
+        existing.pedidos.push(pedido);
+      } else {
+        groups.set(signature, { signature, pedidos: [pedido], label, totalUnidades, imgUrl });
+      }
+    });
+    return Array.from(groups.values()).sort((a, b) => b.pedidos.length - a.pedidos.length);
+  })();
+
   const incomumCaseGroups = (() => {
     const groups = new Map<string, { signature: string; pedidos: any[]; label: string; totalUnidades: number; imgUrl: string | null }>();
     (incomumPedidos || []).forEach((pedido: any) => {
@@ -1697,48 +1713,23 @@ export function Logistica() {
             {/* Seção: Produtos a Embalar */}
             <div className="mb-5">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setTopSectionTab('produtos')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                      topSectionTab === 'produtos'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
-                  >
-                    Produtos a embalar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTopSectionTab('incomuns')}
-                    className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
-                      topSectionTab === 'incomuns'
-                        ? 'bg-primary text-primary-foreground'
-                        : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                    }`}
-                  >
-                    Pacotes incomuns
-                  </button>
-                </div>
+                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PRODUTOS A EMBALAR</h3>
                 <span className="text-sm text-muted-foreground">
-                  {topSectionTab === 'produtos'
-                    ? (loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`)
-                    : `${incomumCaseGroups.length} caso(s) incomum(ns)`}
+                  {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
                 </span>
               </div>
 
-              {topSectionTab === 'produtos' && loadingLogItems ? (
+              {loadingLogItems ? (
                 <div className="flex gap-2 flex-wrap">
                   {[...Array(5)].map((_, i) => (
                     <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
                   ))}
                 </div>
-              ) : topSectionTab === 'produtos' && logItemsError ? (
+              ) : logItemsError ? (
                 <div className="text-sm text-red-500">Erro ao carregar produtos: {logItemsError}</div>
-              ) : topSectionTab === 'produtos' && filteredLogItems.length === 0 ? (
+              ) : filteredLogItems.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
-              ) : topSectionTab === 'produtos' ? (
+              ) : (
                 <div className="flex flex-wrap gap-2">
                   {filteredLogItems
                     .slice()
@@ -1755,12 +1746,10 @@ export function Logistica() {
                           className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
                           onClick={() => fetchPedidosDoProduto({ produto_id: item.produto_id, variacao_id: item.variacao_id, nomeProduto, nomeVariacao, imgUrl })}
                         >
-                          {/* Badge de quantidade */}
                           <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
                             ×{item.quantidade_total}
                           </span>
 
-                          {/* Imagem */}
                           {imgUrl ? (
                             <img
                               src={imgUrl}
@@ -1773,19 +1762,16 @@ export function Logistica() {
                             </div>
                           )}
 
-                          {/* Nome do produto */}
                           <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
                             {nomeProduto}
                           </p>
 
-                          {/* Variação */}
                           {nomeVariacao && (
                             <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
                               {nomeVariacao}
                             </p>
                           )}
 
-                          {/* SKU */}
                           {sku && (
                             <span className="text-[9px] font-mono text-muted-foreground/70 truncate w-full text-center">
                               {sku}
@@ -1795,7 +1781,74 @@ export function Logistica() {
                       );
                     })}
                 </div>
-              ) : incomumCaseGroups.length === 0 ? (
+              )}
+            </div>
+
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PACOTES COMUNS</h3>
+              <span className="text-sm text-muted-foreground">{comumCaseGroups.length} caso(s) comum(ns)</span>
+            </div>
+
+            {comumCaseGroups.length === 0 ? (
+              <div className="text-sm text-muted-foreground">Nenhum pedido comum encontrado.</div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {comumCaseGroups.map((caseGroup: any) => {
+                  const nomePreview = caseGroup.label;
+                  const imgPreview = caseGroup.imgUrl;
+
+                  return (
+                    <div
+                      key={caseGroup.signature}
+                      className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                      onClick={() => {
+                        const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
+                        setModoListaPorPlataforma(true);
+                        setFilterPlataformaId('');
+                        setPedidosFiltrados(groupedPedidos);
+                        setPedidoAtualIndex(0);
+                        setFoundPedido(groupedPedidos[0] || null);
+                        setFoundItemScans({});
+                        setItemInputs({});
+                        setItemStatus({});
+                        setTimeout(() => barcodeRef.current?.focus(), 50);
+                      }}
+                    >
+                      <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                        ×{caseGroup.pedidos.length}
+                      </span>
+
+                      {imgPreview ? (
+                        <img
+                          src={imgPreview}
+                          alt={nomePreview}
+                          className="h-14 w-14 rounded-md object-cover border"
+                        />
+                      ) : (
+                        <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                          sem foto
+                        </div>
+                      )}
+
+                      <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                        {nomePreview}
+                      </p>
+                      <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                        {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PACOTES INCOMUNS</h3>
+                <span className="text-sm text-muted-foreground">{incomumCaseGroups.length} caso(s) incomum(ns)</span>
+              </div>
+
+              {incomumCaseGroups.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Nenhum pedido incomum encontrado.</div>
               ) : (
                 <div className="flex flex-wrap gap-2">
@@ -1849,211 +1902,213 @@ export function Logistica() {
               )}
             </div>
 
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>ITENS A ENVIAR</h3>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
-                          <RefreshCw className="h-4 w-4" />
-                          Atualizar
-                        </Button>
-                      </div>
-            </div>
-
-            {loadingPlataformaCards ? (
-              <div className="text-sm text-muted-foreground">Carregando plataformas...</div>
-            ) : plataformasCards.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
-            ) : (
-              <div className={`grid grid-cols-1 sm:grid-cols-2 ${plataformasCards.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 w-full mx-auto`}>
-                {plataformasCards.map((pc) => {
-                  const currentPage = platformPage[pc.id] ?? 1;
-                  const totalPages = Math.max(1, Math.ceil((pc.pedidos?.length ?? 0) / PLATFORM_PAGE_SIZE));
-                  const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
-                  const pedidosPagina = (pc.pedidos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
-
-                  const handleGoToPage = (e: React.MouseEvent, page: number) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (page < 1 || page > totalPages) return;
-                    setPlatformPage((s) => ({ ...s, [pc.id]: page }));
-                  };
-
-                  const isSyntheticCard = pc.id === 'urgentes' || pc.id === 'leads';
-
-                  return (
-                  <Card
-                    key={pc.id}
-                    className="p-3 cursor-pointer select-none"
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      const next = openPlatformId === pc.id ? null : pc.id;
-                      setOpenPlatformId(next);
-                      if (next) {
-                        setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
-                        try {
-                          const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                          if (ids.length > 0) await fetchItemsForPedidoIds(ids);
-                        } catch (err) { console.error(err); }
-                      }
-                    }}
-                  >
-                    <CardContent className="flex items-center gap-3 p-0">
-                      <div className="w-7 h-7 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
-                        {pc.img_url ? (
-                          <img src={pc.img_url} alt={pc.nome} className="w-7 h-7 object-cover" />
-                        ) : pc.id === 'urgentes' ? (
-                          <TriangleAlert className="w-4 h-4 text-red-500" />
-                        ) : pc.id === 'leads' ? (
-                          <Users className="w-4 h-4 text-gray-600" />
-                        ) : (
-                          <FaBoxesStacked className="w-4 h-4 text-gray-500" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold text-sm">{pc.nome}</div>
-                        <div className="text-xs text-muted-foreground">{pc.count} pedido(s)</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          onClick={async (e) => {
-                            e.stopPropagation();
-                            setOpenPlatformId(null);
-                            if (isSyntheticCard) {
-                              setLoadingPedidosFiltrados(true);
-                              try {
-                                const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                                setModoListaPorPlataforma(true);
-                                setFilterPlataformaId('');
-                                setPedidosFiltrados(fullList);
-                                setPedidoAtualIndex(0);
-                                setFoundPedido(fullList[0] || null);
-                                setFoundItemScans({});
-                                setItemInputs({});
-                                setItemStatus({});
-                              } catch (err) {
-                                console.error('Erro ao buscar pedidos do card:', err);
-                              } finally {
-                                setLoadingPedidosFiltrados(false);
-                              }
-                            } else {
-                              setFilterPlataformaId(pc.id);
-                              try { await fetchPedidosPorPlataforma(pc.id); } catch (_) {}
-                            }
-                          }}
-                        >
-                          Enviar
-                        </Button>
-                        <div className="p-1.5" aria-hidden>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${openPlatformId === pc.id ? 'rotate-180' : ''}`} />
-                        </div>
-                      </div>
-                    </CardContent>
-
-                    {openPlatformId === pc.id && (
-                      <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
-                        {totalPages > 1 && (
-                          <div className="flex items-center justify-between mb-2 pb-2 border-b">
-                            <span className="text-sm text-muted-foreground">
-                              {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <button
-                                type="button"
-                                disabled={currentPage <= 1}
-                                onClick={(e) => handleGoToPage(e, currentPage - 1)}
-                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                              >
-                                ‹
-                              </button>
-                              <button
-                                type="button"
-                                disabled={currentPage >= totalPages}
-                                onClick={(e) => handleGoToPage(e, currentPage + 1)}
-                                className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                              >
-                                ›
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                        {pedidosPagina.length === 0 ? (
-                          <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
-                        ) : (
-                          <div className="space-y-2">
-                            {pedidosPagina.map((p: any) => {
-                              const items = platformOrderItems[p.id] || [];
-                              return (
-                                <div key={p.id} className="rounded border px-3 py-2.5">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                      <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
-                                      <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
-                                    </div>
-                                    <button
-                                      type="button"
-                                      className="text-sm text-primary underline-offset-4 hover:underline"
-                                      onClick={async (e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setOpenPlatformId(null);
-                                        if (isSyntheticCard) {
-                                          try {
-                                            const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                            const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                                            const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
-                                            setModoListaPorPlataforma(true);
-                                            setFilterPlataformaId('');
-                                            setPedidosFiltrados(fullList);
-                                            setPedidoAtualIndex(startIdx);
-                                            setFoundPedido(fullList[startIdx] || null);
-                                            setFoundItemScans({});
-                                            setItemInputs({});
-                                            setItemStatus({});
-                                            setTimeout(() => barcodeRef.current?.focus(), 50);
-                                          } catch (err) {
-                                            console.error('Erro ao buscar pedidos do card:', err);
-                                          }
-                                        } else {
-                                          targetPedidoIdRef.current = p.id;
-                                          setFilterPlataformaId(pc.id);
-                                        }
-                                      }}
-                                    >
-                                      Abrir
-                                    </button>
-                                  </div>
-                                  {items.length > 0 && (
-                                    <div className="flex flex-wrap gap-2 border-t mt-2 pt-2">
-                                      {items.map((item: any, idx: number) => (
-                                        <div key={idx} className="flex flex-col items-center gap-1 max-w-[60px]">
-                                          {item.img_url ? (
-                                            <img src={item.img_url} alt={item.nome || ''} className="h-12 w-12 rounded object-cover border" />
-                                          ) : (
-                                            <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">sem foto</div>
-                                          )}
-                                          <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
-                                          {(item.quantidade ?? 1) > 1 && (
-                                            <span className="text-[10px] font-semibold text-muted-foreground">×{item.quantidade}</span>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </Card>
-                  );
-                })}
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>ITENS A ENVIAR</h3>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4" />
+                    Atualizar
+                  </Button>
+                </div>
               </div>
-            )}
+
+              {loadingPlataformaCards ? (
+                <div className="text-sm text-muted-foreground">Carregando plataformas...</div>
+              ) : plataformasCards.length === 0 ? (
+                <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
+              ) : (
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${plataformasCards.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 w-full mx-auto`}>
+                  {plataformasCards.map((pc) => {
+                    const currentPage = platformPage[pc.id] ?? 1;
+                    const totalPages = Math.max(1, Math.ceil((pc.pedidos?.length ?? 0) / PLATFORM_PAGE_SIZE));
+                    const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
+                    const pedidosPagina = (pc.pedidos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
+
+                    const handleGoToPage = (e: React.MouseEvent, page: number) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (page < 1 || page > totalPages) return;
+                      setPlatformPage((s) => ({ ...s, [pc.id]: page }));
+                    };
+
+                    const isSyntheticCard = pc.id === 'urgentes' || pc.id === 'leads';
+
+                    return (
+                    <Card
+                      key={pc.id}
+                      className="p-3 cursor-pointer select-none"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        const next = openPlatformId === pc.id ? null : pc.id;
+                        setOpenPlatformId(next);
+                        if (next) {
+                          setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
+                          try {
+                            const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                            if (ids.length > 0) await fetchItemsForPedidoIds(ids);
+                          } catch (err) { console.error(err); }
+                        }
+                      }}
+                    >
+                      <CardContent className="flex items-center gap-3 p-0">
+                        <div className="w-7 h-7 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                          {pc.img_url ? (
+                            <img src={pc.img_url} alt={pc.nome} className="w-7 h-7 object-cover" />
+                          ) : pc.id === 'urgentes' ? (
+                            <TriangleAlert className="w-4 h-4 text-red-500" />
+                          ) : pc.id === 'leads' ? (
+                            <Users className="w-4 h-4 text-gray-600" />
+                          ) : (
+                            <FaBoxesStacked className="w-4 h-4 text-gray-500" />
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <div className="font-semibold text-sm">{pc.nome}</div>
+                          <div className="text-xs text-muted-foreground">{pc.count} pedido(s)</div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setOpenPlatformId(null);
+                              if (isSyntheticCard) {
+                                setLoadingPedidosFiltrados(true);
+                                try {
+                                  const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                  const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                  setModoListaPorPlataforma(true);
+                                  setFilterPlataformaId('');
+                                  setPedidosFiltrados(fullList);
+                                  setPedidoAtualIndex(0);
+                                  setFoundPedido(fullList[0] || null);
+                                  setFoundItemScans({});
+                                  setItemInputs({});
+                                  setItemStatus({});
+                                } catch (err) {
+                                  console.error('Erro ao buscar pedidos do card:', err);
+                                } finally {
+                                  setLoadingPedidosFiltrados(false);
+                                }
+                              } else {
+                                setFilterPlataformaId(pc.id);
+                                try { await fetchPedidosPorPlataforma(pc.id); } catch (_) {}
+                              }
+                            }}
+                          >
+                            Enviar
+                          </Button>
+                          <div className="p-1.5" aria-hidden>
+                            <ChevronDown className={`h-4 w-4 transition-transform ${openPlatformId === pc.id ? 'rotate-180' : ''}`} />
+                          </div>
+                        </div>
+                      </CardContent>
+
+                      {openPlatformId === pc.id && (
+                        <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
+                          {totalPages > 1 && (
+                            <div className="flex items-center justify-between mb-2 pb-2 border-b">
+                              <span className="text-sm text-muted-foreground">
+                                {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={currentPage <= 1}
+                                  onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                  className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                >
+                                  ‹
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={currentPage >= totalPages}
+                                  onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                  className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                >
+                                  ›
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {pedidosPagina.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
+                          ) : (
+                            <div className="space-y-2">
+                              {pedidosPagina.map((p: any) => {
+                                const items = platformOrderItems[p.id] || [];
+                                return (
+                                  <div key={p.id} className="rounded border px-3 py-2.5">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                                        <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        className="text-sm text-primary underline-offset-4 hover:underline"
+                                        onClick={async (e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setOpenPlatformId(null);
+                                          if (isSyntheticCard) {
+                                            try {
+                                              const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                              const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                              const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
+                                              setModoListaPorPlataforma(true);
+                                              setFilterPlataformaId('');
+                                              setPedidosFiltrados(fullList);
+                                              setPedidoAtualIndex(startIdx);
+                                              setFoundPedido(fullList[startIdx] || null);
+                                              setFoundItemScans({});
+                                              setItemInputs({});
+                                              setItemStatus({});
+                                              setTimeout(() => barcodeRef.current?.focus(), 50);
+                                            } catch (err) {
+                                              console.error('Erro ao buscar pedidos do card:', err);
+                                            }
+                                          } else {
+                                            targetPedidoIdRef.current = p.id;
+                                            setFilterPlataformaId(pc.id);
+                                          }
+                                        }}
+                                      >
+                                        Abrir
+                                      </button>
+                                    </div>
+                                    {items.length > 0 && (
+                                      <div className="flex flex-wrap gap-2 border-t mt-2 pt-2">
+                                        {items.map((item: any, idx: number) => (
+                                          <div key={idx} className="flex flex-col items-center gap-1 max-w-[60px]">
+                                            {item.img_url ? (
+                                              <img src={item.img_url} alt={item.nome || ''} className="h-12 w-12 rounded object-cover border" />
+                                            ) : (
+                                              <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">sem foto</div>
+                                            )}
+                                            <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
+                                            {(item.quantidade ?? 1) > 1 && (
+                                              <span className="text-[10px] font-semibold text-muted-foreground">×{item.quantidade}</span>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </Card>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
 
           </div>
         )}
