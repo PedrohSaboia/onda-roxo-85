@@ -232,6 +232,7 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
 export default function Pedido() {
   const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
   const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+  const ETIQUETA_PENDENTE_ID = '0c0ff1fc-1c3b-4eff-9dec-a505d33f3e18';
 
   const { id } = useParams();
   const navigate = useNavigate();
@@ -396,7 +397,6 @@ export default function Pedido() {
     if (!pedido || pedido.pedido_liberado) return;
     
     try {
-      const statusAtualId = pedido?.status?.id || pedido?.status_id || null;
       // Get count of items in this order
       const totalItens = (pedido.itens || []).length;
       
@@ -407,20 +407,17 @@ export default function Pedido() {
           // Only 1 up_cell product and it's being resolved - liberate now
           const { error } = await supabase
             .from('pedidos')
-            .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() })
+            .update({
+              pedido_liberado: true,
+              status_id: LOGISTICA_STATUS_ID,
+              etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
+              atualizado_em: new Date().toISOString()
+            })
             .eq('id', pedido.id);
           
           if (error) throw error;
 
-          if (statusAtualId) {
-            const { error: keepStatusError } = await supabase
-              .from('pedidos')
-              .update({ status_id: statusAtualId, atualizado_em: new Date().toISOString() } as any)
-              .eq('id', pedido.id);
-            if (keepStatusError) throw keepStatusError;
-          }
-          
-          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (up-sell resolvido)');
+          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (up-sell resolvido), enviado para Logística e etiqueta Pendente');
           toast({ title: 'Pedido liberado automaticamente', description: 'Produto de up-sell foi resolvido' });
           return;
         }
@@ -461,20 +458,17 @@ export default function Pedido() {
           // Auto-liberate the order
           const { error } = await supabase
             .from('pedidos')
-            .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() })
+            .update({
+              pedido_liberado: true,
+              status_id: LOGISTICA_STATUS_ID,
+              etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
+              atualizado_em: new Date().toISOString()
+            })
             .eq('id', pedido.id);
           
           if (error) throw error;
 
-          if (statusAtualId) {
-            const { error: keepStatusError } = await supabase
-              .from('pedidos')
-              .update({ status_id: statusAtualId, atualizado_em: new Date().toISOString() } as any)
-              .eq('id', pedido.id);
-            if (keepStatusError) throw keepStatusError;
-          }
-          
-          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (todos up-sell resolvidos)');
+          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (todos up-sell resolvidos), enviado para Logística e etiqueta Pendente');
           toast({ title: 'Pedido liberado automaticamente', description: 'Todos os produtos de up-sell foram resolvidos' });
         }
       }
@@ -1631,7 +1625,6 @@ export default function Pedido() {
             <Button
               onClick={async () => {
                 if (!pedido) return;
-                const statusAtualId = pedido?.status?.id || pedido?.status_id || null;
                 
                 // Check for pending up-sell products (status_up_sell === 1 or null for up_cell products)
                 const pendingProducts = (pedido.itens || []).filter((it: any) => {
@@ -1649,21 +1642,18 @@ export default function Pedido() {
                   setLiberando(true);
                   const { error } = await supabase
                     .from('pedidos')
-                    .update({ pedido_liberado: true, atualizado_em: new Date().toISOString() } as any)
+                    .update({
+                      pedido_liberado: true,
+                      status_id: LOGISTICA_STATUS_ID,
+                      etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
+                      atualizado_em: new Date().toISOString()
+                    } as any)
                     .eq('id', pedido.id);
                   if (error) throw error;
 
-                  if (statusAtualId) {
-                    const { error: keepStatusError } = await supabase
-                      .from('pedidos')
-                      .update({ status_id: statusAtualId, atualizado_em: new Date().toISOString() } as any)
-                      .eq('id', pedido.id);
-                    if (keepStatusError) throw keepStatusError;
-                  }
-
-                  await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado manualmente');
+                  await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado manualmente, enviado para Logística e etiqueta Pendente');
                   // update local state so button disappears
-                  setPedido((p: any) => ({ ...p, pedido_liberado: true }));
+                  setPedido((p: any) => ({ ...p, pedido_liberado: true, status_id: LOGISTICA_STATUS_ID, etiqueta_envio_id: ETIQUETA_PENDENTE_ID }));
                   toast({ title: 'Pedido liberado', description: 'Pedido liberado com sucesso' });
                 } catch (err: any) {
                   console.error('Erro ao liberar pedido:', err);
