@@ -3,7 +3,6 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ChevronDown, Loader2, TriangleAlert, List, X, Search, Printer, Truck, PackageCheck, CheckSquare, Users, CheckCircle2, XCircle, Clock, Copy, Check } from 'lucide-react';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -688,15 +687,26 @@ export function ProductionPage() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [platformImages, setPlatformImages] = useState<Record<string, string | null>>({});
 
-  // Estados para a aba "Itens a produzir"
-  const [selectedItemProduzir, setSelectedItemProduzir] = useState<{
-    produtoId: string;
-    variacaoId?: string;
-    produtoNome: string;
-    variacaoNome?: string;
-  } | null>(null);
-  const [idExternosProduzir, setIdExternosProduzir] = useState<string[]>([]);
-  const [copiedIdsProduzir, setCopiedIdsProduzir] = useState<Set<string>>(new Set());
+  // Estados para cards de produto-mãe (na aba principal)
+  type VariacaoResumo = {
+    variacao_id: string | null;
+    nome_variacao: string | null;
+    img_url: string | null;
+    quantidade_total: number;
+  };
+
+  type ProdutoMaeResumo = {
+    produto_id: string;
+    nome_produto: string;
+    img_url: string | null;
+    quantidade_total: number;
+    variacoes: VariacaoResumo[];
+  };
+
+  const [produtoVariacoesModal, setProdutoVariacoesModal] = useState<{
+    open: boolean;
+    produto: ProdutoMaeResumo | null;
+  }>({ open: false, produto: null });
 
   const [expandedBySection, setExpandedBySection] = useState<Record<SectionKey, DateRangeKey | null>>({
     yampi: null,
@@ -1691,68 +1701,49 @@ export function ProductionPage() {
   };
 
   // ============================================
-  // FUNÇÕES PARA ABA "ITENS A PRODUZIR"
+  // FUNÇÕES PARA CARDS DE PRODUTO-MÃE
   // ============================================
   
-  type ItemAgrupado = {
-    produto_id: string | null;
-    variacao_id: string | null;
-    nome_produto: string;
-    nome_variacao: string | null;
-    img_url: string | null;
-    quantidade_total: number;
-  };
 
-  type CategoriaItens = {
-    categoria: string;
-    itens: ItemAgrupado[];
-  };
-
-  const categorizarProduto = (nomeProduto: string): string => {
-    const nomeNormalizado = nomeProduto.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    
-    if (nomeNormalizado.includes('organizador') || nomeNormalizado.includes('adega')) {
-      return 'Organizadores';
-    }
-    if (nomeNormalizado.includes('livraria') || nomeNormalizado.includes('estante') || nomeNormalizado.includes('prateleira')) {
-      return 'Livrarias e Estantes';
-    }
-    if (nomeNormalizado.includes('suporte')) {
-      return 'Suportes';
-    }
-    if (nomeNormalizado.includes('sapateira')) {
-      return 'Sapateiras';
-    }
-    if (nomeNormalizado.includes('anel')) {
-      return 'Anéis de Leitura';
-    }
-    if (nomeNormalizado.includes('vitrine') || nomeNormalizado.includes('componente')) {
-      return 'Componentes';
-    }
-    
-    return 'Outros Produtos';
-  };
-
-  const getItensAgrupadosPorProduto = (): ItemAgrupado[] => {
-    // Combinar summaryItems e mlSummaryItems
+  const getProdutosMaeAgrupados = (): ProdutoMaeResumo[] => {
     const allItems = [...summaryItems, ...mlSummaryItems];
-    
-    const agrupamentoPorProduto = new Map<string, ItemAgrupado>();
+    const produtosMap = new Map<string, ProdutoMaeResumo>();
 
     for (const item of allItems) {
       if (!item.produto_id) continue;
-      
-      const key = `${item.produto_id ?? 'null'}::${item.variacao_id ?? 'null'}`;
+
       const qty = Number(item.quantidade || 0);
-      
-      const current = agrupamentoPorProduto.get(key);
-      if (current) {
-        current.quantidade_total += qty;
-      } else {
-        agrupamentoPorProduto.set(key, {
+      const produtoAtual = produtosMap.get(item.produto_id);
+
+      if (!produtoAtual) {
+        produtosMap.set(item.produto_id, {
           produto_id: item.produto_id,
-          variacao_id: item.variacao_id,
           nome_produto: item.nome_produto || 'Produto sem nome',
+          img_url: item.img_url_produto || item.img_url_variacao || null,
+          quantidade_total: qty,
+          variacoes: [
+            {
+              variacao_id: item.variacao_id,
+              nome_variacao: item.nome_variacao ?? null,
+              img_url: item.img_url_variacao || item.img_url_produto || null,
+              quantidade_total: qty,
+            },
+          ],
+        });
+        continue;
+      }
+
+      produtoAtual.quantidade_total += qty;
+      if (!produtoAtual.img_url) {
+        produtoAtual.img_url = item.img_url_produto || item.img_url_variacao || null;
+      }
+
+      const variacaoIdx = produtoAtual.variacoes.findIndex((v) => v.variacao_id === item.variacao_id);
+      if (variacaoIdx >= 0) {
+        produtoAtual.variacoes[variacaoIdx].quantidade_total += qty;
+      } else {
+        produtoAtual.variacoes.push({
+          variacao_id: item.variacao_id,
           nome_variacao: item.nome_variacao ?? null,
           img_url: item.img_url_variacao || item.img_url_produto || null,
           quantidade_total: qty,
@@ -1760,114 +1751,27 @@ export function ProductionPage() {
       }
     }
 
-    return Array.from(agrupamentoPorProduto.values())
+    return Array.from(produtosMap.values())
+      .map((produto) => ({
+        ...produto,
+        variacoes: produto.variacoes.sort((a, b) => b.quantidade_total - a.quantidade_total),
+      }))
       .sort((a, b) => b.quantidade_total - a.quantidade_total);
   };
 
-  const getItensAgrupadosPorCategoria = (): CategoriaItens[] => {
-    const itens = getItensAgrupadosPorProduto();
-    const categorias = new Map<string, ItemAgrupado[]>();
-
-    // Agrupar por categoria
-    for (const item of itens) {
-      const categoria = categorizarProduto(item.nome_produto);
-      const existing = categorias.get(categoria) ?? [];
-      existing.push(item);
-      categorias.set(categoria, existing);
-    }
-
-    // Converter para array e ordenar categorias
-    const ordensCategorias = ['Organizadores', 'Livrarias e Estantes', 'Suportes', 'Sapateiras', 'Anéis de Leitura', 'Componentes', 'Outros Produtos'];
-    
-    return ordensCategorias
-      .filter(cat => categorias.has(cat))
-      .map(cat => ({
-        categoria: cat,
-        itens: categorias.get(cat)!.sort((a, b) => b.quantidade_total - a.quantidade_total)
-      }));
+  const handleProdutoMaeClick = (produto: ProdutoMaeResumo) => {
+    setProdutoVariacoesModal({ open: true, produto });
   };
 
-  const handleItemClickProduzir = (item: {
-    produtoId: string;
-    produtoNome: string;
-    variacaoId?: string;
-    variacaoNome?: string;
-  }) => {
-    const allItems = [...summaryItems, ...mlSummaryItems];
-    
-    // Buscar todos os pedidos que contêm este item
-    const pedidosComItem = allItems.filter((i) => {
-      if (!i.produto_id) return false;
-      const matchProduto = i.produto_id === item.produtoId;
-      
-      if (item.variacaoId) {
-        return matchProduto && i.variacao_id === item.variacaoId;
-      } else {
-        return matchProduto && !i.variacao_id;
-      }
+  const handleSelectVariacao = (produto: ProdutoMaeResumo, variacao: VariacaoResumo) => {
+    setProdutoVariacoesModal({ open: false, produto: null });
+    void fetchPedidosDoProduto({
+      produto_id: produto.produto_id,
+      variacao_id: variacao.variacao_id,
+      nomeProduto: produto.nome_produto,
+      nomeVariacao: variacao.nome_variacao,
+      imgUrl: variacao.img_url || produto.img_url,
     });
-
-    const ids = Array.from(
-      new Set(
-        pedidosComItem
-          .map((p) => p.id_externo)
-          .filter((id): id is string => !!id && id.trim().length > 0)
-      )
-    ).sort();
-
-    setIdExternosProduzir(ids);
-    setSelectedItemProduzir(item);
-    setCopiedIdsProduzir(new Set());
-
-    // Abrir modal com relação de pedidos
-    fetchPedidosDoProduto({
-      produto_id: item.produtoId,
-      variacao_id: item.variacaoId || null,
-      nomeProduto: item.produtoNome,
-      nomeVariacao: item.variacaoNome || null,
-      imgUrl: pedidosComItem[0]?.img_url_variacao || pedidosComItem[0]?.img_url_produto || null,
-    });
-  };
-
-  const copyToClipboardProduzir = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedIdsProduzir((prev) => new Set(prev).add(text));
-      setTimeout(() => {
-        setCopiedIdsProduzir((prev) => {
-          const newSet = new Set(prev);
-          newSet.delete(text);
-          return newSet;
-        });
-      }, 2000);
-      toast({
-        title: 'Copiado!',
-        description: `ID ${text} copiado para a área de transferência`,
-      });
-    } catch (err) {
-      toast({
-        title: 'Erro ao copiar',
-        description: 'Não foi possível copiar o ID',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const copyAllIdsProduzir = async () => {
-    const allIds = idExternosProduzir.join('\n');
-    try {
-      await navigator.clipboard.writeText(allIds);
-      toast({
-        title: 'Copiado!',
-        description: `${idExternosProduzir.length} IDs copiados para a área de transferência`,
-      });
-    } catch (err) {
-      toast({
-        title: 'Erro ao copiar',
-        description: 'Não foi possível copiar os IDs',
-        variant: 'destructive',
-      });
-    }
   };
 
   return (
@@ -1894,13 +1798,7 @@ export function ProductionPage() {
           </div>
         </div>
 
-        <Tabs defaultValue="plataformas" className="space-y-4">
-          <TabsList className="grid w-full grid-cols-2 max-w-md">
-            <TabsTrigger value="plataformas">Pedidos Plataformas</TabsTrigger>
-            <TabsTrigger value="itens">Itens a produzir</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="plataformas" className="space-y-4">
+        <div className="space-y-4">
           {/* Busca rápida por ID do pedido */}
           <div className="flex flex-col gap-2 sm:w-80">
             <div className="flex gap-2">
@@ -2032,6 +1930,57 @@ export function ProductionPage() {
 
         {!loadingSummary && !summaryError && !(pageSearchResult && pageSearchResult !== 'not_found' && pageSearchResult !== 'already_processed') && (
           <div className="space-y-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Itens a produzir</CardTitle>
+                <p className="text-xs text-muted-foreground">Clique no produto-mãe para escolher a variação e visualizar a quantidade.</p>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const produtosMae = getProdutosMaeAgrupados();
+                  if (produtosMae.length === 0) {
+                    return <div className="text-sm text-muted-foreground">Nenhum item encontrado.</div>;
+                  }
+                  return (
+                    <div className="flex flex-wrap gap-2">
+                      {produtosMae.map((produto, idx) => (
+                        <div
+                          key={`${produto.produto_id}-${idx}`}
+                          className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                          onClick={() => handleProdutoMaeClick(produto)}
+                          title="Selecionar variação"
+                        >
+                          <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                            ×{produto.quantidade_total}
+                          </span>
+
+                          {produto.img_url ? (
+                            <img
+                              src={produto.img_url}
+                              alt={produto.nome_produto}
+                              className="h-14 w-14 rounded-md object-cover border"
+                            />
+                          ) : (
+                            <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                              sem foto
+                            </div>
+                          )}
+
+                          <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                            {produto.nome_produto}
+                          </p>
+
+                          <p className="text-[9px] text-muted-foreground text-center leading-tight w-full">
+                            {produto.variacoes.length} variação(ões)
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+
             {SECTION_CONFIGS.map((section) => (
               <PlatformSection
                 key={section.key}
@@ -2074,75 +2023,7 @@ export function ProductionPage() {
             ))}
           </div>
         )}
-          </TabsContent>
-
-          <TabsContent value="itens" className="space-y-6">
-            {loadingSummary ? (
-              <div className="flex gap-2 flex-wrap">
-                {[...Array(8)].map((_, i) => (
-                  <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
-                ))}
-              </div>
-            ) : summaryError ? (
-              <div className="text-sm text-red-600">{summaryError}</div>
-            ) : (
-              <>
-                {(() => {
-                  const todos = getItensAgrupadosPorProduto();
-                  if (todos.length === 0) {
-                    return <div className="text-sm text-muted-foreground">Nenhum item encontrado.</div>;
-                  }
-                  return (
-                    <div className="flex flex-wrap gap-2">
-                      {todos.map((item, idx) => (
-                        <div
-                          key={`${item.produto_id}-${item.variacao_id}-${idx}`}
-                          className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => handleItemClickProduzir({
-                            produtoId: item.produto_id || '',
-                            produtoNome: item.nome_produto,
-                            variacaoId: item.variacao_id || undefined,
-                            variacaoNome: item.nome_variacao || undefined,
-                          })}
-                        >
-                          {/* Badge de quantidade */}
-                          <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                            ×{item.quantidade_total}
-                          </span>
-
-                          {/* Imagem */}
-                          {item.img_url ? (
-                            <img
-                              src={item.img_url}
-                              alt={item.nome_produto}
-                              className="h-14 w-14 rounded-md object-cover border"
-                            />
-                          ) : (
-                            <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                              sem foto
-                            </div>
-                          )}
-
-                          {/* Nome do produto */}
-                          <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                            {item.nome_produto}
-                          </p>
-
-                          {/* Variação */}
-                          {item.nome_variacao && (
-                            <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
-                              {item.nome_variacao}
-                            </p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })()}
-              </>
-            )}
-          </TabsContent>
-        </Tabs>
+            </div>
       </div>
 
       <Dialog open={orderIdsModalOpen} onOpenChange={(open) => { setOrderIdsModalOpen(open); if (!open) { setModalProductFilter(null); setModalTab('only'); setSelectedOrderIds(new Set()); setOpenOrderIds(new Set()); setSearchTerm(''); } }}>
@@ -2579,64 +2460,52 @@ export function ProductionPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Modal para exibir IDs Externos - Aba Itens a Produzir */}
-      <Dialog open={!!selectedItemProduzir} onOpenChange={(open) => !open && setSelectedItemProduzir(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+      {/* Modal de seleção de variação (produto-mãe) */}
+      <Dialog
+        open={produtoVariacoesModal.open}
+        onOpenChange={(open) => {
+          if (!open) setProdutoVariacoesModal({ open: false, produto: null });
+        }}
+      >
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex flex-col gap-1">
-              <span>{selectedItemProduzir?.produtoNome}</span>
-              {selectedItemProduzir?.variacaoNome && (
-                <span className="text-sm text-muted-foreground font-normal">
-                  {selectedItemProduzir.variacaoNome}
-                </span>
-              )}
+              <span>{produtoVariacoesModal.produto?.nome_produto}</span>
+              <span className="text-sm text-muted-foreground font-normal">
+                Selecione a variação para ver a quantidade e abrir os pedidos
+              </span>
             </DialogTitle>
           </DialogHeader>
-          
-          <div className="flex-1 overflow-y-auto">
-            {idExternosProduzir.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-8">
-                Nenhum pedido encontrado para este item
-              </p>
+
+          <div className="max-h-[60vh] overflow-y-auto space-y-2 pr-1">
+            {(produtoVariacoesModal.produto?.variacoes || []).length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-6">Nenhuma variação encontrada.</p>
             ) : (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between pb-2 border-b">
-                  <span className="text-sm text-muted-foreground">
-                    {idExternosProduzir.length} {idExternosProduzir.length === 1 ? 'pedido' : 'pedidos'}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={copyAllIdsProduzir}
-                  >
-                    <Copy className="h-4 w-4 mr-2" />
-                    Copiar Todos
-                  </Button>
-                </div>
-                
-                <div className="grid gap-2">
-                  {idExternosProduzir.map((id, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent/50 transition-colors"
-                    >
-                      <span className="font-mono text-sm">{id}</span>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => copyToClipboardProduzir(id)}
-                        className="ml-2"
-                      >
-                        {copiedIdsProduzir.has(id) ? (
-                          <Check className="h-4 w-4 text-green-600" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
+              (produtoVariacoesModal.produto?.variacoes || []).map((variacao, idx) => (
+                <button
+                  key={`${variacao.variacao_id ?? 'sem-variacao'}-${idx}`}
+                  type="button"
+                  onClick={() => {
+                    if (!produtoVariacoesModal.produto) return;
+                    handleSelectVariacao(produtoVariacoesModal.produto, variacao);
+                  }}
+                  className="w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-2.5 text-left hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    {variacao.img_url ? (
+                      <img src={variacao.img_url} alt={variacao.nome_variacao || 'Sem variação'} className="h-10 w-10 rounded-md object-cover border" />
+                    ) : (
+                      <div className="h-10 w-10 rounded-md border bg-muted flex-shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">{variacao.nome_variacao || 'Sem variação'}</p>
                     </div>
-                  ))}
-                </div>
-              </div>
+                  </div>
+                  <span className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs px-2 py-0.5 min-w-[1.5rem]">
+                    ×{variacao.quantidade_total}
+                  </span>
+                </button>
+              ))
             )}
           </div>
         </DialogContent>
