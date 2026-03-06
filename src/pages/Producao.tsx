@@ -1525,6 +1525,40 @@ export function ProductionPage() {
     return base;
   }, [summaryItems, mlSummaryItems, comercialSummaryByRange, urgentesSummaryByRange]);
 
+  const createdAtByExternalId = useMemo(() => {
+    const map = new Map<string, number>();
+    const sources: ProducaoItem[][] = [
+      summaryItems,
+      mlSummaryItems,
+      ...Object.values(comercialSummaryByRange),
+      ...Object.values(urgentesSummaryByRange),
+      ...Object.values(urgentesRawByRange),
+    ].filter((rows): rows is ProducaoItem[] => Array.isArray(rows));
+
+    for (const rows of sources) {
+      for (const row of rows) {
+        const idExterno = row.id_externo?.trim();
+        if (!idExterno || !row.criado_em) continue;
+        const createdTs = new Date(row.criado_em).getTime();
+        if (Number.isNaN(createdTs)) continue;
+        const current = map.get(idExterno) ?? 0;
+        if (createdTs > current) map.set(idExterno, createdTs);
+      }
+    }
+
+    return map;
+  }, [summaryItems, mlSummaryItems, comercialSummaryByRange, urgentesSummaryByRange, urgentesRawByRange]);
+
+  const sortOrderIdsByOldest = (orderIds: string[]) => {
+    const unique = Array.from(new Set(orderIds.filter((id) => !!id && id.trim().length > 0)));
+    return unique.sort((a, b) => {
+      const createdA = createdAtByExternalId.get(a) ?? 0;
+      const createdB = createdAtByExternalId.get(b) ?? 0;
+      if (createdA !== createdB) return createdA - createdB;
+      return a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' });
+    });
+  };
+
   const loadDropdownItems = async (section: SectionKey, range: DateRangeConfig) => {
     setLoadingByCard((prev) => ({
       ...prev,
@@ -1566,13 +1600,13 @@ export function ProductionPage() {
         setUrgentesRawByRange((prev) => ({ ...prev, [range.key]: filteredRows }));
       }
       const grouped = groupItems(filteredRows);
-      const uniqueOrderIds = Array.from(
+      const uniqueOrderIds = sortOrderIdsByOldest(Array.from(
         new Set(
           filteredRows
             .map((item) => item.id_externo)
             .filter((id): id is string => !!id && id.trim().length > 0),
         ),
-      );
+      ));
 
       setItemsCache((prev) => ({
         ...prev,
@@ -1643,7 +1677,7 @@ export function ProductionPage() {
   const handleOpenOrderIds = (section: SectionKey, rangeKey: DateRangeKey) => {
     if (loadingByCard[section][rangeKey]) return;
 
-    const orderIds = orderIdsCache[section]?.[rangeKey] || [];
+    const orderIds = sortOrderIdsByOldest(orderIdsCache[section]?.[rangeKey] || []);
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
     const allRanges = section === 'mercado_livre'
       ? ML_DATE_RANGES
@@ -1665,7 +1699,7 @@ export function ProductionPage() {
   const handleOpenOrderIdsForProduct = (section: SectionKey, rangeKey: DateRangeKey, filter: ProductFilter, overrideOrderIds?: string[]) => {
     if (loadingByCard[section][rangeKey]) return;
 
-    const orderIds = overrideOrderIds ?? orderIdsCache[section]?.[rangeKey] ?? [];
+    const orderIds = sortOrderIdsByOldest(overrideOrderIds ?? orderIdsCache[section]?.[rangeKey] ?? []);
     const sectionLabel = SECTION_CONFIGS.find((item) => item.key === section)?.label || section;
     const allRangesForProduct = section === 'mercado_livre'
       ? ML_DATE_RANGES
