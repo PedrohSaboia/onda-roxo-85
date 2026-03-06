@@ -1559,6 +1559,18 @@ export function ProductionPage() {
     });
   };
 
+  const getOrderCreatedAtLabel = (orderId: string) => {
+    const createdTs = createdAtByExternalId.get(orderId);
+    if (!createdTs || Number.isNaN(createdTs)) return null;
+    return new Date(createdTs).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
   const loadDropdownItems = async (section: SectionKey, range: DateRangeConfig) => {
     setLoadingByCard((prev) => ({
       ...prev,
@@ -2198,6 +2210,7 @@ export function ProductionPage() {
                   const products = isOpen ? allProducts : [];
                   const isProcessing = processingLabels.has(orderId);
                   const isMl = !!mlEtiquetaMap[orderId];
+                  const createdAtLabel = getOrderCreatedAtLabel(orderId);
                   return (
                     <div
                       key={orderId}
@@ -2243,21 +2256,28 @@ export function ProductionPage() {
                                 aria-label={isSelected ? 'Desmarcar pedido' : 'Selecionar pedido'}
                               />
 
-                              {/* ID do pedido */}
-                              <button
-                                type="button"
-                                title="Clique para copiar o ID"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void navigator.clipboard.writeText(orderId).then(() => {
-                                    toast({ description: `ID copiado: ${orderId}` });
-                                  });
-                                }}
-                                className="flex items-center gap-1 group rounded px-1 -mx-1 hover:bg-muted transition-colors"
-                              >
-                                <span className="font-mono text-sm font-semibold truncate">{orderId}</span>
-                                <Copy className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                              </button>
+                              {/* ID do pedido + data de criação */}
+                              <div className="min-w-0">
+                                <button
+                                  type="button"
+                                  title="Clique para copiar o ID"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void navigator.clipboard.writeText(orderId).then(() => {
+                                      toast({ description: `ID copiado: ${orderId}` });
+                                    });
+                                  }}
+                                  className="flex items-center gap-1 group rounded px-1 -mx-1 hover:bg-muted transition-colors"
+                                >
+                                  <span className="font-mono text-sm font-semibold truncate">{orderId}</span>
+                                  <Copy className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                                </button>
+                                {createdAtLabel && (
+                                  <span className="block px-1 text-[11px] text-muted-foreground">
+                                    {createdAtLabel}
+                                  </span>
+                                )}
+                              </div>
 
                               {/* Badges */}
                               {isMl && (
