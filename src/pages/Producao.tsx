@@ -1501,9 +1501,11 @@ export function ProductionPage() {
     // Urgentes: usar RPC dedicada por dias para envio
     for (const range of URGENTES_DATE_RANGES) {
       const filtered = urgentesSummaryByRange[range.key] || [];
-      base.urgentes[range.key] = filtered.reduce(
-        (sum, item) => sum + Number(item.quantidade || 0), 0,
-      );
+      base.urgentes[range.key] = new Set(
+        filtered
+          .map((item) => item.id_externo)
+          .filter((id): id is string => !!id && id.trim().length > 0),
+      ).size;
     }
 
     // Mercado Livre: usar mlSummaryItems + ML_DATE_RANGES
