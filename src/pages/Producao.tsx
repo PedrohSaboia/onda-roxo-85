@@ -126,11 +126,16 @@ const COMERCIAL_DATE_RANGES: DateRangeConfig[] = [
   { key: 'r21_30', label: '(5 DIAS)', minDaysAgo: 5, maxDaysAgo: 5 },
 ];
 
-const URGENTES_DATE_RANGES: DateRangeConfig[] = [
-  { key: 'r1_10', label: '(HOJE)', minDaysAgo: 0, maxDaysAgo: 0 },
-  { key: 'r11_20', label: '(AMANHÃ)', minDaysAgo: 1, maxDaysAgo: 1 },
-  { key: 'r21_30', label: '(DEPOIS DE AMANHÃ)', minDaysAgo: 2, maxDaysAgo: 2 },
-];
+const getUrgentesDateRanges = (now: Date): DateRangeConfig[] => {
+  const dayOfWeek = now.getDay();
+  const isWeekendFlow = dayOfWeek === 5 || dayOfWeek === 6 || dayOfWeek === 0; // sexta, sábado, domingo
+
+  return [
+    { key: 'r1_10', label: '(HOJE)', minDaysAgo: 0, maxDaysAgo: 0 },
+    { key: 'r11_20', label: isWeekendFlow ? '(SEGUNDA)' : '(AMANHÃ)', minDaysAgo: 1, maxDaysAgo: 1 },
+    { key: 'r21_30', label: isWeekendFlow ? '(TERÇA)' : '(DEPOIS DE AMANHÃ)', minDaysAgo: 2, maxDaysAgo: 2 },
+  ];
+};
 
 const ML_DATE_RANGES: DateRangeConfig[] = [
   { key: 'ml_r1_5',    label: '(1 A 5 DIAS)',   minDaysAgo: 1,  maxDaysAgo: 5 },
@@ -689,6 +694,7 @@ function PlatformSection({
 }
 
 export function ProductionPage() {
+  const urgentesRanges = useMemo(() => getUrgentesDateRanges(new Date()), []);
   const [summaryItems, setSummaryItems] = useState<ProducaoItem[]>([]);
   const [mlSummaryItems, setMlSummaryItems] = useState<ProducaoItem[]>([]);
   const [comercialSummaryByRange, setComercialSummaryByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
@@ -870,7 +876,7 @@ export function ProductionPage() {
         rows.forEach((row) => registrarEtapa(row.pedido_id, `COMERCIAL • ${range.label}`));
       }
 
-      for (const range of URGENTES_DATE_RANGES) {
+      for (const range of urgentesRanges) {
         const rows = (urgentesSummaryByRange[range.key] || []).filter((row) => matchesProdutoFiltro(row));
         rows.forEach((row) => registrarEtapa(row.pedido_id, `URGENTES • ${range.label}`));
       }
@@ -1505,7 +1511,7 @@ export function ProductionPage() {
     }
 
     // Urgentes: usar RPC dedicada por dias para envio
-    for (const range of URGENTES_DATE_RANGES) {
+    for (const range of urgentesRanges) {
       const filtered = urgentesSummaryByRange[range.key] || [];
       base.urgentes[range.key] = new Set(
         filtered
@@ -1523,7 +1529,7 @@ export function ProductionPage() {
     }
 
     return base;
-  }, [summaryItems, mlSummaryItems, comercialSummaryByRange, urgentesSummaryByRange]);
+  }, [summaryItems, mlSummaryItems, comercialSummaryByRange, urgentesSummaryByRange, urgentesRanges]);
 
   const createdAtByExternalId = useMemo(() => {
     const map = new Map<string, number>();
@@ -1676,7 +1682,7 @@ export function ProductionPage() {
     const allRanges = section === 'mercado_livre'
       ? ML_DATE_RANGES
       : section === 'urgentes'
-      ? URGENTES_DATE_RANGES
+      ? urgentesRanges
       : section === 'leads'
       ? COMERCIAL_DATE_RANGES
       : DATE_RANGES;
@@ -1694,7 +1700,7 @@ export function ProductionPage() {
     const allRanges = section === 'mercado_livre'
       ? ML_DATE_RANGES
       : section === 'urgentes'
-      ? URGENTES_DATE_RANGES
+      ? urgentesRanges
       : section === 'leads'
       ? COMERCIAL_DATE_RANGES
       : DATE_RANGES;
@@ -1716,7 +1722,7 @@ export function ProductionPage() {
     const allRangesForProduct = section === 'mercado_livre'
       ? ML_DATE_RANGES
       : section === 'urgentes'
-      ? URGENTES_DATE_RANGES
+      ? urgentesRanges
       : section === 'leads'
       ? COMERCIAL_DATE_RANGES
       : DATE_RANGES;
@@ -2085,7 +2091,7 @@ export function ProductionPage() {
               <PlatformSection
                 key={section.key}
                 section={section}
-                ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : section.key === 'urgentes' ? URGENTES_DATE_RANGES : section.key === 'leads' ? COMERCIAL_DATE_RANGES : DATE_RANGES}
+                ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : section.key === 'urgentes' ? urgentesRanges : section.key === 'leads' ? COMERCIAL_DATE_RANGES : DATE_RANGES}
                 totals={totalsBySection[section.key]}
                 expandedKey={expandedBySection[section.key]}
                 loadingByRange={loadingByCard[section.key]}
