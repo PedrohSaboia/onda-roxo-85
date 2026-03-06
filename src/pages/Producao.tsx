@@ -121,9 +121,9 @@ const DATE_RANGES: DateRangeConfig[] = [
 ];
 
 const COMERCIAL_DATE_RANGES: DateRangeConfig[] = [
-  { key: 'r1_10', label: '(1 A 3 DIAS)', minDaysAgo: 1, maxDaysAgo: 3 },
-  { key: 'r11_20', label: '(3 A 5 DIAS)', minDaysAgo: 3, maxDaysAgo: 5 },
-  { key: 'r21_30', label: '(5+ DIAS)', minDaysAgo: 5, maxDaysAgo: null },
+  { key: 'r1_10', label: '(1 A 2 DIAS)', minDaysAgo: 1, maxDaysAgo: 2 },
+  { key: 'r11_20', label: '(3 A 4 DIAS)', minDaysAgo: 3, maxDaysAgo: 4 },
+  { key: 'r21_30', label: '(5 DIAS)', minDaysAgo: 5, maxDaysAgo: 5 },
 ];
 
 const URGENTES_DATE_RANGES: DateRangeConfig[] = [
