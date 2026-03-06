@@ -829,58 +829,84 @@ export function ProductionPage() {
   const fetchPedidosDoProduto = async (item: ProdutoModalItem) => {
     setProdutoPedidosModal({ open: true, item, pedidos: [], loading: true });
     try {
-      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+      const matchesProdutoFiltro = (row: ProducaoItem) => {
+        if (item.variacao_id) return row.variacao_id === item.variacao_id;
+        if (item.produto_id) return row.produto_id === item.produto_id && !row.variacao_id;
+        return false;
+      };
 
-      // 1. Busca pedidos filtrados por status + etiqueta (status de produção)
+      const etapasPorPedidoId = new Map<string, Set<string>>();
+      const registrarEtapa = (pedidoId: string | null, etapa: string) => {
+        if (!pedidoId) return;
+        const atual = etapasPorPedidoId.get(pedidoId) ?? new Set<string>();
+        atual.add(etapa);
+        etapasPorPedidoId.set(pedidoId, atual);
+      };
+
+      const now = new Date();
+
+      for (const range of DATE_RANGES) {
+        const rows = summaryItems.filter((row) => itemMatchesSection(row, 'yampi') && itemInRange(row, range, now) && matchesProdutoFiltro(row));
+        rows.forEach((row) => registrarEtapa(row.pedido_id, `YAMPI • ${range.label}`));
+      }
+
+      for (const range of ML_DATE_RANGES) {
+        const rows = mlSummaryItems.filter((row) => itemInRange(row, range, now) && matchesProdutoFiltro(row));
+        rows.forEach((row) => registrarEtapa(row.pedido_id, `MERCADO LIVRE • ${range.label}`));
+      }
+
+      for (const range of COMERCIAL_DATE_RANGES) {
+        const rows = (comercialSummaryByRange[range.key] || []).filter((row) => matchesProdutoFiltro(row));
+        rows.forEach((row) => registrarEtapa(row.pedido_id, `COMERCIAL • ${range.label}`));
+      }
+
+      for (const range of URGENTES_DATE_RANGES) {
+        const rows = (urgentesSummaryByRange[range.key] || []).filter((row) => matchesProdutoFiltro(row));
+        rows.forEach((row) => registrarEtapa(row.pedido_id, `URGENTES • ${range.label}`));
+      }
+
+      // Usa a mesma origem dos cards (summaryItems + mlSummaryItems)
+      // para garantir que os números do modal batam com "Itens a produzir".
+      const allItems = [...summaryItems, ...mlSummaryItems];
+      const itensDoProduto = allItems.filter((row) => {
+        if (!row.pedido_id) return false;
+        return matchesProdutoFiltro(row);
+      });
+
+      const quantMap = new Map<string, number>();
+      for (const row of itensDoProduto) {
+        if (!row.pedido_id) continue;
+        quantMap.set(row.pedido_id, (quantMap.get(row.pedido_id) || 0) + Number(row.quantidade || 0));
+      }
+
+      const pedidoIds = Array.from(quantMap.keys());
+      if (!pedidoIds.length) {
+        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+        return;
+      }
+
+      // Busca metadados dos pedidos apenas para os IDs já filtrados pela base da Produção.
       let pedidosQuery: any = (supabase as any)
         .from('pedidos')
         .select('id, id_externo, criado_em, urgente, plataformas(id, nome, img_url)')
-        .neq('status_id', 'fa6b38ba-1d67-4bc3-821e-ab089d641a25')  // Excludes "Enviado"
-        .neq('status_id', '09ddb68a-cff3-4a69-a120-7459642cca6f'); // Excludes "Cancelado"
+        .in('id', pedidoIds);
       if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
 
       const { data: pedidosData, error: pedidosErr } = await pedidosQuery;
       if (pedidosErr) throw pedidosErr;
 
-      const todosPedidoIds = (pedidosData || []).map((p: any) => p.id) as string[];
-      if (!todosPedidoIds.length) {
-        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
-        return;
-      }
-
-      // 2. Busca itens desses pedidos filtrados pelo produto/variação específico
-      let itensQuery: any = (supabase as any)
-        .from('itens_pedido')
-        .select('pedido_id, quantidade')
-        .in('pedido_id', todosPedidoIds);
-
-      if (item.variacao_id) {
-        itensQuery = itensQuery.eq('variacao_id', item.variacao_id);
-      } else if (item.produto_id) {
-        itensQuery = itensQuery.eq('produto_id', item.produto_id).is('variacao_id', null);
-      }
-
-      const { data: itensData, error: itensErr } = await itensQuery;
-      if (itensErr) throw itensErr;
-
-      const pedidoIdsComItem = new Set((itensData || []).map((i: any) => i.pedido_id));
-      if (!pedidoIdsComItem.size) {
-        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
-        return;
-      }
-
-      // 3. Monta mapa de quantidades e cruza com pedidos
-      const quantMap = new Map<string, number>();
-      (itensData || []).forEach((i: any) => {
-        quantMap.set(i.pedido_id, (quantMap.get(i.pedido_id) || 0) + Number(i.quantidade || 0));
-      });
-
       const pedidosComQtd = (pedidosData || [])
-        .filter((p: any) => pedidoIdsComItem.has(p.id))
+        .filter((p: any) => quantMap.has(p.id))
         .map((p: any) => ({
           ...p,
           quantidade_item: quantMap.get(p.id) || 0,
-        }));
+          etapas_producao: Array.from(etapasPorPedidoId.get(p.id) || []),
+        }))
+        .sort((a: any, b: any) => {
+          const da = a?.criado_em ? new Date(a.criado_em).getTime() : 0;
+          const db = b?.criado_em ? new Date(b.criado_em).getTime() : 0;
+          return db - da;
+        });
 
       setProdutoPedidosModal((prev) => ({ ...prev, pedidos: pedidosComQtd, loading: false }));
     } catch (err) {
@@ -1756,7 +1782,7 @@ export function ProductionPage() {
         ...produto,
         variacoes: produto.variacoes.sort((a, b) => b.quantidade_total - a.quantidade_total),
       }))
-      .sort((a, b) => b.quantidade_total - a.quantidade_total);
+      .sort((a, b) => a.quantidade_total - b.quantidade_total);
   };
 
   const handleProdutoMaeClick = (produto: ProdutoMaeResumo) => {
@@ -2570,6 +2596,18 @@ export function ProductionPage() {
                         </div>
                         {p.plataformas?.nome && (
                           <div className="text-[10px] text-muted-foreground">{p.plataformas.nome}</div>
+                        )}
+                        {Array.isArray(p.etapas_producao) && p.etapas_producao.length > 0 && (
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {p.etapas_producao.map((etapa: string, etapaIdx: number) => (
+                              <span
+                                key={`${p.id}-etapa-${etapaIdx}`}
+                                className="inline-flex items-center rounded-full border bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-foreground"
+                              >
+                                {etapa}
+                              </span>
+                            ))}
+                          </div>
                         )}
                       </div>
                     </div>
