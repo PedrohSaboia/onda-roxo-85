@@ -391,12 +391,16 @@ function filterUrgentesItems(
       const isSpecial =
         item.produto_id === SPECIAL_URGENT_PRODUCT_ID &&
         item.plataforma_id === SPECIAL_URGENT_PLATFORM_ID;
+      const isMlOrganizador =
+        isSpecial ||
+        (pn === 'mercado_livre' &&
+          (pd.includes(normalize(ML_KEYWORD)) || (pd.includes('organizador') && pd.includes('relogio'))));
       if (subTab === 'shopee') return pn.includes('shopee');
       if (subTab === 'tiktok') return pn.includes('tiktok');
       if (subTab === 'magalu') return pn.includes('magalu') || pn.includes('magazine');
-      if (subTab === 'ml') return pn === 'mercado_livre';
+      if (subTab === 'ml') return pn === 'mercado_livre' && !isMlOrganizador;
       if (subTab === 'ml_org')
-        return isSpecial || (pn === 'mercado_livre' && (pd.includes(normalize(ML_KEYWORD)) || (pd.includes('organizador') && pd.includes('relogio'))));
+        return isMlOrganizador;
       return true;
     });
   }
