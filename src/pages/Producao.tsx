@@ -222,6 +222,12 @@ const normalize = (text: string | null | undefined): string => {
     .replace(/\s+/g, '_');
 };
 
+const getProdutoFamiliaKey = (nome: string | null | undefined): string => {
+  const normalized = normalize(nome);
+  if (!normalized) return '';
+  return normalized.split('_')[0] || normalized;
+};
+
 const subtractDays = (base: Date, days: number) => {
   const date = new Date(base);
   date.setDate(date.getDate() - days);
@@ -1786,9 +1792,25 @@ export function ProductionPage() {
     return Array.from(produtosMap.values())
       .map((produto) => ({
         ...produto,
-        variacoes: produto.variacoes.sort((a, b) => b.quantidade_total - a.quantidade_total),
+        variacoes: produto.variacoes.sort((a, b) => {
+          const nomeA = a.nome_variacao || '';
+          const nomeB = b.nome_variacao || '';
+          return nomeA.localeCompare(nomeB, 'pt-BR', { numeric: true, sensitivity: 'base' });
+        }),
       }))
-      .sort((a, b) => a.quantidade_total - b.quantidade_total);
+      .sort((a, b) => {
+        const familiaA = getProdutoFamiliaKey(a.nome_produto);
+        const familiaB = getProdutoFamiliaKey(b.nome_produto);
+
+        if (familiaA !== familiaB) {
+          return familiaA.localeCompare(familiaB, 'pt-BR');
+        }
+
+        const nomeCmp = (a.nome_produto || '').localeCompare((b.nome_produto || ''), 'pt-BR');
+        if (nomeCmp !== 0) return nomeCmp;
+
+        return a.quantidade_total - b.quantidade_total;
+      });
   };
 
   const handleProdutoMaeClick = (produto: ProdutoMaeResumo) => {
