@@ -979,7 +979,11 @@ export function Logistica() {
     const grouped = new Map<string, { key: string; nome: string; quantidade: number; imgUrl: string | null }>();
     (pedido?.itens_pedido || []).forEach((it: any) => {
       const refKey = String(it?.variacao_id || it?.produto_id || it?.id || 'sem-ref');
-      const nome = it?.variacao?.nome || it?.produto?.nome || 'Produto';
+      const nomeProduto = it?.produto?.nome || '';
+      const nomeVariacao = it?.variacao?.nome || '';
+      const nome = nomeProduto && nomeVariacao
+        ? `${nomeProduto} - ${nomeVariacao}`
+        : (nomeVariacao || nomeProduto || 'Produto');
       const imgUrl = it?.variacao?.img_url || it?.produto?.img_url || null;
       const qtd = Math.max(1, Number(it?.quantidade ?? 1));
       const existing = grouped.get(refKey);
