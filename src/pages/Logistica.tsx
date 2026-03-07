@@ -146,6 +146,11 @@ export function Logistica() {
   const [pedidosFiltrados, setPedidosFiltrados] = useState<any[]>([]);
   const [loadingPedidosFiltrados, setLoadingPedidosFiltrados] = useState(false);
   const [pedidoAtualIndex, setPedidoAtualIndex] = useState(0);
+  const [openSections, setOpenSections] = useState<{ produtos: boolean; comuns: boolean; incomuns: boolean }>({
+    produtos: false,
+    comuns: false,
+    incomuns: false,
+  });
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const targetPedidoIdRef = useRef<string | null>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -1002,10 +1007,93 @@ export function Logistica() {
       .join(' | ');
   };
 
+  const toggleSection = (key: 'produtos' | 'comuns' | 'incomuns') => {
+    setOpenSections((prev) => {
+      const willOpen = !prev[key];
+      return {
+        produtos: false,
+        comuns: false,
+        incomuns: false,
+        [key]: willOpen,
+      };
+    });
+  };
+
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
   const allItemsBipado = items.length > 0 && items.every((it: any) => isItemFullyScanned(it));
   const filteredLogItems = logItems;
+  const normalizeProductTypeText = (value: string) =>
+    value
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .trim();
+
+  const getProductCardType = (item: any) => {
+    const sourceText = normalizeProductTypeText(`${item?.produto?.nome || ''} ${item?.variacao?.nome || ''}`);
+    if (sourceText.includes('livraria branca')) return 'Livraria branca';
+    if (sourceText.includes('livraria preta')) return 'Livraria preta';
+    if (sourceText.includes('organizador')) return 'Organizador';
+    return 'Outros';
+  };
+  
+  const getProductTypeFromText = (text: string) => {
+    const sourceText = normalizeProductTypeText(text);
+    if (sourceText.includes('livraria branca')) return 'Livraria branca';
+    if (sourceText.includes('livraria preta')) return 'Livraria preta';
+    if (sourceText.includes('organizador')) return 'Organizador';
+    return 'Outros';
+  };
+
+  const productCardTypePriority: Record<string, number> = {
+    'Livraria branca': 1,
+    'Livraria preta': 2,
+    Organizador: 3,
+    Outros: 99,
+  };
+
+  const groupedLogItemsByType = (() => {
+    const grouped = new Map<string, any[]>();
+    filteredLogItems
+      .slice()
+      .sort((a, b) => b.quantidade_total - a.quantidade_total)
+      .forEach((item) => {
+        const type = getProductCardType(item);
+        const current = grouped.get(type) || [];
+        current.push(item);
+        grouped.set(type, current);
+      });
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => {
+        const prioA = productCardTypePriority[a[0]] ?? 50;
+        const prioB = productCardTypePriority[b[0]] ?? 50;
+        if (prioA !== prioB) return prioA - prioB;
+        return a[0].localeCompare(b[0], 'pt-BR');
+      })
+      .map(([type, items]) => ({ type, items }));
+  })();
+  
+  const groupCaseGroupsByType = (caseGroups: any[]) => {
+    const grouped = new Map<string, any[]>();
+    (caseGroups || []).forEach((caseGroup: any) => {
+      const type = getProductTypeFromText(caseGroup?.label || '');
+      const current = grouped.get(type) || [];
+      current.push(caseGroup);
+      grouped.set(type, current);
+    });
+
+    return Array.from(grouped.entries())
+      .sort((a, b) => {
+        const prioA = productCardTypePriority[a[0]] ?? 50;
+        const prioB = productCardTypePriority[b[0]] ?? 50;
+        if (prioA !== prioB) return prioA - prioB;
+        return a[0].localeCompare(b[0], 'pt-BR');
+      })
+      .map(([type, groups]) => ({ type, groups }));
+  };
+
   const comumCaseGroups = (() => {
     const groups = new Map<string, { signature: string; pedidos: any[]; label: string; totalUnidades: number; imgUrl: string | null }>();
     (comumPedidos || []).forEach((pedido: any) => {
@@ -1041,6 +1129,15 @@ export function Logistica() {
     });
     return Array.from(groups.values()).sort((a, b) => b.pedidos.length - a.pedidos.length);
   })();
+
+  const groupedComumCaseGroupsByType = groupCaseGroupsByType(comumCaseGroups);
+  const groupedIncomumCaseGroupsByType = groupCaseGroupsByType(incomumCaseGroups);
+
+  const dropdownHeaderStyles: Record<'produtos' | 'comuns' | 'incomuns', React.CSSProperties> = {
+    produtos: { backgroundColor: '#0ea5e90f', borderColor: '#0284c7' },
+    comuns: { backgroundColor: '#8b5cf60f', borderColor: '#8b5cf6' },
+    incomuns: { backgroundColor: '#f973160f', borderColor: '#f97316' },
+  };
   
   // Verifica se deve mostrar o botão da etiqueta ML
   // Prioridade: shipping_id deve ter valor (não null, não vazio)
@@ -1716,192 +1813,248 @@ export function Logistica() {
 
             {/* Seção: Produtos a Embalar */}
             <div className="mb-5">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PRODUTOS A EMBALAR</h3>
-                <span className="text-sm text-muted-foreground">
-                  {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
-                </span>
-              </div>
-
-              {loadingLogItems ? (
-                <div className="flex gap-2 flex-wrap">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
-                  ))}
+              <button
+                type="button"
+                onClick={() => toggleSection('produtos')}
+                className="mb-3 flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left hover:bg-muted/30"
+                style={dropdownHeaderStyles.produtos}
+              >
+                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em', textShadow: '1px 1px 2px rgba(0,0,0,0.25)' }}>PRODUTOS A EMBALAR</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">
+                    {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
+                  </span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${openSections.produtos ? 'rotate-180' : ''}`} />
                 </div>
-              ) : logItemsError ? (
-                <div className="text-sm text-red-500">Erro ao carregar produtos: {logItemsError}</div>
-              ) : filteredLogItems.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {filteredLogItems
-                    .slice()
-                    .sort((a, b) => b.quantidade_total - a.quantidade_total)
-                    .map((item, idx) => {
-                      const nomeProduto = item.produto?.nome || '—';
-                      const nomeVariacao = item.variacao?.nome || null;
-                      const sku = item.variacao?.sku || item.produto?.sku || null;
-                      const imgUrl = item.variacao?.img_url || item.produto?.img_url || null;
+              </button>
 
-                      return (
-                        <div
-                          key={`${item.produto_id}-${item.variacao_id}-${idx}`}
-                          className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => fetchPedidosDoProduto({ produto_id: item.produto_id, variacao_id: item.variacao_id, nomeProduto, nomeVariacao, imgUrl })}
-                        >
-                          <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                            ×{item.quantidade_total}
-                          </span>
+              {openSections.produtos && (
+                <div className="rounded-md border p-3" style={dropdownHeaderStyles.produtos}>
+                  {loadingLogItems ? (
+                    <div className="flex gap-2 flex-wrap">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
+                      ))}
+                    </div>
+                  ) : logItemsError ? (
+                    <div className="text-sm text-red-500">Erro ao carregar produtos: {logItemsError}</div>
+                  ) : filteredLogItems.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {groupedLogItemsByType.map((group) => (
+                        <div key={group.type} className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {group.items.map((item: any, idx: number) => {
+                              const nomeProduto = item.produto?.nome || '—';
+                              const nomeVariacao = item.variacao?.nome || null;
+                              const sku = item.variacao?.sku || item.produto?.sku || null;
+                              const imgUrl = item.variacao?.img_url || item.produto?.img_url || null;
 
-                          {imgUrl ? (
-                            <img
-                              src={imgUrl}
-                              alt={nomeProduto}
-                              className="h-14 w-14 rounded-md object-cover border"
-                            />
-                          ) : (
-                            <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                              sem foto
-                            </div>
-                          )}
+                              return (
+                                <div
+                                  key={`${group.type}-${item.produto_id}-${item.variacao_id}-${idx}`}
+                                  className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                  onClick={() => fetchPedidosDoProduto({ produto_id: item.produto_id, variacao_id: item.variacao_id, nomeProduto, nomeVariacao, imgUrl })}
+                                >
+                                  <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                    ×{item.quantidade_total}
+                                  </span>
 
-                          <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                            {nomeProduto}
-                          </p>
+                                  {imgUrl ? (
+                                    <img
+                                      src={imgUrl}
+                                      alt={nomeProduto}
+                                      className="h-14 w-14 rounded-md object-cover border"
+                                    />
+                                  ) : (
+                                    <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                      sem foto
+                                    </div>
+                                  )}
 
-                          {nomeVariacao && (
-                            <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
-                              {nomeVariacao}
-                            </p>
-                          )}
+                                  <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                    {nomeProduto}
+                                  </p>
 
-                          {sku && (
-                            <span className="text-[9px] font-mono text-muted-foreground/70 truncate w-full text-center">
-                              {sku}
-                            </span>
-                          )}
+                                  {nomeVariacao && (
+                                    <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
+                                      {nomeVariacao}
+                                    </p>
+                                  )}
+
+                                  {sku && (
+                                    <span className="text-[9px] font-mono text-muted-foreground/70 truncate w-full text-center">
+                                      {sku}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      );
-                    })}
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
 
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PACOTES COMUNS</h3>
-              <span className="text-sm text-muted-foreground">{comumCaseGroups.length} caso(s) comum(ns)</span>
+            <div className="mb-6">
+              <button
+                type="button"
+                onClick={() => toggleSection('comuns')}
+                className="mb-3 flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left hover:bg-muted/30"
+                style={dropdownHeaderStyles.comuns}
+              >
+                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em', textShadow: '1px 1px 2px rgba(0,0,0,0.25)' }}>PACOTES COMUNS</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{comumCaseGroups.length} caso(s) comum(ns)</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${openSections.comuns ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
+
+              {openSections.comuns && (
+                <div className="rounded-md border p-3" style={dropdownHeaderStyles.comuns}>
+                  {comumCaseGroups.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Nenhum pedido comum encontrado.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {groupedComumCaseGroupsByType.map((group) => (
+                        <div key={`comum-${group.type}`} className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {group.groups.map((caseGroup: any) => {
+                              const nomePreview = caseGroup.label;
+                              const imgPreview = caseGroup.imgUrl;
+
+                              return (
+                                <div
+                                  key={caseGroup.signature}
+                                  className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                  onClick={() => {
+                                    const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
+                                    setModoListaPorPlataforma(true);
+                                    setFilterPlataformaId('');
+                                    setPedidosFiltrados(groupedPedidos);
+                                    setPedidoAtualIndex(0);
+                                    setFoundPedido(groupedPedidos[0] || null);
+                                    setFoundItemScans({});
+                                    setItemInputs({});
+                                    setItemStatus({});
+                                    setTimeout(() => barcodeRef.current?.focus(), 50);
+                                  }}
+                                >
+                                  <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                    ×{caseGroup.pedidos.length}
+                                  </span>
+
+                                  {imgPreview ? (
+                                    <img
+                                      src={imgPreview}
+                                      alt={nomePreview}
+                                      className="h-14 w-14 rounded-md object-cover border"
+                                    />
+                                  ) : (
+                                    <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                      sem foto
+                                    </div>
+                                  )}
+
+                                  <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                    {nomePreview}
+                                  </p>
+                                  <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                                    {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                                  </p>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
-            {comumCaseGroups.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nenhum pedido comum encontrado.</div>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {comumCaseGroups.map((caseGroup: any) => {
-                  const nomePreview = caseGroup.label;
-                  const imgPreview = caseGroup.imgUrl;
-
-                  return (
-                    <div
-                      key={caseGroup.signature}
-                      className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                      onClick={() => {
-                        const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
-                        setModoListaPorPlataforma(true);
-                        setFilterPlataformaId('');
-                        setPedidosFiltrados(groupedPedidos);
-                        setPedidoAtualIndex(0);
-                        setFoundPedido(groupedPedidos[0] || null);
-                        setFoundItemScans({});
-                        setItemInputs({});
-                        setItemStatus({});
-                        setTimeout(() => barcodeRef.current?.focus(), 50);
-                      }}
-                    >
-                      <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                        ×{caseGroup.pedidos.length}
-                      </span>
-
-                      {imgPreview ? (
-                        <img
-                          src={imgPreview}
-                          alt={nomePreview}
-                          className="h-14 w-14 rounded-md object-cover border"
-                        />
-                      ) : (
-                        <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                          sem foto
-                        </div>
-                      )}
-
-                      <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                        {nomePreview}
-                      </p>
-                      <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
-                        {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
             <div className="mt-6">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>PACOTES INCOMUNS</h3>
-                <span className="text-sm text-muted-foreground">{incomumCaseGroups.length} caso(s) incomum(ns)</span>
-              </div>
+              <button
+                type="button"
+                onClick={() => toggleSection('incomuns')}
+                className="mb-3 flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left hover:bg-muted/30"
+                style={dropdownHeaderStyles.incomuns}
+              >
+                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em', textShadow: '1px 1px 2px rgba(0,0,0,0.25)' }}>PACOTES INCOMUNS</h3>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{incomumCaseGroups.length} caso(s) incomum(ns)</span>
+                  <ChevronDown className={`h-4 w-4 transition-transform ${openSections.incomuns ? 'rotate-180' : ''}`} />
+                </div>
+              </button>
 
-              {incomumCaseGroups.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Nenhum pedido incomum encontrado.</div>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {incomumCaseGroups.map((caseGroup: any) => {
-                    const nomePreview = caseGroup.label;
-                    const imgPreview = caseGroup.imgUrl;
+              {openSections.incomuns && (
+                <div className="rounded-md border p-3" style={dropdownHeaderStyles.incomuns}>
+                  {incomumCaseGroups.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">Nenhum pedido incomum encontrado.</div>
+                  ) : (
+                    <div className="space-y-3">
+                      {groupedIncomumCaseGroupsByType.map((group) => (
+                        <div key={`incomum-${group.type}`} className="space-y-2">
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
+                          <div className="flex flex-wrap gap-2">
+                            {group.groups.map((caseGroup: any) => {
+                              const nomePreview = caseGroup.label;
+                              const imgPreview = caseGroup.imgUrl;
 
-                    return (
-                      <div
-                        key={caseGroup.signature}
-                        className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => {
-                          const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
-                          setModoListaPorPlataforma(true);
-                          setFilterPlataformaId('');
-                          setPedidosFiltrados(groupedPedidos);
-                          setPedidoAtualIndex(0);
-                          setFoundPedido(groupedPedidos[0] || null);
-                          setFoundItemScans({});
-                          setItemInputs({});
-                          setItemStatus({});
-                          setTimeout(() => barcodeRef.current?.focus(), 50);
-                        }}
-                      >
-                        <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                          ×{caseGroup.pedidos.length}
-                        </span>
+                              return (
+                                <div
+                                  key={caseGroup.signature}
+                                  className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                  onClick={() => {
+                                    const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
+                                    setModoListaPorPlataforma(true);
+                                    setFilterPlataformaId('');
+                                    setPedidosFiltrados(groupedPedidos);
+                                    setPedidoAtualIndex(0);
+                                    setFoundPedido(groupedPedidos[0] || null);
+                                    setFoundItemScans({});
+                                    setItemInputs({});
+                                    setItemStatus({});
+                                    setTimeout(() => barcodeRef.current?.focus(), 50);
+                                  }}
+                                >
+                                  <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                    ×{caseGroup.pedidos.length}
+                                  </span>
 
-                        {imgPreview ? (
-                          <img
-                            src={imgPreview}
-                            alt={nomePreview}
-                            className="h-14 w-14 rounded-md object-cover border"
-                          />
-                        ) : (
-                          <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                            sem foto
+                                  {imgPreview ? (
+                                    <img
+                                      src={imgPreview}
+                                      alt={nomePreview}
+                                      className="h-14 w-14 rounded-md object-cover border"
+                                    />
+                                  ) : (
+                                    <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                      sem foto
+                                    </div>
+                                  )}
+
+                                  <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                    {nomePreview}
+                                  </p>
+                                  <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                                    {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                                  </p>
+                                </div>
+                              );
+                            })}
                           </div>
-                        )}
-
-                        <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                          {nomePreview}
-                        </p>
-                        <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
-                          {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
-                        </p>
-                      </div>
-                    );
-                  })}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1922,12 +2075,13 @@ export function Logistica() {
               ) : plataformasCards.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
               ) : (
-                <div className={`grid grid-cols-1 sm:grid-cols-2 ${plataformasCards.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 w-full mx-auto`}>
-                  {plataformasCards.map((pc) => {
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${plataformasCards.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 w-full mx-auto items-start`}>
+                  {plataformasCards.map((pc, idx) => {
                     const currentPage = platformPage[pc.id] ?? 1;
                     const totalPages = Math.max(1, Math.ceil((pc.pedidos?.length ?? 0) / PLATFORM_PAGE_SIZE));
                     const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
                     const pedidosPagina = (pc.pedidos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
+                    const cardDropdownKey = `${pc.id || 'sem-id'}-${idx}`;
 
                     const handleGoToPage = (e: React.MouseEvent, page: number) => {
                       e.preventDefault();
@@ -1941,10 +2095,10 @@ export function Logistica() {
                     return (
                     <Card
                       key={pc.id}
-                      className="p-3 cursor-pointer select-none"
+                      className="p-3 cursor-pointer select-none self-start"
                       onClick={async (e) => {
                         e.preventDefault();
-                        const next = openPlatformId === pc.id ? null : pc.id;
+                        const next = openPlatformId === cardDropdownKey ? null : cardDropdownKey;
                         setOpenPlatformId(next);
                         if (next) {
                           setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
@@ -2005,12 +2159,12 @@ export function Logistica() {
                             Enviar
                           </Button>
                           <div className="p-1.5" aria-hidden>
-                            <ChevronDown className={`h-4 w-4 transition-transform ${openPlatformId === pc.id ? 'rotate-180' : ''}`} />
+                            <ChevronDown className={`h-4 w-4 transition-transform ${openPlatformId === cardDropdownKey ? 'rotate-180' : ''}`} />
                           </div>
                         </div>
                       </CardContent>
 
-                      {openPlatformId === pc.id && (
+                      {openPlatformId === cardDropdownKey && (
                         <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
                           {totalPages > 1 && (
                             <div className="flex items-center justify-between mb-2 pb-2 border-b">
