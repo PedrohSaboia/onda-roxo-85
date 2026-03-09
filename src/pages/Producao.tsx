@@ -945,6 +945,7 @@ export function ProductionPage() {
   const { empresaId } = useAuth();
   const [processingLabels, setProcessingLabels] = useState<Set<string>>(new Set());
   const [mlEtiquetaMap, setMlEtiquetaMap] = useState<Record<string, boolean>>({});
+  const [etiquetaGeradaMap, setEtiquetaGeradaMap] = useState<Record<string, boolean>>({});
   const [orderPlatformMap, setOrderPlatformMap] = useState<Record<string, { id: string | null; nome: string | null; img_url: string | null }>>({});
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [batchProcessing, setBatchProcessing] = useState(false);
@@ -1187,6 +1188,7 @@ export function ProductionPage() {
   useEffect(() => {
     if (!orderIdsModalData || orderIdsModalData.length === 0) {
       setMlEtiquetaMap({});
+      setEtiquetaGeradaMap({});
       setOrderPlatformMap({});
       return;
     }
@@ -1196,18 +1198,20 @@ export function ProductionPage() {
       try {
         const { data, error } = await (supabase as any)
           .from('pedidos')
-          .select('id_externo,etiqueta_ml,plataforma_id,plataforma:plataformas(nome,img_url)')
+          .select('id_externo,etiqueta_ml,etiqueta_envio_id,plataforma_id,plataforma:plataformas(nome,img_url)')
           .in('id_externo', orderIdsModalData);
 
         if (error) throw error;
 
         if (!mounted) return;
         const map: Record<string, boolean> = {};
+        const generatedMap: Record<string, boolean> = {};
         const platformMap: Record<string, { id: string | null; nome: string | null; img_url: string | null }> = {};
         (data || []).forEach((row: any) => {
           if (row && row.id_externo) {
             const plataformaRaw = Array.isArray(row?.plataforma) ? row.plataforma[0] : row?.plataforma;
             map[row.id_externo] = !!row.etiqueta_ml;
+            generatedMap[row.id_externo] = row.etiqueta_envio_id === ETIQUETA_DISPONIVEL_ID;
             platformMap[row.id_externo] = {
               id: row?.plataforma_id ?? null,
               nome: plataformaRaw?.nome ?? null,
@@ -1216,6 +1220,7 @@ export function ProductionPage() {
           }
         });
         setMlEtiquetaMap(map);
+        setEtiquetaGeradaMap(generatedMap);
         setOrderPlatformMap(platformMap);
       } catch (err) {
         console.warn('Erro ao buscar flags etiqueta_ml:', err);
@@ -1292,6 +1297,7 @@ export function ProductionPage() {
 
   const toggleSelectOrder = (orderId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    if (etiquetaGeradaMap[orderId]) return;
     setSelectedOrderIds((prev) => {
       const next = new Set(prev);
       if (next.has(orderId)) next.delete(orderId); else next.add(orderId);
@@ -1299,11 +1305,24 @@ export function ProductionPage() {
     });
   };
 
+  const selectableOrderIds = useMemo(
+    () => filteredActiveOrderIds.filter((id) => !etiquetaGeradaMap[id]),
+    [filteredActiveOrderIds, etiquetaGeradaMap],
+  );
+
+  useEffect(() => {
+    setSelectedOrderIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => !etiquetaGeradaMap[id]));
+      if (next.size === prev.size) return prev;
+      return next;
+    });
+  }, [etiquetaGeradaMap]);
+
   const toggleSelectAll = () => {
-    if (selectedOrderIds.size === filteredActiveOrderIds.length) {
+    if (selectedOrderIds.size === selectableOrderIds.length) {
       setSelectedOrderIds(new Set());
     } else {
-      setSelectedOrderIds(new Set(filteredActiveOrderIds));
+      setSelectedOrderIds(new Set(selectableOrderIds));
     }
   };
 
@@ -1480,10 +1499,16 @@ export function ProductionPage() {
       // Verificar se é Mercado Livre com etiqueta_ml = true
       const { data: pedidoRow, error: pedidoErr } = await (supabase as any)
         .from('pedidos')
-        .select('id,shipping_id,etiqueta_ml')
+        .select('id,shipping_id,etiqueta_ml,etiqueta_envio_id')
         .eq('id_externo', pedidoId)
         .limit(1)
         .single();
+
+      if (!pedidoErr && pedidoRow?.etiqueta_envio_id === ETIQUETA_DISPONIVEL_ID) {
+        setSingleLabelProgress((prev) => prev ? { ...prev, status: 'error', message: 'Etiqueta já foi gerada para este pedido.' } : prev);
+        toast({ title: 'Etiqueta já gerada', description: `O pedido ${pedidoId} já possui etiqueta.`, variant: 'destructive' });
+        return;
+      }
 
       const primaryPedidoId = pedidoRow?.id as string | undefined;
       const isML = !pedidoErr && pedidoRow?.etiqueta_ml && pedidoRow?.shipping_id;
@@ -2449,16 +2474,16 @@ export function ProductionPage() {
                   onClick={toggleSelectAll}
                 >
                   <Checkbox
-                    checked={selectedOrderIds.size === filteredActiveOrderIds.length && filteredActiveOrderIds.length > 0}
+                    checked={selectedOrderIds.size === selectableOrderIds.length && selectableOrderIds.length > 0}
                     onCheckedChange={toggleSelectAll}
                     aria-label="Selecionar todos"
                     className="rounded-full"
                     onClick={(e) => e.stopPropagation()}
                   />
                   <span className="text-sm text-muted-foreground font-medium">
-                    {selectedOrderIds.size === filteredActiveOrderIds.length && filteredActiveOrderIds.length > 0
+                    {selectedOrderIds.size === selectableOrderIds.length && selectableOrderIds.length > 0
                       ? 'Desmarcar todos'
-                      : `Selecionar todos (${filteredActiveOrderIds.length})`}
+                      : `Selecionar todos (${selectableOrderIds.length})`}
                   </span>
                 </div>
 
@@ -2469,6 +2494,7 @@ export function ProductionPage() {
                   const allProducts = modalItemsByExternalId.get(orderId) ?? itemsByExternalId.get(orderId) ?? [];
                   const products = isOpen ? allProducts : [];
                   const isProcessing = processingLabels.has(orderId);
+                  const hasGeneratedLabel = !!etiquetaGeradaMap[orderId];
                   const isMl = !!mlEtiquetaMap[orderId];
                   const createdAtLabel = getOrderCreatedAtLabel(orderId);
                   const showPlatformBeforeId = orderIdsModalSection === 'leads' || orderIdsModalSection === 'urgentes';
@@ -2519,6 +2545,7 @@ export function ProductionPage() {
                                 checked={isSelected}
                                 onCheckedChange={() => {}}
                                 onClick={(e) => toggleSelectOrder(orderId, e as React.MouseEvent)}
+                                disabled={hasGeneratedLabel}
                                 className="rounded-full flex-shrink-0"
                                 aria-label={isSelected ? 'Desmarcar pedido' : 'Selecionar pedido'}
                               />
@@ -2557,6 +2584,9 @@ export function ProductionPage() {
                               {isMl && (
                                 <span className="shrink-0 rounded-full bg-yellow-100 border border-yellow-400 px-2 py-0.5 text-[10px] font-bold text-yellow-800 uppercase tracking-wide">ML</span>
                               )}
+                              {hasGeneratedLabel && (
+                                <span className="shrink-0 rounded-full bg-emerald-100 border border-emerald-300 px-2 py-0.5 text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Etiqueta gerada</span>
+                              )}
                               <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
                                 {allProducts.length} {allProducts.length === 1 ? 'item' : 'itens'}
                               </span>
@@ -2566,17 +2596,21 @@ export function ProductionPage() {
                             {!hasSelection && (
                               <button
                                 type="button"
-                                disabled={isProcessing}
+                                disabled={isProcessing || hasGeneratedLabel}
                                 onClick={(e) => { e.stopPropagation(); void handleGenerateLabel(orderId); }}
                                 className={`shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 ${
                                   isProcessing
                                     ? 'opacity-60 cursor-wait'
+                                    : hasGeneratedLabel
+                                    ? 'opacity-60 cursor-not-allowed'
                                     : isMl
                                     ? 'bg-yellow-400 hover:bg-yellow-500 text-yellow-900 focus:ring-yellow-400'
                                     : 'bg-blue-600 hover:bg-blue-700 text-white focus:ring-blue-500'
                                 }`}
                               >
-                                {isProcessing ? (
+                                {hasGeneratedLabel ? (
+                                  <><CheckCircle2 className="h-3.5 w-3.5" /><span>Etiqueta gerada</span></>
+                                ) : isProcessing ? (
                                   <><Loader2 className="h-3.5 w-3.5 animate-spin" /><span>Gerando...</span></>
                                 ) : isMl ? (
                                   <><Truck className="h-3.5 w-3.5" /><span>Etiqueta ML</span></>
