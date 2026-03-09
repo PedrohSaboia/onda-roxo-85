@@ -55,6 +55,8 @@ type GroupedItem = {
 type DateRangeCardProps = {
   range: DateRangeConfig;
   quantity: number;
+  quantitySplit?: { pending: number; generated: number };
+  showSplit?: boolean;
   expanded: boolean;
   onToggle: () => void;
 };
@@ -84,6 +86,7 @@ type PlatformSectionProps = {
   section: SectionConfig;
   ranges: DateRangeConfig[];
   totals: Partial<Record<DateRangeKey, number>>;
+  totalsSplit?: Partial<Record<DateRangeKey, { pending: number; generated: number }>>;
   expandedKey: DateRangeKey | null;
   loadingByRange: Partial<Record<DateRangeKey, boolean>>;
   itemsByRange: Partial<Record<DateRangeKey, GroupedItem[]>>;
@@ -94,6 +97,7 @@ type PlatformSectionProps = {
   imageUrl?: string | null;
   // urgentes-specific
   urgentesRawItems?: ProducaoItem[];
+  urgentesGeradasPedidoIds?: Set<string>;
   urgentesMainTab?: UrgenteMainTab;
   urgentesSubTab?: string;
   onUrgentesMainTabChange?: (tab: UrgenteMainTab) => void;
@@ -158,6 +162,7 @@ const URGENT_PLATFORMS = new Set(['shopee', 'tiktok_shop', 'magazine_luiza']);
 const ML_KEYWORD = 'organizador de relogio';
 const SPECIAL_URGENT_PRODUCT_ID = 'ab8a89a1-aa95-4a98-99c2-eaa3de670462';
 const SPECIAL_URGENT_PLATFORM_ID = '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec';
+const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
 const ORDER_IDS_PAGE_SIZE = 20;
 const URGENTES_DAY_BY_RANGE: Partial<Record<DateRangeKey, 0 | 1 | 2>> = {
   r1_10: 0,
@@ -169,6 +174,51 @@ const COMERCIAL_FAIXA_BY_RANGE: Partial<Record<DateRangeKey, 'r1_3' | 'r3_5' | '
   r1_10: 'r1_3',
   r11_20: 'r3_5',
   r21_30: 'r5_plus',
+};
+
+const filterOutEtiquetaDisponivel = async (rows: ProducaoItem[]): Promise<ProducaoItem[]> => {
+  const pedidoIds = Array.from(
+    new Set(rows.map((row) => row.pedido_id).filter((id): id is string => !!id)),
+  );
+
+  if (pedidoIds.length === 0) return rows;
+
+  const { data, error } = await (supabase as any)
+    .from('pedidos')
+    .select('id')
+    .in('id', pedidoIds)
+    .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID);
+
+  if (error) {
+    console.warn('Falha ao filtrar pedidos com etiqueta disponível:', error);
+    return rows;
+  }
+
+  const blockedIds = new Set((data || []).map((row: any) => row.id));
+  if (blockedIds.size === 0) return rows;
+
+  return rows.filter((row) => !row.pedido_id || !blockedIds.has(row.pedido_id));
+};
+
+const getEtiquetaDisponivelPedidoIds = async (rows: ProducaoItem[]): Promise<Set<string>> => {
+  const pedidoIds = Array.from(
+    new Set(rows.map((row) => row.pedido_id).filter((id): id is string => !!id)),
+  );
+
+  if (pedidoIds.length === 0) return new Set<string>();
+
+  const { data, error } = await (supabase as any)
+    .from('pedidos')
+    .select('id')
+    .in('id', pedidoIds)
+    .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID);
+
+  if (error) {
+    console.warn('Falha ao buscar pedidos com etiqueta disponível:', error);
+    return new Set<string>();
+  }
+
+  return new Set((data || []).map((row: any) => row.id as string));
 };
 
 // ---------------------------------------------------------------------------
@@ -183,7 +233,7 @@ const fetchProducaoItens = async (opts: {
     p_start: opts.start ? opts.start.toISOString() : null,
   });
   if (error) throw error;
-  return (data || []) as ProducaoItem[];
+  return await filterOutEtiquetaDisponivel((data || []) as ProducaoItem[]);
 };
 
 const fetchProducaoItensMl = async (opts: {
@@ -195,7 +245,7 @@ const fetchProducaoItensMl = async (opts: {
     p_dias_max: opts.diasMax ?? 9999,
   });
   if (error) throw error;
-  return (data || []) as ProducaoItem[];
+  return await filterOutEtiquetaDisponivel((data || []) as ProducaoItem[]);
 };
 
 const fetchProducaoItensUrgentes = async (opts: {
@@ -215,7 +265,7 @@ const fetchProducaoItensComercial = async (opts: {
     p_faixa: opts.faixa,
   });
   if (error) throw error;
-  return (data || []) as ProducaoItem[];
+  return await filterOutEtiquetaDisponivel((data || []) as ProducaoItem[]);
 };
 
 const normalize = (text: string | null | undefined): string => {
@@ -422,6 +472,8 @@ function filterUrgentesItems(
 function UrgentesItemsDropdown({
   rawItems,
   allGroupedItems,
+  urgentesGeradasPedidoIds,
+  showGeneratedInDropdown,
   mainTab,
   subTab,
   onSetMainTab,
@@ -430,6 +482,8 @@ function UrgentesItemsDropdown({
 }: {
   rawItems: ProducaoItem[];
   allGroupedItems: GroupedItem[];
+  urgentesGeradasPedidoIds: Set<string>;
+  showGeneratedInDropdown: boolean;
   mainTab: UrgenteMainTab;
   subTab: string;
   onSetMainTab: (tab: UrgenteMainTab) => void;
@@ -446,9 +500,50 @@ function UrgentesItemsDropdown({
     return Array.from(seen.entries()).map(([id, nome]) => ({ id, nome }));
   }, [rawItems]);
 
-  const filteredGrouped = useMemo(() => {
-    return groupItems(filterUrgentesItems(rawItems, mainTab, subTab));
-  }, [rawItems, mainTab, subTab]);
+  const filteredGroupedWithStatus = useMemo(() => {
+    const tabFiltered = filterUrgentesItems(rawItems, mainTab, subTab).filter((item) => {
+      if (!showGeneratedInDropdown) {
+        return !item.pedido_id || !urgentesGeradasPedidoIds.has(item.pedido_id);
+      }
+      return true;
+    });
+
+    const grouped = new Map<string, {
+      produto_id: string | null;
+      variacao_id: string | null;
+      nome_produto: string;
+      nome_variacao: string | null;
+      img_url: string | null;
+      quantidade_pendente: number;
+      quantidade_gerada: number;
+    }>();
+
+    for (const item of tabFiltered) {
+      const key = `${item.produto_id ?? 'null'}::${item.variacao_id ?? 'null'}`;
+      const qty = Number(item.quantidade || 0);
+      const isGerada = !!item.pedido_id && urgentesGeradasPedidoIds.has(item.pedido_id);
+      const current = grouped.get(key);
+
+      if (current) {
+        if (isGerada) current.quantidade_gerada += qty;
+        else current.quantidade_pendente += qty;
+      } else {
+        grouped.set(key, {
+          produto_id: item.produto_id,
+          variacao_id: item.variacao_id,
+          nome_produto: item.nome_produto || 'Produto sem nome',
+          nome_variacao: item.nome_variacao ?? null,
+          img_url: item.img_url_variacao || item.img_url_produto || null,
+          quantidade_pendente: isGerada ? 0 : qty,
+          quantidade_gerada: isGerada ? qty : 0,
+        });
+      }
+    }
+
+    return Array.from(grouped.values()).sort(
+      (a, b) => (b.quantidade_pendente + b.quantidade_gerada) - (a.quantidade_pendente + a.quantidade_gerada),
+    );
+  }, [rawItems, mainTab, subTab, urgentesGeradasPedidoIds, showGeneratedInDropdown]);
 
   const MAIN_TABS: { key: UrgenteMainTab; label: string }[] = [
     { key: 'comercial', label: 'Comercial' },
@@ -530,21 +625,70 @@ function UrgentesItemsDropdown({
         </div>
       )}
 
-      <ItemsDropdown
-        items={filteredGrouped}
-        onProductClick={(filter) => {
-          const tabFiltered = filterUrgentesItems(rawItems, mainTab, subTab);
-          const tabIds = Array.from(
-            new Set(tabFiltered.map((i) => i.id_externo).filter((id): id is string => !!id && id.trim().length > 0))
-          );
-          onProductClick?.(filter, tabIds);
-        }}
-      />
+      {filteredGroupedWithStatus.length === 0 ? (
+        <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+          Nenhum item encontrado para este intervalo.
+        </div>
+      ) : (
+        <div className="rounded-xl border bg-muted/20 p-3" onClick={(event) => event.stopPropagation()}>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filteredGroupedWithStatus.map((item) => (
+              <div
+                key={`${item.produto_id ?? 'null'}-${item.variacao_id ?? 'null'}`}
+                className="h-20 rounded-lg border bg-background px-3 py-2 shadow-sm transition-shadow hover:shadow-md cursor-pointer select-none"
+                title="Clique para ver pedidos com este produto"
+                onClick={() => {
+                  const tabFiltered = filterUrgentesItems(rawItems, mainTab, subTab).filter((row) => {
+                    if (!showGeneratedInDropdown) {
+                      return !row.pedido_id || !urgentesGeradasPedidoIds.has(row.pedido_id);
+                    }
+                    return true;
+                  });
+                  const tabIds = Array.from(
+                    new Set(tabFiltered.map((i) => i.id_externo).filter((id): id is string => !!id && id.trim().length > 0)),
+                  );
+                  onProductClick?.({
+                    produto_id: item.produto_id,
+                    variacao_id: item.variacao_id,
+                    nome: item.nome_produto,
+                    nomeVariacao: item.nome_variacao,
+                  }, tabIds);
+                }}
+              >
+                <div className="flex h-full items-center justify-between gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <div className="h-12 w-12 overflow-hidden rounded-md border bg-muted/30">
+                      {item.img_url ? (
+                        <img src={item.img_url} alt={item.nome_produto} className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center text-[10px] text-muted-foreground">Sem foto</div>
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold leading-tight">{item.nome_produto}</p>
+                      <p className="truncate text-xs text-muted-foreground">{item.nome_variacao || 'Sem variação'}</p>
+                      {showGeneratedInDropdown && item.quantidade_gerada > 0 && (
+                        <p className="text-[10px] font-semibold text-green-600">Etiqueta já gerada</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex min-w-[72px] items-center justify-end gap-2">
+                    <span className="text-xl font-extrabold leading-none tabular-nums">{item.quantidade_pendente}</span>
+                    {showGeneratedInDropdown && item.quantidade_gerada > 0 && (
+                      <span className="text-xl font-extrabold leading-none tabular-nums text-green-600">{item.quantidade_gerada}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function DateRangeCard({ range, quantity, expanded, onToggle }: DateRangeCardProps) {
+function DateRangeCard({ range, quantity, quantitySplit, showSplit, expanded, onToggle }: DateRangeCardProps) {
   return (
     <div>
       <Button
@@ -561,7 +705,15 @@ function DateRangeCard({ range, quantity, expanded, onToggle }: DateRangeCardPro
       >
         <div className="space-y-1">
           <div className="text-xs font-medium text-muted-foreground">{range.label}</div>
-          <div className="text-base font-bold tabular-nums">{quantity} PRODUTOS</div>
+          {!showSplit ? (
+            <div className="text-base font-bold tabular-nums">{quantity} PRODUTOS</div>
+          ) : (
+            <div className="flex items-center gap-2 text-sm font-bold tabular-nums">
+              <span>{quantitySplit?.pending ?? quantity}</span>
+              <span className="text-muted-foreground">|</span>
+              <span className="text-green-600">{quantitySplit?.generated ?? 0}</span>
+            </div>
+          )}
         </div>
         <ChevronDown className={`h-4 w-4 transition-transform ${expanded ? 'rotate-180' : ''}`} />
       </Button>
@@ -573,6 +725,7 @@ function PlatformSection({
   section,
   ranges,
   totals,
+  totalsSplit,
   expandedKey,
   loadingByRange,
   itemsByRange,
@@ -582,6 +735,7 @@ function PlatformSection({
   onOpenOrderIdsForProduct,
   imageUrl,
   urgentesRawItems,
+  urgentesGeradasPedidoIds,
   urgentesMainTab,
   urgentesSubTab,
   onUrgentesMainTabChange,
@@ -636,6 +790,8 @@ function PlatformSection({
               key={`${section.key}-${range.key}`}
               range={range}
               quantity={totals[range.key] || 0}
+              quantitySplit={totalsSplit?.[range.key]}
+              showSplit={section.key === 'urgentes' && (range.key === 'r11_20' || range.key === 'r21_30')}
               expanded={expandedKey === range.key}
               onToggle={() => onToggleRange(range.key)}
             />
@@ -674,6 +830,8 @@ function PlatformSection({
               <UrgentesItemsDropdown
                 rawItems={urgentesRawItems}
                 allGroupedItems={itemsByRange[expandedKey] || []}
+                urgentesGeradasPedidoIds={urgentesGeradasPedidoIds ?? new Set<string>()}
+                showGeneratedInDropdown={expandedKey === 'r11_20' || expandedKey === 'r21_30'}
                 mainTab={urgentesMainTab ?? 'comercial'}
                 subTab={urgentesSubTab ?? ''}
                 onSetMainTab={(tab) => onUrgentesMainTabChange?.(tab)}
@@ -697,11 +855,13 @@ export function ProductionPage() {
   const urgentesRanges = useMemo(() => getUrgentesDateRanges(new Date()), []);
   const [summaryItems, setSummaryItems] = useState<ProducaoItem[]>([]);
   const [mlSummaryItems, setMlSummaryItems] = useState<ProducaoItem[]>([]);
+  const [mlSummaryByRange, setMlSummaryByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
   const [comercialSummaryByRange, setComercialSummaryByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
   const [urgentesSummaryByRange, setUrgentesSummaryByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
   const [loadingSummary, setLoadingSummary] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [platformImages, setPlatformImages] = useState<Record<string, string | null>>({});
+  const [platformImagesById, setPlatformImagesById] = useState<Record<string, string | null>>({});
 
   // Estados para cards de produto-mãe (na aba principal)
   type VariacaoResumo = {
@@ -774,6 +934,7 @@ export function ProductionPage() {
   const [orderIdsModalOpen, setOrderIdsModalOpen] = useState(false);
   const [orderIdsModalData, setOrderIdsModalData] = useState<string[]>([]);
   const [orderIdsModalTitle, setOrderIdsModalTitle] = useState('');
+  const [orderIdsModalSection, setOrderIdsModalSection] = useState<SectionKey | null>(null);
   const [modalItemsByExternalId, setModalItemsByExternalId] = useState<Map<string, ProducaoItem[]>>(new Map());
   const [orderIdsPage, setOrderIdsPage] = useState(1);
   const [openOrderIds, setOpenOrderIds] = useState<Set<string>>(new Set());
@@ -784,6 +945,7 @@ export function ProductionPage() {
   const { empresaId } = useAuth();
   const [processingLabels, setProcessingLabels] = useState<Set<string>>(new Set());
   const [mlEtiquetaMap, setMlEtiquetaMap] = useState<Record<string, boolean>>({});
+  const [orderPlatformMap, setOrderPlatformMap] = useState<Record<string, { id: string | null; nome: string | null; img_url: string | null }>>({});
   const [selectedOrderIds, setSelectedOrderIds] = useState<Set<string>>(new Set());
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [progressModalOpen, setProgressModalOpen] = useState(false);
@@ -799,6 +961,7 @@ export function ProductionPage() {
 
   // Urgentes: raw items por range para filtragem por aba de plataforma
   const [urgentesRawByRange, setUrgentesRawByRange] = useState<Partial<Record<DateRangeKey, ProducaoItem[]>>>({});
+  const [urgentesGeradasPedidoIdsByRange, setUrgentesGeradasPedidoIdsByRange] = useState<Partial<Record<DateRangeKey, Set<string>>>>({});
   const [urgentesMainTabByRange, setUrgentesMainTabByRange] = useState<Partial<Record<DateRangeKey, UrgenteMainTab>>>({});
   const [urgentesSubTabByRange, setUrgentesSubTabByRange] = useState<Partial<Record<DateRangeKey, string>>>({});
 
@@ -809,9 +972,12 @@ export function ProductionPage() {
       setSummaryError(null);
       const now = new Date();
       const end = endOfDay(now);
-      const [items, mlItems, com1_3, com3_5, com5plus, urg0, urg1, urg2] = await Promise.all([
+      const [items, ml1_5, ml6_11, ml11_20, ml20plus, com1_3, com3_5, com5plus, urg0, urg1, urg2] = await Promise.all([
         fetchProducaoItens({ start: null, end }),
-        fetchProducaoItensMl({ diasMin: 1, diasMax: null }),
+        fetchProducaoItensMl({ diasMin: 1, diasMax: 5 }),
+        fetchProducaoItensMl({ diasMin: 6, diasMax: 11 }),
+        fetchProducaoItensMl({ diasMin: 11, diasMax: 20 }),
+        fetchProducaoItensMl({ diasMin: 20, diasMax: null }),
         fetchProducaoItensComercial({ faixa: 'r1_3' }),
         fetchProducaoItensComercial({ faixa: 'r3_5' }),
         fetchProducaoItensComercial({ faixa: 'r5_plus' }),
@@ -820,16 +986,32 @@ export function ProductionPage() {
         fetchProducaoItensUrgentes({ diasParaEnvio: 2 }),
       ]);
       setSummaryItems(items);
-      setMlSummaryItems(mlItems);
+      setMlSummaryByRange({
+        ml_r1_5: ml1_5,
+        ml_r6_11: ml6_11,
+        ml_r11_20: ml11_20,
+        ml_r20_plus: ml20plus,
+      });
+      setMlSummaryItems([...ml1_5, ...ml6_11, ...ml11_20, ...ml20plus]);
       setComercialSummaryByRange({
         r1_10: com1_3,
         r11_20: com3_5,
         r21_30: com5plus,
       });
+      const [urgGeradas0, urgGeradas1, urgGeradas2] = await Promise.all([
+        getEtiquetaDisponivelPedidoIds(urg0),
+        getEtiquetaDisponivelPedidoIds(urg1),
+        getEtiquetaDisponivelPedidoIds(urg2),
+      ]);
       setUrgentesSummaryByRange({
-        r1_10: urg0,
+        r1_10: urg0.filter((row) => !row.pedido_id || !urgGeradas0.has(row.pedido_id)),
         r11_20: urg1,
         r21_30: urg2,
+      });
+      setUrgentesGeradasPedidoIdsByRange({
+        r1_10: urgGeradas0,
+        r11_20: urgGeradas1,
+        r21_30: urgGeradas2,
       });
       // limpar caches para garantir que os próximos acessos peguem dados atualizados
       setItemsCache({ yampi: {}, mercado_livre: {}, leads: {}, urgentes: {} });
@@ -867,7 +1049,7 @@ export function ProductionPage() {
       }
 
       for (const range of ML_DATE_RANGES) {
-        const rows = mlSummaryItems.filter((row) => itemInRange(row, range, now) && matchesProdutoFiltro(row));
+        const rows = (mlSummaryByRange[range.key] || []).filter((row) => matchesProdutoFiltro(row));
         rows.forEach((row) => registrarEtapa(row.pedido_id, `MERCADO LIVRE • ${range.label}`));
       }
 
@@ -881,9 +1063,15 @@ export function ProductionPage() {
         rows.forEach((row) => registrarEtapa(row.pedido_id, `URGENTES • ${range.label}`));
       }
 
-      // Usa a mesma origem dos cards (summaryItems + mlSummaryItems)
-      // para garantir que os números do modal batam com "Itens a produzir".
-      const allItems = [...summaryItems, ...mlSummaryItems];
+      // Usa exatamente as mesmas origens por seção/faixa que alimentam os cards.
+      const allMlItems = ML_DATE_RANGES.flatMap((range) => mlSummaryByRange[range.key] || []);
+      const allComercialItems = COMERCIAL_DATE_RANGES.flatMap((range) => comercialSummaryByRange[range.key] || []);
+      const allUrgentesItems = urgentesRanges.flatMap((range) => urgentesSummaryByRange[range.key] || []);
+      const allYampiItems = DATE_RANGES.flatMap((range) =>
+        summaryItems.filter((row) => itemMatchesSection(row, 'yampi') && itemInRange(row, range, now)),
+      );
+
+      const allItems = [...allYampiItems, ...allMlItems, ...allComercialItems, ...allUrgentesItems];
       const itensDoProduto = allItems.filter((row) => {
         if (!row.pedido_id) return false;
         return matchesProdutoFiltro(row);
@@ -999,6 +1187,7 @@ export function ProductionPage() {
   useEffect(() => {
     if (!orderIdsModalData || orderIdsModalData.length === 0) {
       setMlEtiquetaMap({});
+      setOrderPlatformMap({});
       return;
     }
 
@@ -1007,17 +1196,27 @@ export function ProductionPage() {
       try {
         const { data, error } = await (supabase as any)
           .from('pedidos')
-          .select('id_externo,etiqueta_ml')
+          .select('id_externo,etiqueta_ml,plataforma_id,plataforma:plataformas(nome,img_url)')
           .in('id_externo', orderIdsModalData);
 
         if (error) throw error;
 
         if (!mounted) return;
         const map: Record<string, boolean> = {};
+        const platformMap: Record<string, { id: string | null; nome: string | null; img_url: string | null }> = {};
         (data || []).forEach((row: any) => {
-          if (row && row.id_externo) map[row.id_externo] = !!row.etiqueta_ml;
+          if (row && row.id_externo) {
+            const plataformaRaw = Array.isArray(row?.plataforma) ? row.plataforma[0] : row?.plataforma;
+            map[row.id_externo] = !!row.etiqueta_ml;
+            platformMap[row.id_externo] = {
+              id: row?.plataforma_id ?? null,
+              nome: plataformaRaw?.nome ?? null,
+              img_url: plataformaRaw?.img_url ?? null,
+            };
+          }
         });
         setMlEtiquetaMap(map);
+        setOrderPlatformMap(platformMap);
       } catch (err) {
         console.warn('Erro ao buscar flags etiqueta_ml:', err);
       }
@@ -1401,8 +1600,12 @@ export function ProductionPage() {
         const now = new Date();
         // start = null para incluir 31+ dias sem limite inferior
         const end = endOfDay(now);
-        const [items, com1_3, com3_5, com5plus, urg0, urg1, urg2] = await Promise.all([
+        const [items, ml1_5, ml6_11, ml11_20, ml20plus, com1_3, com3_5, com5plus, urg0, urg1, urg2] = await Promise.all([
           fetchProducaoItens({ start: null, end }),
+          fetchProducaoItensMl({ diasMin: 1, diasMax: 5 }),
+          fetchProducaoItensMl({ diasMin: 6, diasMax: 11 }),
+          fetchProducaoItensMl({ diasMin: 11, diasMax: 20 }),
+          fetchProducaoItensMl({ diasMin: 20, diasMax: null }),
           fetchProducaoItensComercial({ faixa: 'r1_3' }),
           fetchProducaoItensComercial({ faixa: 'r3_5' }),
           fetchProducaoItensComercial({ faixa: 'r5_plus' }),
@@ -1412,15 +1615,32 @@ export function ProductionPage() {
         ]);
         if (mounted) {
           setSummaryItems(items);
+          setMlSummaryByRange({
+            ml_r1_5: ml1_5,
+            ml_r6_11: ml6_11,
+            ml_r11_20: ml11_20,
+            ml_r20_plus: ml20plus,
+          });
+          setMlSummaryItems([...ml1_5, ...ml6_11, ...ml11_20, ...ml20plus]);
           setComercialSummaryByRange({
             r1_10: com1_3,
             r11_20: com3_5,
             r21_30: com5plus,
           });
+          const [urgGeradas0, urgGeradas1, urgGeradas2] = await Promise.all([
+            getEtiquetaDisponivelPedidoIds(urg0),
+            getEtiquetaDisponivelPedidoIds(urg1),
+            getEtiquetaDisponivelPedidoIds(urg2),
+          ]);
           setUrgentesSummaryByRange({
-            r1_10: urg0,
+            r1_10: urg0.filter((row) => !row.pedido_id || !urgGeradas0.has(row.pedido_id)),
             r11_20: urg1,
             r21_30: urg2,
+          });
+          setUrgentesGeradasPedidoIdsByRange({
+            r1_10: urgGeradas0,
+            r11_20: urgGeradas1,
+            r21_30: urgGeradas2,
           });
         }
       } catch (err: any) {
@@ -1432,20 +1652,6 @@ export function ProductionPage() {
 
     void fetchSummary();
 
-    // fetch ML summary
-    const fetchMlSummary = async () => {
-      try {
-        const now = new Date();
-        const end = endOfDay(now);
-        const items = await fetchProducaoItensMl({ diasMin: 1, diasMax: null });
-        if (mounted) setMlSummaryItems(items);
-      } catch (err) {
-        console.warn('Erro ao buscar itens ML:', err);
-      }
-    };
-
-    void fetchMlSummary();
-
     // fetch plataformas imagens
     const fetchPlataformas = async () => {
       try {
@@ -1453,11 +1659,14 @@ export function ProductionPage() {
         if (error) throw error;
         if (!mounted) return;
         const map: Record<string, string | null> = {};
+        const mapById: Record<string, string | null> = {};
         (data || []).forEach((p: any) => {
           const key = normalize(p.nome);
           map[key] = p.img_url || null;
+          if (p?.id) mapById[p.id] = p.img_url || null;
         });
         setPlatformImages(map);
+        setPlatformImagesById(mapById);
       } catch (err) {
         console.warn('Erro ao buscar plataformas:', err);
       }
@@ -1513,29 +1722,58 @@ export function ProductionPage() {
     // Urgentes: usar RPC dedicada por dias para envio
     for (const range of urgentesRanges) {
       const filtered = urgentesSummaryByRange[range.key] || [];
+      const geradasSet = urgentesGeradasPedidoIdsByRange[range.key] || new Set<string>();
       base.urgentes[range.key] = new Set(
         filtered
+          .filter((item) => !item.pedido_id || !geradasSet.has(item.pedido_id))
           .map((item) => item.id_externo)
           .filter((id): id is string => !!id && id.trim().length > 0),
       ).size;
     }
 
-    // Mercado Livre: usar mlSummaryItems + ML_DATE_RANGES
+    // Mercado Livre: usar RPC dedicada por faixa
     for (const range of ML_DATE_RANGES) {
-      const filtered = mlSummaryItems.filter((item) => itemInRange(item, range, now));
+      const filtered = mlSummaryByRange[range.key] || [];
       base.mercado_livre[range.key] = filtered.reduce(
         (sum, item) => sum + Number(item.quantidade || 0), 0,
       );
     }
 
     return base;
-  }, [summaryItems, mlSummaryItems, comercialSummaryByRange, urgentesSummaryByRange, urgentesRanges]);
+  }, [summaryItems, mlSummaryByRange, comercialSummaryByRange, urgentesSummaryByRange, urgentesRanges, urgentesGeradasPedidoIdsByRange]);
+
+  const urgentesTotalsSplitByRange = useMemo(() => {
+    const split: Partial<Record<DateRangeKey, { pending: number; generated: number }>> = {};
+
+    for (const range of urgentesRanges) {
+      const rows = urgentesSummaryByRange[range.key] || [];
+      const geradasSet = urgentesGeradasPedidoIdsByRange[range.key] || new Set<string>();
+
+      const pending = new Set(
+        rows
+          .filter((item) => !item.pedido_id || !geradasSet.has(item.pedido_id))
+          .map((item) => item.id_externo)
+          .filter((id): id is string => !!id && id.trim().length > 0),
+      ).size;
+
+      const generated = new Set(
+        rows
+          .filter((item) => !!item.pedido_id && geradasSet.has(item.pedido_id))
+          .map((item) => item.id_externo)
+          .filter((id): id is string => !!id && id.trim().length > 0),
+      ).size;
+
+      split[range.key] = { pending, generated };
+    }
+
+    return split;
+  }, [urgentesRanges, urgentesSummaryByRange, urgentesGeradasPedidoIdsByRange]);
 
   const createdAtByExternalId = useMemo(() => {
     const map = new Map<string, number>();
     const sources: ProducaoItem[][] = [
       summaryItems,
-      mlSummaryItems,
+      ...Object.values(mlSummaryByRange),
       ...Object.values(comercialSummaryByRange),
       ...Object.values(urgentesSummaryByRange),
       ...Object.values(urgentesRawByRange),
@@ -1553,7 +1791,7 @@ export function ProductionPage() {
     }
 
     return map;
-  }, [summaryItems, mlSummaryItems, comercialSummaryByRange, urgentesSummaryByRange, urgentesRawByRange]);
+  }, [summaryItems, mlSummaryByRange, comercialSummaryByRange, urgentesSummaryByRange, urgentesRawByRange]);
 
   const sortOrderIdsByOldest = (orderIds: string[]) => {
     const unique = Array.from(new Set(orderIds.filter((id) => !!id && id.trim().length > 0)));
@@ -1607,6 +1845,11 @@ export function ProductionPage() {
         const day = URGENTES_DAY_BY_RANGE[range.key];
         if (day !== undefined) {
           filteredRows = await fetchProducaoItensUrgentes({ diasParaEnvio: day });
+          const geradasSet = await getEtiquetaDisponivelPedidoIds(filteredRows);
+          setUrgentesGeradasPedidoIdsByRange((prev) => ({ ...prev, [range.key]: geradasSet }));
+          if (range.key === 'r1_10') {
+            filteredRows = filteredRows.filter((row) => !row.pedido_id || !geradasSet.has(row.pedido_id));
+          }
         }
       } else {
         const rawItems = await fetchProducaoItens({ start: bounds.start, end: bounds.end });
@@ -1707,6 +1950,7 @@ export function ProductionPage() {
     const rangeLabel = allRanges.find((item) => item.key === rangeKey)?.label || rangeKey;
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel}`);
+    setOrderIdsModalSection(section);
     setOrderIdsModalData(orderIds);
     setModalProductFilter(null);
     setModalTab('only');
@@ -1730,6 +1974,7 @@ export function ProductionPage() {
     const productLabel = filter.nomeVariacao ? `${filter.nome} — ${filter.nomeVariacao}` : filter.nome;
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel} • ${productLabel}`);
+    setOrderIdsModalSection(section);
     setOrderIdsModalData(orderIds);
     setModalProductFilter(filter);
     setModalTab('only');
@@ -1796,7 +2041,14 @@ export function ProductionPage() {
   
 
   const getProdutosMaeAgrupados = (): ProdutoMaeResumo[] => {
-    const allItems = [...summaryItems, ...mlSummaryItems];
+    const now = new Date();
+    const allYampiItems = DATE_RANGES.flatMap((range) =>
+      summaryItems.filter((row) => itemMatchesSection(row, 'yampi') && itemInRange(row, range, now)),
+    );
+    const allMlItems = ML_DATE_RANGES.flatMap((range) => mlSummaryByRange[range.key] || []);
+    const allComercialItems = COMERCIAL_DATE_RANGES.flatMap((range) => comercialSummaryByRange[range.key] || []);
+    const allUrgentesItems = urgentesRanges.flatMap((range) => urgentesSummaryByRange[range.key] || []);
+    const allItems = [...allYampiItems, ...allMlItems, ...allComercialItems, ...allUrgentesItems];
     const produtosMap = new Map<string, ProdutoMaeResumo>();
 
     for (const item of allItems) {
@@ -2093,6 +2345,7 @@ export function ProductionPage() {
                 section={section}
                 ranges={section.key === 'mercado_livre' ? ML_DATE_RANGES : section.key === 'urgentes' ? urgentesRanges : section.key === 'leads' ? COMERCIAL_DATE_RANGES : DATE_RANGES}
                 totals={totalsBySection[section.key]}
+                totalsSplit={section.key === 'urgentes' ? urgentesTotalsSplitByRange : undefined}
                 expandedKey={expandedBySection[section.key]}
                 loadingByRange={loadingByCard[section.key]}
                 itemsByRange={itemsCache[section.key]}
@@ -2110,6 +2363,7 @@ export function ProductionPage() {
                 {...(section.key === 'urgentes'
                   ? {
                       urgentesRawItems: urgentesRawByRange[expandedBySection['urgentes'] as DateRangeKey] ?? [],
+                      urgentesGeradasPedidoIds: urgentesGeradasPedidoIdsByRange[expandedBySection['urgentes'] as DateRangeKey] ?? new Set<string>(),
                       urgentesMainTab: urgentesMainTabByRange[expandedBySection['urgentes'] as DateRangeKey] ?? 'comercial',
                       urgentesSubTab: urgentesSubTabByRange[expandedBySection['urgentes'] as DateRangeKey] ?? '',
                       onUrgentesMainTabChange: (tab: UrgenteMainTab) => {
@@ -2132,7 +2386,7 @@ export function ProductionPage() {
             </div>
       </div>
 
-      <Dialog open={orderIdsModalOpen} onOpenChange={(open) => { setOrderIdsModalOpen(open); if (!open) { setModalProductFilter(null); setModalTab('only'); setSelectedOrderIds(new Set()); setOpenOrderIds(new Set()); setSearchTerm(''); } }}>
+      <Dialog open={orderIdsModalOpen} onOpenChange={(open) => { setOrderIdsModalOpen(open); if (!open) { setModalProductFilter(null); setModalTab('only'); setSelectedOrderIds(new Set()); setOpenOrderIds(new Set()); setSearchTerm(''); setOrderIdsModalSection(null); } }}>
         <DialogContent className="!w-[96vw] !max-w-[96vw] lg:!w-[92vw] lg:!max-w-[92vw] px-2 sm:px-3">
           <DialogHeader>
             <DialogTitle className="text-lg">Pedidos — Gerar Etiquetas</DialogTitle>
@@ -2217,6 +2471,13 @@ export function ProductionPage() {
                   const isProcessing = processingLabels.has(orderId);
                   const isMl = !!mlEtiquetaMap[orderId];
                   const createdAtLabel = getOrderCreatedAtLabel(orderId);
+                  const showPlatformBeforeId = orderIdsModalSection === 'leads' || orderIdsModalSection === 'urgentes';
+                  const plataformaFromOrder = orderPlatformMap[orderId];
+                  const plataformaNome = plataformaFromOrder?.nome || allProducts[0]?.plataforma_nome || '';
+                  const plataformaImg =
+                    plataformaFromOrder?.img_url
+                    || (plataformaFromOrder?.id ? (platformImagesById[plataformaFromOrder.id] || null) : null)
+                    || (plataformaNome ? (platformImages[normalize(plataformaNome)] || null) : null);
                   return (
                     <div
                       key={orderId}
@@ -2275,6 +2536,13 @@ export function ProductionPage() {
                                   }}
                                   className="flex items-center gap-1 group rounded px-1 -mx-1 hover:bg-muted transition-colors"
                                 >
+                                  {showPlatformBeforeId && plataformaImg && (
+                                    <img
+                                      src={plataformaImg}
+                                      alt={plataformaNome}
+                                      className="h-4 w-4 rounded-sm object-cover border shrink-0"
+                                    />
+                                  )}
                                   <span className="font-mono text-sm font-semibold truncate">{orderId}</span>
                                   <Copy className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                                 </button>
