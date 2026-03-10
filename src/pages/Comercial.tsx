@@ -183,8 +183,10 @@ export function Comercial() {
   type DailyChartStyle = 'linha' | 'barras' | 'pizza';
 
   const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
+  const [whatsappMetrics, setWhatsappMetrics] = useState<PixMetricsRow | null>(null);
   const [pixDailySeries, setPixDailySeries] = useState<PixDailyRow[]>([]);
   const [carrinhoDailySeries, setCarrinhoDailySeries] = useState<PixDailyRow[]>([]);
+  const [whatsappDailySeries, setWhatsappDailySeries] = useState<PixDailyRow[]>([]);
   const [pixConvertedByResponsavel, setPixConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
   const [carrinhoConvertedByResponsavel, setCarrinhoConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
   const [yampiUpsellMetrics, setYampiUpsellMetrics] = useState<YampiUpsellMetricsRow | null>(null);
@@ -192,6 +194,7 @@ export function Comercial() {
   const [pixDashboardError, setPixDashboardError] = useState<string | null>(null);
   const [pixDailyChartStyle, setPixDailyChartStyle] = useState<DailyChartStyle>('linha');
   const [carrinhoDailyChartStyle, setCarrinhoDailyChartStyle] = useState<DailyChartStyle>('linha');
+  const [whatsappDailyChartStyle, setWhatsappDailyChartStyle] = useState<DailyChartStyle>('linha');
   const [dashboardDateStart, setDashboardDateStart] = useState<string>(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [dashboardDateEnd, setDashboardDateEnd] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [dashboardPickerOpen, setDashboardPickerOpen] = useState(false);
@@ -336,13 +339,21 @@ export function Comercial() {
 
         const [
           { data: metricasData, error: metricasError },
+          { data: metricasWhatsappData, error: metricasWhatsappError },
           { data: seriePixData, error: seriePixError },
           { data: serieCarrinhoData, error: serieCarrinhoError },
+          { data: serieWhatsappData, error: serieWhatsappError },
           { data: convertidosData, error: convertidosError },
           { data: convertidosCarrinhoData, error: convertidosCarrinhoError },
           { data: yampiUpsellData, error: yampiUpsellError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_metricas_leads_whatsapp', {
             p_empresa_id: empresaId ?? null,
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
@@ -356,6 +367,13 @@ export function Comercial() {
             p_timezone: 'America/Sao_Paulo',
           }),
           (supabase as any).rpc('comercial_get_entradas_leads_carrinho_ab_por_dia', {
+            p_empresa_id: empresaId ?? null,
+            p_dias: intervaloDias,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_entradas_leads_whatsapp_por_dia', {
             p_empresa_id: empresaId ?? null,
             p_dias: intervaloDias,
             p_data_inicio: startDate.toISOString(),
@@ -385,16 +403,20 @@ export function Comercial() {
         ]);
 
         if (metricasError) throw metricasError;
+  if (metricasWhatsappError) throw metricasWhatsappError;
         if (seriePixError) throw seriePixError;
         if (serieCarrinhoError) throw serieCarrinhoError;
+  if (serieWhatsappError) throw serieWhatsappError;
         if (convertidosError) throw convertidosError;
         if (convertidosCarrinhoError) throw convertidosCarrinhoError;
         if (yampiUpsellError) throw yampiUpsellError;
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
+  setWhatsappMetrics((metricasWhatsappData?.[0] || null) as PixMetricsRow | null);
         setPixDailySeries((seriePixData || []) as PixDailyRow[]);
         setCarrinhoDailySeries((serieCarrinhoData || []) as PixDailyRow[]);
+  setWhatsappDailySeries((serieWhatsappData || []) as PixDailyRow[]);
         setPixConvertedByResponsavel((convertidosData || []) as PixConvertedByResponsavelRow[]);
         setCarrinhoConvertedByResponsavel((convertidosCarrinhoData || []) as PixConvertedByResponsavelRow[]);
         setYampiUpsellMetrics((yampiUpsellData?.[0] || null) as YampiUpsellMetricsRow | null);
@@ -402,8 +424,10 @@ export function Comercial() {
         if (!mounted) return;
         setPixDashboardError(err?.message || String(err));
         setPixMetrics(null);
+        setWhatsappMetrics(null);
         setPixDailySeries([]);
         setCarrinhoDailySeries([]);
+        setWhatsappDailySeries([]);
         setPixConvertedByResponsavel([]);
         setCarrinhoConvertedByResponsavel([]);
         setYampiUpsellMetrics(null);
@@ -1766,6 +1790,11 @@ export function Comercial() {
     dia_label: format(parseISO(`${row.dia}T00:00:00`), 'dd/MM'),
   }));
 
+  const whatsappDailyChartData = whatsappDailySeries.map((row) => ({
+    ...row,
+    dia_label: format(parseISO(`${row.dia}T00:00:00`), 'dd/MM'),
+  }));
+
   const pixPieChartData = [
     { name: 'Entradas', value: pixDailySeries.reduce((acc, row) => acc + Number(row.total_entradas || 0), 0), color: '#2563eb' },
     { name: 'Vendidos', value: pixDailySeries.reduce((acc, row) => acc + Number(row.total_vendidos || 0), 0), color: '#16a34a' },
@@ -1774,6 +1803,11 @@ export function Comercial() {
   const carrinhoPieChartData = [
     { name: 'Entradas', value: carrinhoDailySeries.reduce((acc, row) => acc + Number(row.total_entradas || 0), 0), color: '#2563eb' },
     { name: 'Vendidos', value: carrinhoDailySeries.reduce((acc, row) => acc + Number(row.total_vendidos || 0), 0), color: '#16a34a' },
+  ];
+
+  const whatsappPieChartData = [
+    { name: 'Entradas', value: whatsappDailySeries.reduce((acc, row) => acc + Number(row.total_entradas || 0), 0), color: '#2563eb' },
+    { name: 'Vendidos', value: whatsappDailySeries.reduce((acc, row) => acc + Number(row.total_vendidos || 0), 0), color: '#16a34a' },
   ];
 
   const mediaEntradasDia = pixDailySeries.length
@@ -2098,6 +2132,27 @@ export function Comercial() {
                   <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Mês atual:</strong> {pixMetrics?.total_mes_atual || 0}</div>
                 </div>
 
+                <div className="rounded-md border border-emerald-200/70 bg-emerald-50/40 px-3 py-2 text-sm text-emerald-900/80 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-100/80">
+                  Leads de WhatsApp: total de entradas no período e taxa de conversão para vendidos.
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Entradas WhatsApp (período)</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{whatsappMetrics?.total_periodo || 0}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Total de leads WhatsApp captados no período analisado.</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-green-600 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Conversão WhatsApp</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-green-700 dark:text-green-300">{formatPercent(whatsappMetrics?.taxa_conversao_periodo)}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Percentual de leads WhatsApp marcados como vendidos.</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
                 <div className="rounded-md border border-amber-200/70 bg-amber-50/40 px-3 py-2 text-sm text-amber-900/80 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100/80">
                   Seção de upsell Yampi: compara pedidos com e sem inclusão de itens para medir impacto em ticket médio.
                 </div>
@@ -2141,7 +2196,7 @@ export function Comercial() {
                   <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Unidades médias/pedido:</strong> {Number(yampiUpsellMetrics?.unidades_medias_por_pedido || 0).toFixed(2)}</div>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                   <Card className="border shadow-sm">
                     <CardHeader>
                       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -2250,6 +2305,63 @@ export function Comercial() {
                               <Pie data={carrinhoPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
                                 {carrinhoPieChartData.map((entry, index) => (
                                   <Cell key={`car-pie-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value: any) => Number(value || 0)} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border shadow-sm">
+                    <CardHeader>
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <CardTitle className="text-base">Entradas diárias WhatsApp (30 dias)</CardTitle>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('linha')}>Linha</Button>
+                          <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('barras')}>Barras</Button>
+                          <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('pizza')}>Pizza</Button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Azul = entradas de WhatsApp, verde = leads convertidos no período exibido.</p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[220px]">
+                        {whatsappDailyChartStyle === 'linha' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={whatsappDailyChartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="dia_label" />
+                              <YAxis allowDecimals={false} />
+                              <Tooltip content={renderPixDailyTooltip} />
+                              <Line type="monotone" dataKey="total_entradas" name="Entradas" stroke="#2563eb" strokeWidth={2} dot={false} />
+                              <Line type="monotone" dataKey="total_vendidos" name="Vendidos" stroke="#16a34a" strokeWidth={2} dot={false} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        )}
+
+                        {whatsappDailyChartStyle === 'barras' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={whatsappDailyChartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="dia_label" />
+                              <YAxis allowDecimals={false} />
+                              <Tooltip content={renderPixDailyTooltip} />
+                              <Bar dataKey="total_entradas" name="Entradas" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="total_vendidos" name="Vendidos" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+
+                        {whatsappDailyChartStyle === 'pizza' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={whatsappPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                                {whatsappPieChartData.map((entry, index) => (
+                                  <Cell key={`wpp-pie-${index}`} fill={entry.color} />
                                 ))}
                               </Pie>
                               <Tooltip formatter={(value: any) => Number(value || 0)} />

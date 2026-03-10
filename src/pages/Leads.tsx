@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { useToast } from '@/hooks/use-toast';
 import { /* header provided by AppLayout */ } from '@/components/layout/AppHeader';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
-import { Check, X, Pencil, SquarePlus, AlertCircle, Users, Search } from 'lucide-react';
+import { Check, X, Pencil, SquarePlus, AlertCircle, Users, Search, UserPlus, ArrowLeft, Phone } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
 
@@ -61,10 +61,105 @@ export default function Leads() {
   const [paymentValues, setPaymentValues] = useState<Record<string, string>>({});
   const [showCartaoDropdown, setShowCartaoDropdown] = useState(false);
   const cartaoDropdownRef = useRef<HTMLDivElement>(null);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'pix' | 'carrinho' | 'typebot'>('all');
+  const [activeFilter, setActiveFilter] = useState<'all' | 'pix' | 'carrinho' | 'typebot' | 'whatsapp'>('all');
   const [pixCount, setPixCount] = useState<number>(0);
   const [carrinhoCount, setCarrinhoCount] = useState<number>(0);
   const [typebotCount, setTypebotCount] = useState<number>(0);
+  const [whatsappCount, setWhatsappCount] = useState<number>(0);
+
+  // Seção de cadastro de lead simples
+  const [addLeadSection, setAddLeadSection] = useState(false);
+  const [newLeadNome, setNewLeadNome] = useState('');
+  const [newLeadContato, setNewLeadContato] = useState('');
+  const [newLeadTipoId, setNewLeadTipoId] = useState<string>('');
+  const [tiposLeadOptions, setTiposLeadOptions] = useState<Array<{ id: number; nome: string; img_url?: string | null }>>([]);
+  const [loadingTiposLead, setLoadingTiposLead] = useState(false);
+  const [savingLead, setSavingLead] = useState(false);
+
+  const normalizePhoneDigits = (value: string) => {
+    let digits = value.replace(/\D/g, '');
+    if (digits.startsWith('55') && digits.length > 11) {
+      digits = digits.slice(2);
+    }
+    return digits.slice(0, 11);
+  };
+
+  const formatPhoneInput = (value: string) => {
+    const digits = normalizePhoneDigits(value);
+
+    if (!digits) return '';
+    if (digits.length <= 2) return `(${digits}`;
+    if (digits.length <= 6) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+  };
+
+  useEffect(() => {
+    if (!addLeadSection) return;
+    let mounted = true;
+    const load = async () => {
+      setLoadingTiposLead(true);
+      try {
+        const { data, error } = await (supabase as any).from('tipo_de_lead').select('id,nome,img_url').order('id');
+        if (error) throw error;
+        if (!mounted) return;
+        setTiposLeadOptions(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar tipos de lead:', err);
+      } finally {
+        if (mounted) setLoadingTiposLead(false);
+      }
+    };
+    load();
+    return () => { mounted = false; };
+  }, [addLeadSection]);
+
+  const handleSaveNewLead = async () => {
+    if (!newLeadNome.trim()) {
+      toast({ title: 'Campo obrigatório', description: 'Informe o nome do lead', variant: 'destructive' });
+      return;
+    }
+
+    if (!empresaId) {
+      toast({ title: 'Sem empresa vinculada', description: 'Não foi possível identificar sua empresa para cadastrar o lead', variant: 'destructive' });
+      return;
+    }
+
+    const contatoDigits = normalizePhoneDigits(newLeadContato);
+    if (contatoDigits && contatoDigits.length !== 10 && contatoDigits.length !== 11) {
+      toast({ title: 'Contato inválido', description: 'Informe um telefone com DDD (10 ou 11 dígitos)', variant: 'destructive' });
+      return;
+    }
+
+    setSavingLead(true);
+    try {
+      const { error } = await (supabase as any).from('leads').insert({
+        nome: newLeadNome.trim(),
+        contato: contatoDigits || null,
+        tipo_de_lead_id: newLeadTipoId ? Number(newLeadTipoId) : null,
+        empresa_id: empresaId,
+        responsavel: '7dcdde01-a075-4169-86d1-2263440ecde6'
+      });
+      if (error) throw error;
+      toast({ title: 'Lead cadastrado', description: `${newLeadNome.trim()} adicionado com sucesso` });
+      setNewLeadNome('');
+      setNewLeadContato('');
+      setNewLeadTipoId('');
+      setAddLeadSection(false);
+      setPage(1);
+    } catch (err: any) {
+      const isRlsError = err?.code === '42501' || String(err?.message || '').toLowerCase().includes('row-level security');
+      toast({
+        title: 'Erro ao cadastrar',
+        description: isRlsError
+          ? 'Seu usuário não tem permissão para criar leads nesta empresa. Verifique o vínculo de empresa/permissões.'
+          : (err?.message || 'Não foi possível salvar o lead'),
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingLead(false);
+    }
+  };
 
   // formata input para moeda BR (ex: 1.234,56) enquanto o usuário digita
   const formatCurrencyInput = (value: string) => {
@@ -154,6 +249,8 @@ export default function Leads() {
           query = query.eq('tipo_de_lead_id', 2).eq('status_lead_id', 1);
         } else if (activeFilter === 'typebot') {
           query = query.eq('tipo_de_lead_id', 3).eq('status_lead_id', 1);
+        } else if (activeFilter === 'whatsapp') {
+          query = query.eq('tipo_de_lead_id', 4).eq('status_lead_id', 1);
         }
 
         // Apply search filter in database query
@@ -239,10 +336,21 @@ export default function Leads() {
         
         if (typebotError) throw typebotError;
 
+        // Count WhatsApp leads (tipo_de_lead_id = 4, status_lead_id = 1, vendido = false or null)
+        const { count: whatsappTotal, error: whatsappError } = await (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 4)
+          .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false');
+
+        if (whatsappError) throw whatsappError;
+
         if (!mounted) return;
         setPixCount(pixTotal || 0);
         setCarrinhoCount(carrinhoTotal || 0);
         setTypebotCount(typebotTotal || 0);
+        setWhatsappCount(whatsappTotal || 0);
       } catch (err: any) {
         console.error('Erro ao carregar contagens:', err);
       }
@@ -258,7 +366,7 @@ export default function Leads() {
       if (error) throw error;
       
       // Remove lead from list immediately if it no longer matches the filter
-      if (activeFilter === 'pix' || activeFilter === 'carrinho') {
+      if (activeFilter !== 'all') {
         // Lead with status !== 1 should be removed from filtered views
         if (newStatus !== 1) {
           setLeads(prev => prev.filter(l => l.id !== leadId));
@@ -269,7 +377,7 @@ export default function Leads() {
       }
       
       // Reload counts to update badges in real-time
-      const [pixResp, carrinhoResp, typebotResp] = await Promise.all([
+      const [pixResp, carrinhoResp, typebotResp, whatsappResp] = await Promise.all([
         (supabase as any)
           .from('leads')
           .select('*', { count: 'exact', head: true })
@@ -287,12 +395,19 @@ export default function Leads() {
           .select('*', { count: 'exact', head: true })
           .eq('tipo_de_lead_id', 3)
           .eq('status_lead_id', 1)
+          .or('vendido.is.null,vendido.eq.false'),
+        (supabase as any)
+          .from('leads')
+          .select('*', { count: 'exact', head: true })
+          .eq('tipo_de_lead_id', 4)
+          .eq('status_lead_id', 1)
           .or('vendido.is.null,vendido.eq.false')
       ]);
       
       setPixCount(pixResp.count || 0);
       setCarrinhoCount(carrinhoResp.count || 0);
       setTypebotCount(typebotResp.count || 0);
+      setWhatsappCount(whatsappResp.count || 0);
       
       toast({ title: 'Sucesso', description: 'Status atualizado' });
     } catch (err: any) {
@@ -388,10 +503,111 @@ export default function Leads() {
         <div>
             <Card>
               <CardHeader className="space-y-4">
-                <CardTitle>Lista de Leads</CardTitle>
-                
-                {/* Filter buttons and search in same row */}
-                <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center justify-between">
+                  <CardTitle>
+                    {addLeadSection ? (
+                      <button
+                        type="button"
+                        onClick={() => { setAddLeadSection(false); setNewLeadNome(''); setNewLeadContato(''); setNewLeadTipoId(''); }}
+                        className="flex items-center gap-2 text-base font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Voltar para lista
+                      </button>
+                    ) : 'Lista de Leads'}
+                  </CardTitle>
+                  {!addLeadSection && (
+                    <Button
+                      size="sm"
+                      onClick={() => setAddLeadSection(true)}
+                      className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      <UserPlus className="h-4 w-4" />
+                      Adicionar Lead
+                    </Button>
+                  )}
+                </div>
+
+                {addLeadSection ? (
+                  <div className="py-4">
+                    <div className="max-w-md mx-auto space-y-6">
+                      <div className="text-center pb-2">
+                        <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-3">
+                          <UserPlus className="h-6 w-6 text-green-600" />
+                        </div>
+                        <h2 className="text-xl font-bold">Novo Lead</h2>
+                        <p className="text-sm text-muted-foreground mt-1">Preencha os dados de contato do lead</p>
+                      </div>
+
+                      <div className="space-y-4">
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium">Nome do Lead <span className="text-red-500">*</span></label>
+                          <Input
+                            placeholder="Nome do cliente"
+                            value={newLeadNome}
+                            onChange={(e) => setNewLeadNome(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleSaveNewLead()}
+                            autoFocus
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium">Tipo do Lead</label>
+                          <select
+                            className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                            value={newLeadTipoId}
+                            onChange={(e) => setNewLeadTipoId(e.target.value)}
+                            disabled={loadingTiposLead}
+                          >
+                            <option value="">{loadingTiposLead ? 'Carregando...' : 'Selecione um tipo (opcional)'}</option>
+                            {tiposLeadOptions.map((t) => (
+                              <option key={t.id} value={String(t.id)}>{t.nome}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <label className="text-sm font-medium">Contato</label>
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center justify-center h-9 px-3 rounded-md border bg-muted text-sm text-muted-foreground">
+                              <Phone className="h-3.5 w-3.5 mr-1" />
+                              +55
+                            </div>
+                            <Input
+                              placeholder="Número de telefone"
+                              value={newLeadContato}
+                              onChange={(e) => setNewLeadContato(formatPhoneInput(e.target.value))}
+                              onKeyDown={(e) => e.key === 'Enter' && handleSaveNewLead()}
+                              type="tel"
+                              inputMode="numeric"
+                              maxLength={15}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="flex gap-3 pt-2">
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={() => { setAddLeadSection(false); setNewLeadNome(''); setNewLeadContato(''); setNewLeadTipoId(''); }}
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                            onClick={handleSaveNewLead}
+                            disabled={savingLead || !newLeadNome.trim()}
+                          >
+                            {savingLead ? 'Salvando...' : 'Cadastrar Lead'}
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                  {/* Filter buttons and search in same row */}
+                  <div className="flex items-center justify-between gap-4">
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground mr-2">Filtrar por:</span>
                     <Button
@@ -441,6 +657,19 @@ export default function Leads() {
                         </span>
                       )}
                     </Button>
+                    <Button
+                      variant={activeFilter === 'whatsapp' ? 'default' : 'outline'}
+                      onClick={() => setActiveFilter('whatsapp')}
+                      size="sm"
+                      className="relative"
+                    >
+                      WhatsApp
+                      {whatsappCount > 0 && (
+                        <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center shadow-sm">
+                          {whatsappCount}
+                        </span>
+                      )}
+                    </Button>
                   </div>
                   
                   <div className="flex items-center gap-2">
@@ -457,9 +686,11 @@ export default function Leads() {
                       <Button onClick={clearSearch} variant="ghost" size="sm">Limpar</Button>
                     )}
                   </div>
-                </div>
+                  </div>
+                  </>
+                )}
               </CardHeader>
-              <CardContent>
+              {!addLeadSection && <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -482,7 +713,7 @@ export default function Leads() {
                             <div>
                               <p className="text-lg font-medium">Nenhum lead encontrado</p>
                               <p className="text-sm">
-                                {search ? 'Tente ajustar sua busca' : activeFilter === 'pix' ? 'Não há leads Pix pendentes' : activeFilter === 'carrinho' ? 'Não há leads de Carrinho Abandonado pendentes' : activeFilter === 'typebot' ? 'Não há leads Typebot pendentes' : 'Não há leads cadastrados'}
+                                {search ? 'Tente ajustar sua busca' : activeFilter === 'pix' ? 'Não há leads Pix pendentes' : activeFilter === 'carrinho' ? 'Não há leads de Carrinho Abandonado pendentes' : activeFilter === 'typebot' ? 'Não há leads Typebot pendentes' : activeFilter === 'whatsapp' ? 'Não há leads WhatsApp pendentes' : 'Não há leads cadastrados'}
                               </p>
                             </div>
                           </div>
@@ -905,8 +1136,8 @@ export default function Leads() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-              </CardContent>
-              <div className="flex items-center justify-between p-4 border-t">
+              </CardContent>}
+              {!addLeadSection && <div className="flex items-center justify-between p-4 border-t">
                 <div className="flex items-center gap-4">
                   <div className="text-sm text-muted-foreground">
                     Mostrando <strong>{(page - 1) * pageSize + 1}</strong> - <strong>{Math.min(page * pageSize, total || filtered.length)}</strong> de <strong>{total || filtered.length}</strong>
@@ -932,7 +1163,7 @@ export default function Leads() {
                   <div className="text-sm">{page} / {totalPages}</div>
                   <Button size="sm" variant="outline" onClick={handleNext} disabled={page >= totalPages}>Próximo</Button>
                 </div>
-              </div>
+              </div>}
             </Card>
         </div>
       </div>
