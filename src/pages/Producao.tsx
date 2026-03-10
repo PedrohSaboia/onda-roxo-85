@@ -500,9 +500,23 @@ function UrgentesItemsDropdown({
     return Array.from(seen.entries()).map(([id, nome]) => ({ id, nome }));
   }, [rawItems]);
 
+  const [showGenerated, setShowGenerated] = useState(false);
+
+  // Quantidade de pedidos gerados visíveis na aba/sub-tab atual
+  const geradosCount = useMemo(() => {
+    const tabFiltered = filterUrgentesItems(rawItems, mainTab, subTab);
+    return new Set(
+      tabFiltered
+        .filter((item) => !!item.pedido_id && urgentesGeradasPedidoIds.has(item.pedido_id))
+        .map((item) => item.id_externo)
+        .filter((id): id is string => !!id),
+    ).size;
+  }, [rawItems, mainTab, subTab, urgentesGeradasPedidoIds]);
+
   const filteredGroupedWithStatus = useMemo(() => {
+    const activeShowGenerated = showGeneratedInDropdown && showGenerated;
     const tabFiltered = filterUrgentesItems(rawItems, mainTab, subTab).filter((item) => {
-      if (!showGeneratedInDropdown) {
+      if (!activeShowGenerated) {
         return !item.pedido_id || !urgentesGeradasPedidoIds.has(item.pedido_id);
       }
       return true;
@@ -543,7 +557,7 @@ function UrgentesItemsDropdown({
     return Array.from(grouped.values()).sort(
       (a, b) => (b.quantidade_pendente + b.quantidade_gerada) - (a.quantidade_pendente + a.quantidade_gerada),
     );
-  }, [rawItems, mainTab, subTab, urgentesGeradasPedidoIds, showGeneratedInDropdown]);
+  }, [rawItems, mainTab, subTab, urgentesGeradasPedidoIds, showGeneratedInDropdown, showGenerated]);
 
   const MAIN_TABS: { key: UrgenteMainTab; label: string }[] = [
     { key: 'comercial', label: 'Comercial' },
@@ -553,8 +567,8 @@ function UrgentesItemsDropdown({
 
   return (
     <div className="space-y-2">
-      {/* Main tabs */}
-      <div className="flex flex-wrap gap-2 border-b pb-2">
+      {/* Main tabs + botão etiquetas geradas */}
+      <div className="flex flex-wrap items-center gap-2 border-b pb-2">
         {MAIN_TABS.map((tab) => (
           <button
             key={tab.key}
@@ -569,6 +583,25 @@ function UrgentesItemsDropdown({
             {tab.label}
           </button>
         ))}
+        {showGeneratedInDropdown && geradosCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowGenerated((v) => !v)}
+            className={`ml-auto flex items-center gap-2 rounded-full border-2 px-4 py-1.5 text-xs font-bold shadow-sm transition-all duration-200 ${
+              showGenerated
+                ? 'border-green-500 bg-green-500 text-white shadow-green-200 shadow-md scale-105'
+                : 'border-green-400 bg-white text-green-700 hover:bg-green-50 hover:shadow-green-100 hover:shadow-md hover:scale-105'
+            }`}
+          >
+            <CheckCircle2 className={`h-3.5 w-3.5 ${showGenerated ? 'text-white' : 'text-green-500'}`} />
+            Etiquetas geradas
+            <span className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[11px] font-extrabold leading-none min-w-[1.25rem] ${
+              showGenerated ? 'bg-white text-green-700' : 'bg-green-500 text-white'
+            }`}>
+              {geradosCount}
+            </span>
+          </button>
+        )}
       </div>
 
       {/* Sub-tabs Comercial */}
@@ -638,8 +671,9 @@ function UrgentesItemsDropdown({
                 className="h-20 rounded-lg border bg-background px-3 py-2 shadow-sm transition-shadow hover:shadow-md cursor-pointer select-none"
                 title="Clique para ver pedidos com este produto"
                 onClick={() => {
+                  const activeShowGenerated = showGeneratedInDropdown && showGenerated;
                   const tabFiltered = filterUrgentesItems(rawItems, mainTab, subTab).filter((row) => {
-                    if (!showGeneratedInDropdown) {
+                    if (!activeShowGenerated) {
                       return !row.pedido_id || !urgentesGeradasPedidoIds.has(row.pedido_id);
                     }
                     return true;
@@ -667,14 +701,14 @@ function UrgentesItemsDropdown({
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-semibold leading-tight">{item.nome_produto}</p>
                       <p className="truncate text-xs text-muted-foreground">{item.nome_variacao || 'Sem variação'}</p>
-                      {showGeneratedInDropdown && item.quantidade_gerada > 0 && (
+                      {showGeneratedInDropdown && showGenerated && item.quantidade_gerada > 0 && (
                         <p className="text-[10px] font-semibold text-green-600">Etiqueta já gerada</p>
                       )}
                     </div>
                   </div>
                   <div className="flex min-w-[72px] items-center justify-end gap-2">
                     <span className="text-xl font-extrabold leading-none tabular-nums">{item.quantidade_pendente}</span>
-                    {showGeneratedInDropdown && item.quantidade_gerada > 0 && (
+                    {showGeneratedInDropdown && showGenerated && item.quantidade_gerada > 0 && (
                       <span className="text-xl font-extrabold leading-none tabular-nums text-green-600">{item.quantidade_gerada}</span>
                     )}
                   </div>
@@ -791,7 +825,7 @@ function PlatformSection({
               range={range}
               quantity={totals[range.key] || 0}
               quantitySplit={totalsSplit?.[range.key]}
-              showSplit={section.key === 'urgentes' && (range.key === 'r11_20' || range.key === 'r21_30')}
+              showSplit={section.key === 'urgentes' && (range.key === 'r1_10' || range.key === 'r11_20' || range.key === 'r21_30')}
               expanded={expandedKey === range.key}
               onToggle={() => onToggleRange(range.key)}
             />
@@ -831,7 +865,7 @@ function PlatformSection({
                 rawItems={urgentesRawItems}
                 allGroupedItems={itemsByRange[expandedKey] || []}
                 urgentesGeradasPedidoIds={urgentesGeradasPedidoIds ?? new Set<string>()}
-                showGeneratedInDropdown={expandedKey === 'r11_20' || expandedKey === 'r21_30'}
+                showGeneratedInDropdown={expandedKey === 'r1_10' || expandedKey === 'r11_20' || expandedKey === 'r21_30'}
                 mainTab={urgentesMainTab ?? 'comercial'}
                 subTab={urgentesSubTab ?? ''}
                 onSetMainTab={(tab) => onUrgentesMainTabChange?.(tab)}
@@ -1005,7 +1039,7 @@ export function ProductionPage() {
         getEtiquetaDisponivelPedidoIds(urg2),
       ]);
       setUrgentesSummaryByRange({
-        r1_10: urg0.filter((row) => !row.pedido_id || !urgGeradas0.has(row.pedido_id)),
+        r1_10: urg0,
         r11_20: urg1,
         r21_30: urg2,
       });
@@ -1658,7 +1692,7 @@ export function ProductionPage() {
             getEtiquetaDisponivelPedidoIds(urg2),
           ]);
           setUrgentesSummaryByRange({
-            r1_10: urg0.filter((row) => !row.pedido_id || !urgGeradas0.has(row.pedido_id)),
+            r1_10: urg0,
             r11_20: urg1,
             r21_30: urg2,
           });
@@ -1872,9 +1906,6 @@ export function ProductionPage() {
           filteredRows = await fetchProducaoItensUrgentes({ diasParaEnvio: day });
           const geradasSet = await getEtiquetaDisponivelPedidoIds(filteredRows);
           setUrgentesGeradasPedidoIdsByRange((prev) => ({ ...prev, [range.key]: geradasSet }));
-          if (range.key === 'r1_10') {
-            filteredRows = filteredRows.filter((row) => !row.pedido_id || !geradasSet.has(row.pedido_id));
-          }
         }
       } else {
         const rawItems = await fetchProducaoItens({ start: bounds.start, end: bounds.end });

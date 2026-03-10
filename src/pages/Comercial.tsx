@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Plus, Search, Filter, Copy, Trash2, X, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Search, Filter, Copy, Trash2, X, ChevronDown, ChevronLeft, ChevronRight, BarChart3 } from 'lucide-react';
 import { FaCalendarAlt } from 'react-icons/fa';
 import { format, parseISO, startOfMonth, subMonths, isSameDay, isWithinInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -23,6 +23,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { HiFilter } from "react-icons/hi";
+import { ResponsiveContainer, LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 
 const etiquetaLabels = {
@@ -134,6 +135,75 @@ export function Comercial() {
   const [selectedPedidosIds, setSelectedPedidosIds] = useState<Set<string>>(new Set());
   const [selectedMelhorEnvioIds, setSelectedMelhorEnvioIds] = useState<string[]>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+
+  type PixMetricsRow = {
+    tipo_de_lead_id: number;
+    tipo_de_lead_nome: string;
+    total_periodo: number;
+    total_hoje: number;
+    total_ontem: number;
+    total_7_dias: number;
+    total_30_dias: number;
+    total_mes_atual: number;
+    total_vendidos_periodo: number;
+    taxa_conversao_periodo: number;
+    valor_total_periodo: number;
+    ticket_medio_periodo: number;
+  };
+
+  type PixDailyRow = {
+    dia: string;
+    total_entradas: number;
+    total_vendidos: number;
+    valor_total: number;
+  };
+
+  type PixConvertedByResponsavelRow = {
+    responsavel_id: string | null;
+    responsavel_nome: string;
+    total_convertidos: number;
+    valor_total_convertido: number;
+    ticket_medio_convertido: number;
+  };
+
+  type YampiUpsellMetricsRow = {
+    total_pedidos_yampi: number;
+    pedidos_com_inclusao_itens: number;
+    pedidos_sem_inclusao_itens: number;
+    taxa_inclusao_itens_pct: number;
+    ticket_medio_geral: number;
+    ticket_medio_sem_inclusao: number;
+    ticket_medio_com_inclusao: number;
+    aumento_ticket_medio_valor: number;
+    aumento_ticket_medio_pct: number;
+    itens_medios_por_pedido: number;
+    unidades_medias_por_pedido: number;
+  };
+
+  type DailyChartStyle = 'linha' | 'barras' | 'pizza';
+
+  const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
+  const [pixDailySeries, setPixDailySeries] = useState<PixDailyRow[]>([]);
+  const [carrinhoDailySeries, setCarrinhoDailySeries] = useState<PixDailyRow[]>([]);
+  const [pixConvertedByResponsavel, setPixConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
+  const [carrinhoConvertedByResponsavel, setCarrinhoConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
+  const [yampiUpsellMetrics, setYampiUpsellMetrics] = useState<YampiUpsellMetricsRow | null>(null);
+  const [loadingPixDashboard, setLoadingPixDashboard] = useState(false);
+  const [pixDashboardError, setPixDashboardError] = useState<string | null>(null);
+  const [pixDailyChartStyle, setPixDailyChartStyle] = useState<DailyChartStyle>('linha');
+  const [carrinhoDailyChartStyle, setCarrinhoDailyChartStyle] = useState<DailyChartStyle>('linha');
+  const [dashboardDateStart, setDashboardDateStart] = useState<string>(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [dashboardDateEnd, setDashboardDateEnd] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
+  const [dashboardPickerOpen, setDashboardPickerOpen] = useState(false);
+  const [dashboardTempStartDate, setDashboardTempStartDate] = useState<Date | null>(() => startOfMonth(new Date()));
+  const [dashboardTempEndDate, setDashboardTempEndDate] = useState<Date | null>(() => new Date());
+  const [dashboardHoverDate, setDashboardHoverDate] = useState<Date | null>(null);
+  const [dashboardCalendarMonth, setDashboardCalendarMonth] = useState<number>(() => new Date().getMonth());
+  const [dashboardCalendarYear, setDashboardCalendarYear] = useState<number>(() => new Date().getFullYear());
+  const [dashboardRangeApplied, setDashboardRangeApplied] = useState<{ start: string; end: string }>(() => ({
+    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    end: format(new Date(), 'yyyy-MM-dd'),
+  }));
 
   // Função para deletar os pedidos selecionados (usada pelo AlertDialog)
   const deleteSelectedPedidos = async () => {
@@ -254,7 +324,111 @@ export function Comercial() {
 
   useEffect(() => {
     let mounted = true;
+
+    const loadPixDashboard = async () => {
+      if (view !== 'dashboard') return;
+      setLoadingPixDashboard(true);
+      setPixDashboardError(null);
+      try {
+        const startDate = new Date(`${dashboardRangeApplied.start}T00:00:00`);
+        const endDate = new Date(`${dashboardRangeApplied.end}T23:59:59.999`);
+        const intervaloDias = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+
+        const [
+          { data: metricasData, error: metricasError },
+          { data: seriePixData, error: seriePixError },
+          { data: serieCarrinhoData, error: serieCarrinhoError },
+          { data: convertidosData, error: convertidosError },
+          { data: convertidosCarrinhoData, error: convertidosCarrinhoError },
+          { data: yampiUpsellData, error: yampiUpsellError },
+        ] = await Promise.all([
+          (supabase as any).rpc('comercial_get_metricas_leads_pix', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_entradas_leads_pix_por_dia', {
+            p_empresa_id: empresaId ?? null,
+            p_dias: intervaloDias,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_entradas_leads_carrinho_ab_por_dia', {
+            p_empresa_id: empresaId ?? null,
+            p_dias: intervaloDias,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_leads_convertidos_pix_por_responsavel', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_limit: 8,
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_leads_convertidos_carrinho_ab_por_responsavel', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_limit: 8,
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_metricas_upsell_yampi', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
+        ]);
+
+        if (metricasError) throw metricasError;
+        if (seriePixError) throw seriePixError;
+        if (serieCarrinhoError) throw serieCarrinhoError;
+        if (convertidosError) throw convertidosError;
+        if (convertidosCarrinhoError) throw convertidosCarrinhoError;
+        if (yampiUpsellError) throw yampiUpsellError;
+        if (!mounted) return;
+
+        setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
+        setPixDailySeries((seriePixData || []) as PixDailyRow[]);
+        setCarrinhoDailySeries((serieCarrinhoData || []) as PixDailyRow[]);
+        setPixConvertedByResponsavel((convertidosData || []) as PixConvertedByResponsavelRow[]);
+        setCarrinhoConvertedByResponsavel((convertidosCarrinhoData || []) as PixConvertedByResponsavelRow[]);
+        setYampiUpsellMetrics((yampiUpsellData?.[0] || null) as YampiUpsellMetricsRow | null);
+      } catch (err: any) {
+        if (!mounted) return;
+        setPixDashboardError(err?.message || String(err));
+        setPixMetrics(null);
+        setPixDailySeries([]);
+        setCarrinhoDailySeries([]);
+        setPixConvertedByResponsavel([]);
+        setCarrinhoConvertedByResponsavel([]);
+        setYampiUpsellMetrics(null);
+      } finally {
+        if (mounted) setLoadingPixDashboard(false);
+      }
+    };
+
+    loadPixDashboard();
+
+    return () => {
+      mounted = false;
+    };
+  }, [view, empresaId, dashboardRangeApplied]);
+
+  useEffect(() => {
+    let mounted = true;
     const fetchPedidos = async () => {
+      if (view === 'dashboard') {
+        setLoading(false);
+        setError(null);
+        setPedidos([]);
+        return;
+      }
+
       setLoading(true);
       setError(null);
       try {
@@ -1576,6 +1750,576 @@ export function Comercial() {
 
   // helper to get status options formatted for EditSelectModal
   const statusModalOptions = statusOptions.map(o => ({ id: o.id, nome: o.nome }));
+
+  const formatCurrency = (value?: number | null) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(value || 0));
+
+  const formatPercent = (value?: number | null) => `${Number(value || 0).toFixed(2)}%`;
+
+  const pixDailyChartData = pixDailySeries.map((row) => ({
+    ...row,
+    dia_label: format(parseISO(`${row.dia}T00:00:00`), 'dd/MM'),
+  }));
+
+  const carrinhoDailyChartData = carrinhoDailySeries.map((row) => ({
+    ...row,
+    dia_label: format(parseISO(`${row.dia}T00:00:00`), 'dd/MM'),
+  }));
+
+  const pixPieChartData = [
+    { name: 'Entradas', value: pixDailySeries.reduce((acc, row) => acc + Number(row.total_entradas || 0), 0), color: '#2563eb' },
+    { name: 'Vendidos', value: pixDailySeries.reduce((acc, row) => acc + Number(row.total_vendidos || 0), 0), color: '#16a34a' },
+  ];
+
+  const carrinhoPieChartData = [
+    { name: 'Entradas', value: carrinhoDailySeries.reduce((acc, row) => acc + Number(row.total_entradas || 0), 0), color: '#2563eb' },
+    { name: 'Vendidos', value: carrinhoDailySeries.reduce((acc, row) => acc + Number(row.total_vendidos || 0), 0), color: '#16a34a' },
+  ];
+
+  const mediaEntradasDia = pixDailySeries.length
+    ? Number((pixDailySeries.reduce((acc, row) => acc + Number(row.total_entradas || 0), 0) / pixDailySeries.length).toFixed(1))
+    : 0;
+
+  const renderPixDailyTooltip = ({ active, payload }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+    const row = payload[0]?.payload;
+    if (!row) return null;
+
+    const entradas = Number(row.total_entradas || 0);
+    const vendidos = Number(row.total_vendidos || 0);
+    const taxaDia = entradas > 0 ? (vendidos / entradas) * 100 : 0;
+    const diaLabel = row?.dia ? format(parseISO(`${row.dia}T00:00:00`), "dd/MM/yyyy", { locale: ptBR }) : row?.dia_label;
+
+    return (
+      <div className="rounded-md border bg-white px-3 py-2 shadow-sm text-xs space-y-1">
+        <p className="font-semibold text-sm">{diaLabel}</p>
+        <p><span className="font-medium">Entradas:</span> {entradas}</p>
+        <p><span className="font-medium">Convertidos:</span> {vendidos}</p>
+        <p><span className="font-medium">Conversão do dia:</span> {taxaDia.toFixed(2)}%</p>
+        <p><span className="font-medium">Valor total:</span> {formatCurrency(row.valor_total)}</p>
+      </div>
+    );
+  };
+
+  const handleDashboardDateClick = (date: Date) => {
+    if (!dashboardTempStartDate || (dashboardTempStartDate && dashboardTempEndDate)) {
+      setDashboardTempStartDate(date);
+      setDashboardTempEndDate(null);
+    } else {
+      if (date < dashboardTempStartDate) {
+        setDashboardTempEndDate(dashboardTempStartDate);
+        setDashboardTempStartDate(date);
+      } else {
+        setDashboardTempEndDate(date);
+      }
+    }
+  };
+
+  const applyDashboardCustomDates = () => {
+    if (dashboardTempStartDate) {
+      const start = format(dashboardTempStartDate, 'yyyy-MM-dd');
+      const end = dashboardTempEndDate ? format(dashboardTempEndDate, 'yyyy-MM-dd') : start;
+      setDashboardDateStart(start);
+      setDashboardDateEnd(end);
+      setDashboardRangeApplied({ start, end });
+    }
+    setDashboardPickerOpen(false);
+  };
+
+  const handleDashboardPreset = (presetFn: () => void) => {
+    presetFn();
+  };
+
+  const navigateDashboardMonth = (direction: 'prev' | 'next') => {
+    if (direction === 'prev') {
+      if (dashboardCalendarMonth === 0) {
+        setDashboardCalendarMonth(11);
+        setDashboardCalendarYear(dashboardCalendarYear - 1);
+      } else {
+        setDashboardCalendarMonth(dashboardCalendarMonth - 1);
+      }
+    } else {
+      if (dashboardCalendarMonth === 11) {
+        setDashboardCalendarMonth(0);
+        setDashboardCalendarYear(dashboardCalendarYear + 1);
+      } else {
+        setDashboardCalendarMonth(dashboardCalendarMonth + 1);
+      }
+    }
+  };
+
+  const renderDashboardCalendar = (monthOffset: number = 0) => {
+    const today = new Date();
+
+    const displayYear = monthOffset === 0 ? dashboardCalendarYear : (dashboardCalendarMonth === 11 ? dashboardCalendarYear + 1 : dashboardCalendarYear);
+    const displayMonth = monthOffset === 0 ? dashboardCalendarMonth : (dashboardCalendarMonth === 11 ? 0 : dashboardCalendarMonth + 1);
+
+    const firstDay = new Date(displayYear, displayMonth, 1);
+    const lastDay = new Date(displayYear, displayMonth + 1, 0);
+    const daysInMonth = lastDay.getDate();
+    const startDayOfWeek = firstDay.getDay();
+
+    const days = [];
+
+    for (let i = 0; i < startDayOfWeek; i++) {
+      days.push(<div key={`dash-empty-${monthOffset}-${i}`} className="h-9" />);
+    }
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(displayYear, displayMonth, day);
+      const isFirstDay = dashboardTempStartDate && isSameDay(date, dashboardTempStartDate);
+      const isLastDay = dashboardTempEndDate && isSameDay(date, dashboardTempEndDate);
+      const isSelected = isFirstDay || isLastDay;
+      const isInRange = dashboardTempStartDate && dashboardTempEndDate &&
+                       isWithinInterval(date, { start: dashboardTempStartDate, end: dashboardTempEndDate }) &&
+                       !isFirstDay && !isLastDay;
+      const isHovered = dashboardHoverDate && dashboardTempStartDate && !dashboardTempEndDate &&
+                       isWithinInterval(date, {
+                         start: dashboardTempStartDate < dashboardHoverDate ? dashboardTempStartDate : dashboardHoverDate,
+                         end: dashboardTempStartDate < dashboardHoverDate ? dashboardHoverDate : dashboardTempStartDate
+                       });
+      const isToday = isSameDay(date, today);
+
+      days.push(
+        <button
+          key={day}
+          onClick={() => handleDashboardDateClick(date)}
+          onMouseEnter={() => setDashboardHoverDate(date)}
+          onMouseLeave={() => setDashboardHoverDate(null)}
+          className={`
+            h-9 w-9 text-sm transition-colors flex items-center justify-center
+            ${isFirstDay && !isLastDay ? 'rounded-l-full bg-custom-600 text-white font-semibold' : ''}
+            ${isLastDay && !isFirstDay ? 'rounded-r-full bg-custom-600 text-white font-semibold' : ''}
+            ${isFirstDay && isLastDay ? 'rounded-full bg-custom-600 text-white font-semibold' : ''}
+            ${isInRange || isHovered ? 'bg-custom-600 text-white' : ''}
+            ${!isSelected && !isInRange && !isHovered ? 'rounded hover:bg-gray-100' : ''}
+            ${isToday && !isSelected ? 'border-2 rounded-full border-custom-600' : ''}
+          `}
+        >
+          {day}
+        </button>
+      );
+    }
+
+    return (
+      <div className="px-4 py-3">
+        <div className="flex items-center justify-between mb-3">
+          {monthOffset === 0 && (
+            <button
+              onClick={() => navigateDashboardMonth('prev')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 1 && <div className="w-7" />}
+          <div className="text-center font-semibold text-base">
+            {format(firstDay, 'MMMM yyyy', { locale: ptBR })}
+          </div>
+          {monthOffset === 1 && (
+            <button
+              onClick={() => navigateDashboardMonth('next')}
+              className="p-1 hover:bg-gray-100 rounded transition-colors"
+              type="button"
+            >
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          )}
+          {monthOffset === 0 && <div className="w-7" />}
+        </div>
+        <div className="grid grid-cols-7 gap-1 mb-2 text-xs text-gray-500 text-center font-medium">
+          <div>DOM</div>
+          <div>SEG</div>
+          <div>TER</div>
+          <div>QUA</div>
+          <div>QUI</div>
+          <div>SEX</div>
+          <div>SÁB</div>
+        </div>
+        <div className="grid grid-cols-7 gap-1">
+          {days}
+        </div>
+      </div>
+    );
+  };
+
+  if (view === 'dashboard') {
+    return (
+      <div className="flex h-full">
+        <div className="flex-shrink-0">
+          <ComercialSidebar />
+        </div>
+
+        <div className="flex-1 overflow-y-auto bg-muted/10">
+          <div className="p-6 space-y-6">
+            <Card className="border shadow-sm">
+              <CardContent className="pt-6 pb-5">
+                <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <h1 className="text-2xl font-bold flex items-center gap-2"><BarChart3 className="h-6 w-6 text-primary" />Dashboard Comercial</h1>
+                  </div>
+                  <Badge variant="secondary" className="w-fit">Visão consolidada</Badge>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border shadow-sm">
+              <CardContent className="pt-5 pb-5">
+                <div className="flex flex-col gap-2">
+                  <label className="text-sm text-muted-foreground">Período</label>
+                  <Popover open={dashboardPickerOpen} onOpenChange={setDashboardPickerOpen}>
+                    <PopoverTrigger asChild>
+                      <Button className="w-fit flex items-center justify-center gap-2 bg-custom-600 text-white hover:bg-custom-700">
+                        <FaCalendarAlt className="h-4 w-4" />
+                        <span className="text-sm">{format(parseISO(dashboardDateStart), 'dd/MM/yy', { locale: ptBR })} → {format(parseISO(dashboardDateEnd), 'dd/MM/yy', { locale: ptBR })}</span>
+                        <ChevronDown className="h-4 w-4 opacity-50" />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <div className="px-4 py-3 border-b">
+                        <h3 className="font-semibold text-base">Selecionar Período</h3>
+                      </div>
+
+                      <div className="flex">
+                        <div className="w-48 border-r">
+                          <div className="py-2">
+                            {[
+                              { label: 'Hoje', fn: () => { const d = new Date(); const ds = format(d, 'yyyy-MM-dd'); setDashboardDateStart(ds); setDashboardDateEnd(ds); setDashboardRangeApplied({ start: ds, end: ds }); setDashboardTempStartDate(d); setDashboardTempEndDate(d); } },
+                              { label: 'Ontem', fn: () => { const d = new Date(); d.setDate(d.getDate() - 1); const ds = format(d, 'yyyy-MM-dd'); setDashboardDateStart(ds); setDashboardDateEnd(ds); setDashboardRangeApplied({ start: ds, end: ds }); setDashboardTempStartDate(d); setDashboardTempEndDate(d); } },
+                              { label: 'Últimos 7 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 6); const start = format(s, 'yyyy-MM-dd'); const end = format(e, 'yyyy-MM-dd'); setDashboardDateStart(start); setDashboardDateEnd(end); setDashboardRangeApplied({ start, end }); setDashboardTempStartDate(s); setDashboardTempEndDate(e); } },
+                              { label: 'Últimos 14 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 13); const start = format(s, 'yyyy-MM-dd'); const end = format(e, 'yyyy-MM-dd'); setDashboardDateStart(start); setDashboardDateEnd(end); setDashboardRangeApplied({ start, end }); setDashboardTempStartDate(s); setDashboardTempEndDate(e); } },
+                              { label: 'Últimos 30 dias', fn: () => { const e = new Date(); const s = new Date(); s.setDate(e.getDate() - 29); const start = format(s, 'yyyy-MM-dd'); const end = format(e, 'yyyy-MM-dd'); setDashboardDateStart(start); setDashboardDateEnd(end); setDashboardRangeApplied({ start, end }); setDashboardTempStartDate(s); setDashboardTempEndDate(e); } },
+                              { label: 'Este mês', fn: () => { const e = new Date(); const s = startOfMonth(e); const start = format(s, 'yyyy-MM-dd'); const end = format(e, 'yyyy-MM-dd'); setDashboardDateStart(start); setDashboardDateEnd(end); setDashboardRangeApplied({ start, end }); setDashboardTempStartDate(s); setDashboardTempEndDate(e); } },
+                              { label: 'Mês passado', fn: () => { const hoje = new Date(); const mesPassado = subMonths(hoje, 1); const s = startOfMonth(mesPassado); const e = new Date(mesPassado.getFullYear(), mesPassado.getMonth() + 1, 0); const start = format(s, 'yyyy-MM-dd'); const end = format(e, 'yyyy-MM-dd'); setDashboardDateStart(start); setDashboardDateEnd(end); setDashboardRangeApplied({ start, end }); setDashboardTempStartDate(s); setDashboardTempEndDate(e); } },
+                              { label: 'Ano', fn: () => { const e = new Date(); const s = new Date(e.getFullYear(), 0, 1); const start = format(s, 'yyyy-MM-dd'); const end = format(e, 'yyyy-MM-dd'); setDashboardDateStart(start); setDashboardDateEnd(end); setDashboardRangeApplied({ start, end }); setDashboardTempStartDate(s); setDashboardTempEndDate(e); } },
+                              { label: 'Máximo', fn: () => { const e = new Date(); const s = new Date(2020, 0, 1); const start = format(s, 'yyyy-MM-dd'); const end = format(e, 'yyyy-MM-dd'); setDashboardDateStart(start); setDashboardDateEnd(end); setDashboardRangeApplied({ start, end }); setDashboardTempStartDate(s); setDashboardTempEndDate(e); } },
+                            ].map((preset, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => handleDashboardPreset(preset.fn)}
+                                className="w-full text-left px-4 py-2 hover:bg-gray-50 transition-colors text-sm"
+                              >
+                                {preset.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col">
+                          <div className="flex">
+                            {renderDashboardCalendar(0)}
+                            {renderDashboardCalendar(1)}
+                          </div>
+
+                          <div className="flex gap-2 px-4 py-3 border-t">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => {
+                                setDashboardTempStartDate(null);
+                                setDashboardTempEndDate(null);
+                                setDashboardPickerOpen(false);
+                              }}
+                            >
+                              Cancelar
+                            </Button>
+                            <Button
+                              size="sm"
+                              className="flex-1 bg-custom-600 hover:bg-custom-700"
+                              onClick={applyDashboardCustomDates}
+                              disabled={!dashboardTempStartDate}
+                            >
+                              Atualizar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Período aplicado: {format(parseISO(`${dashboardRangeApplied.start}T00:00:00`), 'dd/MM/yyyy')} até {format(parseISO(`${dashboardRangeApplied.end}T00:00:00`), 'dd/MM/yyyy')}
+                </p>
+              </CardContent>
+            </Card>
+
+            {loadingPixDashboard ? (
+              <Card>
+                <CardContent className="py-10 text-sm text-muted-foreground">Carregando métricas...</CardContent>
+              </Card>
+            ) : pixDashboardError ? (
+              <Card>
+                <CardContent className="py-10 text-sm text-red-500">Erro ao carregar dashboard: {pixDashboardError}</CardContent>
+              </Card>
+            ) : (
+              <>
+                <div className="rounded-md border border-blue-200/60 bg-blue-50/40 px-3 py-2 text-sm text-blue-900/80 dark:border-blue-900/50 dark:bg-blue-950/20 dark:text-blue-100/80">
+                  Esta seção mostra o funil de leads Pix: entradas, convertidos e evolução diária para acompanhar volume e eficiência comercial.
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <Card className="border-l-4 border-l-blue-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Entradas (período)</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{pixMetrics?.total_periodo || 0}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Total de leads Pix captados no período analisado.</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-cyan-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Entradas hoje</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300">{pixMetrics?.total_hoje || 0}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Novos leads Pix recebidos hoje.</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-indigo-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Entradas (7 dias)</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{pixMetrics?.total_7_dias || 0}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Acumulado da última semana.</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Taxa de conversão</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{formatPercent(pixMetrics?.taxa_conversao_periodo)}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Percentual de leads Pix marcados como vendidos.</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="rounded-md border bg-card px-3 py-3 text-sm grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-2">
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Vendidos:</strong> {pixMetrics?.total_vendidos_periodo || 0}</div>
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Valor total:</strong> {formatCurrency(pixMetrics?.valor_total_periodo)}</div>
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Ticket médio:</strong> {formatCurrency(pixMetrics?.ticket_medio_periodo)}</div>
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Mês atual:</strong> {pixMetrics?.total_mes_atual || 0}</div>
+                </div>
+
+                <div className="rounded-md border border-amber-200/70 bg-amber-50/40 px-3 py-2 text-sm text-amber-900/80 dark:border-amber-900/50 dark:bg-amber-950/20 dark:text-amber-100/80">
+                  Seção de upsell Yampi: compara pedidos com e sem inclusão de itens para medir impacto em ticket médio.
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                  <Card className="border-l-4 border-l-violet-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Pedidos Yampi (período)</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{yampiUpsellMetrics?.total_pedidos_yampi || 0}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Base de pedidos usada para análise de upsell.</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-amber-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Com inclusão de itens</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{yampiUpsellMetrics?.pedidos_com_inclusao_itens || 0}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Pedidos com mais de 1 linha de item ou mais de 1 unidade.</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-orange-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Taxa de inclusão</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">{formatPercent(yampiUpsellMetrics?.taxa_inclusao_itens_pct)}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Percentual de pedidos Yampi com inclusão de itens.</p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-l-4 border-l-rose-500 shadow-sm">
+                    <CardHeader className="pb-2"><CardTitle className="text-sm">Aumento de ticket (%)</CardTitle></CardHeader>
+                    <CardContent className="pt-0">
+                      <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{formatPercent(yampiUpsellMetrics?.aumento_ticket_medio_pct)}</div>
+                      <p className="text-xs text-muted-foreground mt-1">Diferença percentual entre ticket com e sem inclusão.</p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="rounded-md border bg-card px-3 py-3 text-sm grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-2">
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Sem inclusão:</strong> {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</div>
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Com inclusão:</strong> {formatCurrency(yampiUpsellMetrics?.ticket_medio_com_inclusao)}</div>
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Aumento (R$):</strong> {formatCurrency(yampiUpsellMetrics?.aumento_ticket_medio_valor)}</div>
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Itens médios/pedido:</strong> {Number(yampiUpsellMetrics?.itens_medios_por_pedido || 0).toFixed(2)}</div>
+                  <div className="rounded-md bg-muted/30 px-2.5 py-2"><strong className="text-foreground">Unidades médias/pedido:</strong> {Number(yampiUpsellMetrics?.unidades_medias_por_pedido || 0).toFixed(2)}</div>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <Card className="border shadow-sm">
+                    <CardHeader>
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <CardTitle className="text-base">Entradas diárias Pix (30 dias)</CardTitle>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" size="sm" variant={pixDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('linha')}>Linha</Button>
+                          <Button type="button" size="sm" variant={pixDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('barras')}>Barras</Button>
+                          <Button type="button" size="sm" variant={pixDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('pizza')}>Pizza</Button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Azul = entradas de leads Pix, verde = leads convertidos no período exibido.</p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="mb-3 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground flex flex-wrap items-center gap-x-4 gap-y-1">
+                        <span><strong className="text-foreground">Média de entradas/dia:</strong> {mediaEntradasDia}</span>
+                        <span><strong className="text-foreground">Pico diário:</strong> {Math.max(0, ...pixDailySeries.map((r) => Number(r.total_entradas || 0)))}</span>
+                        <span><strong className="text-foreground">Total de dias no gráfico:</strong> {pixDailySeries.length}</span>
+                      </div>
+                      <div className="h-[220px]">
+                        {pixDailyChartStyle === 'linha' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={pixDailyChartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="dia_label" />
+                              <YAxis allowDecimals={false} />
+                              <Tooltip content={renderPixDailyTooltip} />
+                              <Line type="monotone" dataKey="total_entradas" name="Entradas" stroke="#2563eb" strokeWidth={2} dot={false} />
+                              <Line type="monotone" dataKey="total_vendidos" name="Vendidos" stroke="#16a34a" strokeWidth={2} dot={false} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        )}
+
+                        {pixDailyChartStyle === 'barras' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={pixDailyChartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="dia_label" />
+                              <YAxis allowDecimals={false} />
+                              <Tooltip content={renderPixDailyTooltip} />
+                              <Bar dataKey="total_entradas" name="Entradas" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="total_vendidos" name="Vendidos" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+
+                        {pixDailyChartStyle === 'pizza' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={pixPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                                {pixPieChartData.map((entry, index) => (
+                                  <Cell key={`pix-pie-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value: any) => Number(value || 0)} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border shadow-sm">
+                    <CardHeader>
+                      <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <CardTitle className="text-base">Entradas diárias Carrinho Ab (30 dias)</CardTitle>
+                        <div className="flex items-center gap-1">
+                          <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('linha')}>Linha</Button>
+                          <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('barras')}>Barras</Button>
+                          <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('pizza')}>Pizza</Button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Azul = entradas de Carrinho Ab, verde = leads convertidos no período exibido.</p>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="h-[220px]">
+                        {carrinhoDailyChartStyle === 'linha' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={carrinhoDailyChartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="dia_label" />
+                              <YAxis allowDecimals={false} />
+                              <Tooltip content={renderPixDailyTooltip} />
+                              <Line type="monotone" dataKey="total_entradas" name="Entradas" stroke="#2563eb" strokeWidth={2} dot={false} />
+                              <Line type="monotone" dataKey="total_vendidos" name="Vendidos" stroke="#16a34a" strokeWidth={2} dot={false} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        )}
+
+                        {carrinhoDailyChartStyle === 'barras' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={carrinhoDailyChartData}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="dia_label" />
+                              <YAxis allowDecimals={false} />
+                              <Tooltip content={renderPixDailyTooltip} />
+                              <Bar dataKey="total_entradas" name="Entradas" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                              <Bar dataKey="total_vendidos" name="Vendidos" fill="#16a34a" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        )}
+
+                        {carrinhoDailyChartStyle === 'pizza' && (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie data={carrinhoPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
+                                {carrinhoPieChartData.map((entry, index) => (
+                                  <Cell key={`car-pie-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value: any) => Number(value || 0)} />
+                              <Legend />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                  <Card className="border shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-base">Convertidos Pix por responsável</CardTitle>
+                      <p className="text-xs text-muted-foreground">Ranking por volume de conversão no período, com valor total e ticket médio.</p>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {pixConvertedByResponsavel.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Nenhuma conversão de Pix encontrada no período.</p>
+                      ) : (
+                        pixConvertedByResponsavel.map((row, idx) => (
+                          <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-md border bg-muted/10 px-2.5 py-2 hover:bg-muted/20 transition-colors">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium truncate">{row.responsavel_nome}</span>
+                              <span className="text-sm font-bold">{row.total_convertidos}</span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-muted-foreground flex items-center justify-between gap-2">
+                              <span>{formatCurrency(row.valor_total_convertido)}</span>
+                              <span>Ticket: {formatCurrency(row.ticket_medio_convertido)}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border shadow-sm">
+                    <CardHeader>
+                      <CardTitle className="text-base">Convertidos Carrinho Ab por responsável</CardTitle>
+                      <p className="text-xs text-muted-foreground">Ranking por volume de conversão no período, com valor total e ticket médio.</p>
+                    </CardHeader>
+                    <CardContent className="space-y-2">
+                      {carrinhoConvertedByResponsavel.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">Nenhuma conversão de Carrinho Ab encontrada no período.</p>
+                      ) : (
+                        carrinhoConvertedByResponsavel.map((row, idx) => (
+                          <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-md border bg-muted/10 px-2.5 py-2 hover:bg-muted/20 transition-colors">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-sm font-medium truncate">{row.responsavel_nome}</span>
+                              <span className="text-sm font-bold">{row.total_convertidos}</span>
+                            </div>
+                            <div className="mt-1 text-[11px] text-muted-foreground flex items-center justify-between gap-2">
+                              <span>{formatCurrency(row.valor_total_convertido)}</span>
+                              <span>Ticket: {formatCurrency(row.ticket_medio_convertido)}</span>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full">

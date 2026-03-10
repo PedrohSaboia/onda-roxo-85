@@ -2167,7 +2167,7 @@ export function Logistica() {
                       {openPlatformId === cardDropdownKey && (
                         <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
                           {totalPages > 1 && (
-                            <div className="flex items-center justify-between mb-2 pb-2 border-b">
+                            <div className="flex items-center justify-between mb-3 pb-3 border-b">
                               <span className="text-sm text-muted-foreground">
                                 {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
                               </span>
@@ -2238,7 +2238,7 @@ export function Logistica() {
                                       </button>
                                     </div>
                                     {items.length > 0 && (
-                                      <div className="flex flex-wrap gap-2 border-t mt-2 pt-2">
+                                      <div className="flex flex-wrap gap-2 border-t mt-3 pt-3">
                                         {items.map((item: any, idx: number) => (
                                           <div key={idx} className="flex flex-col items-center gap-1 max-w-[60px]">
                                             {item.img_url ? (
