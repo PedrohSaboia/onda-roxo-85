@@ -55,7 +55,7 @@ export default function Leads() {
   const [addFrete, setAddFrete] = useState<string>('');
   const [transportadoras, setTransportadoras] = useState<Array<{ id: string; nome: string }>>([]);
   const [loadingTransportadoras, setLoadingTransportadoras] = useState(false);
-  const [formasPagamentos, setFormasPagamentos] = useState<Array<{ id: string; nome: string }>>([]);
+  const [formasPagamentos, setFormasPagamentos] = useState<Array<{ id: string; nome: string; img_url?: string | null }>>([]);
   const [loadingFormasPagamentos, setLoadingFormasPagamentos] = useState(false);
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
   const [paymentValues, setPaymentValues] = useState<Record<string, string>>({});
@@ -198,7 +198,7 @@ export default function Leads() {
       if (!addOpen) return;
       setLoadingFormasPagamentos(true);
       try {
-        const { data, error } = await (supabase as any).from('formas_pagamentos').select('id,nome').order('nome');
+        const { data, error } = await (supabase as any).from('formas_pagamentos').select('id,nome,img_url').order('nome');
         if (error) throw error;
         if (!mounted) return;
         setFormasPagamentos((data || []) as any[]);
@@ -556,10 +556,18 @@ export default function Leads() {
                           <select
                             className="w-full h-9 rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
                             value={newLeadTipoId}
-                            onChange={(e) => setNewLeadTipoId(e.target.value)}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === '__create_tipo_lead__') {
+                                navigate('/tipos-de-lead');
+                                return;
+                              }
+                              setNewLeadTipoId(value);
+                            }}
                             disabled={loadingTiposLead}
                           >
                             <option value="">{loadingTiposLead ? 'Carregando...' : 'Selecione um tipo (opcional)'}</option>
+                            <option value="__create_tipo_lead__">+ Criar tipo de lead</option>
                             {tiposLeadOptions.map((t) => (
                               <option key={t.id} value={String(t.id)}>{t.nome}</option>
                             ))}

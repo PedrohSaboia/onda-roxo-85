@@ -106,6 +106,28 @@ export function Logistica() {
     }
   };
 
+  const fetchAtrasados = async () => {
+    if (!empresaId) return;
+    setLoadingAtrasados(true);
+    try {
+      const now = new Date();
+      now.setHours(0, 0, 0, 0);
+      const { data, error } = await (supabase as any)
+        .from('pedidos')
+        .select('id,id_externo,data_logistica_urgente,plataformas(id,nome,img_url)')
+        .eq('empresa_id', empresaId)
+        .neq('status_id', ENVIADO_STATUS_ID)
+        .not('data_logistica_urgente', 'is', null)
+        .lt('data_logistica_urgente', now.toISOString());
+      if (error) throw error;
+      setAtrasados(data || []);
+    } catch (err) {
+      console.error('Erro ao buscar atrasados:', err);
+    } finally {
+      setLoadingAtrasados(false);
+    }
+  };
+
   const { toast } = useToast();
   const [loadingScan, setLoadingScan] = useState(false);
   const [foundPedido, setFoundPedido] = useState<any | null>(null);
@@ -133,6 +155,14 @@ export function Logistica() {
   const [platformPage, setPlatformPage] = useState<Record<string, number>>({});
   const [comumPedidos, setComumPedidos] = useState<any[]>([]);
   const [incomumPedidos, setIncomumPedidos] = useState<any[]>([]);
+
+  // Modal de dar entrada no pacote
+  type EntradaPacoteModal = {
+    open: boolean;
+    caseGroup: { signature: string; pedidos: any[]; label: string; totalUnidades: number; imgUrl: string | null } | null;
+    loading: boolean;
+  };
+  const [entradaPacoteModal, setEntradaPacoteModal] = useState<EntradaPacoteModal>({ open: false, caseGroup: null, loading: false });
   const [filterPlataformaId, setFilterPlataformaId] = useState('');
   const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState('');
   const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
@@ -150,6 +180,20 @@ export function Logistica() {
     produtos: false,
     comuns: false,
     incomuns: false,
+  });
+  const [logisticaMainTab, setLogisticaMainTab] = useState<'itens-produzir' | 'pacotes' | 'enviar'>('itens-produzir');
+  const [pacotesSubTab, setPacotesSubTab] = useState<'comuns' | 'incomuns'>('comuns');
+  const [produzidosPorGrupo, setProduzidosPorGrupo] = useState<Record<string, Record<string, number>>>({});
+  const [itemProduzidoFlash, setItemProduzidoFlash] = useState<string | null>(null);
+  const [salvandoBaixaCategoria, setSalvandoBaixaCategoria] = useState(false);
+  const [produtoInputQty, setProdutoInputQty] = useState<Record<string, string>>({});
+  const [atrasados, setAtrasados] = useState<any[]>([]);
+  const [loadingAtrasados, setLoadingAtrasados] = useState(false);
+  const [baixaCategoriaModal, setBaixaCategoriaModal] = useState<{ open: boolean; groupId: string | null; itemKey: string; quantidade: string }>({
+    open: false,
+    groupId: null,
+    itemKey: '',
+    quantidade: '1',
   });
   const filterDropdownRef = useRef<HTMLDivElement>(null);
   const targetPedidoIdRef = useRef<string | null>(null);
@@ -301,36 +345,39 @@ export function Logistica() {
     setLoadingLogItems(true);
     setLogItemsError(null);
     try {
-      let rows: Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }> = [];
+      let rows: Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number; quantidade_embalada: number }> = [];
 
       const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
 
       if (filterPlataformaId) {
         const { data: pedidosData, error: pedidosError } = await (supabase as any)
           .from('pedidos')
-          .select('id, status_id, plataforma_id, itens_pedido(produto_id, variacao_id, quantidade)')
+          .select('id, status_id, plataforma_id, itens_pedido(produto_id, variacao_id, quantidade, embalado)')
           .eq('plataforma_id', filterPlataformaId)
           .eq('status_id', LOGISTICA_STATUS_ID)
           .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
 
         if (pedidosError) throw pedidosError;
 
-        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number }>();
+        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number; quantidade_embalada: number }>();
         const pedidos = (pedidosData ?? []) as Array<any>;
 
         for (const pedido of pedidos) {
-          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null }>;
+          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null; embalado: boolean | null }>;
           for (const item of itens) {
             const key = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
             const quantidade = Number(item.quantidade ?? 0);
+            const quantidadeEmbalada = item.embalado ? quantidade : 0;
             const existing = aggregate.get(key);
             if (existing) {
               existing.quantidade_total += quantidade;
+              existing.quantidade_embalada += quantidadeEmbalada;
             } else {
               aggregate.set(key, {
                 produto_id: item.produto_id ?? null,
                 variacao_id: item.variacao_id ?? null,
                 quantidade_total: quantidade,
+                quantidade_embalada: quantidadeEmbalada,
               });
             }
           }
@@ -341,7 +388,7 @@ export function Logistica() {
         // Busca pedidos com status logística E etiqueta disponível, depois agrega os itens
         let pedidosQuery = (supabase as any)
           .from('pedidos')
-          .select('itens_pedido(produto_id, variacao_id, quantidade)')
+          .select('itens_pedido(produto_id, variacao_id, quantidade, embalado)')
           .eq('status_id', LOGISTICA_STATUS_ID)
           .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
         if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
@@ -349,20 +396,23 @@ export function Logistica() {
         const { data: pedidosData, error: pedidosError } = await pedidosQuery;
         if (pedidosError) throw pedidosError;
 
-        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number }>();
+        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number; quantidade_embalada: number }>();
         for (const pedido of (pedidosData ?? [])) {
-          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null }>;
+          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null; embalado: boolean | null }>;
           for (const item of itens) {
             const key = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
             const quantidade = Number(item.quantidade ?? 0);
+            const quantidadeEmbalada = item.embalado ? quantidade : 0;
             const existing = aggregate.get(key);
             if (existing) {
               existing.quantidade_total += quantidade;
+              existing.quantidade_embalada += quantidadeEmbalada;
             } else {
               aggregate.set(key, {
                 produto_id: item.produto_id ?? null,
                 variacao_id: item.variacao_id ?? null,
                 quantidade_total: quantidade,
+                quantidade_embalada: quantidadeEmbalada,
               });
             }
           }
@@ -418,7 +468,7 @@ export function Logistica() {
     }
   };
 
-  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,data_logistica_urgente,pacote_disponivel,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,embalado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
 
   const fetchPedidosPorIds = async (ids: string[]): Promise<any[]> => {
     if (!ids.length) return [];
@@ -638,7 +688,7 @@ export function Logistica() {
       // buscar pedidos com status LOGISTICA e etiqueta_envio_id exatos (filtros aplicados no servidor)
       let pedidosQuery = (supabase as any)
         .from('pedidos')
-        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id,itens_pedido(produto_id,variacao_id,quantidade)')
+        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id,pacote_disponivel,itens_pedido(produto_id,variacao_id,quantidade)')
         .eq('status_id', LOGISTICA_STATUS_ID)
         .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
       if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
@@ -746,6 +796,44 @@ export function Logistica() {
       setPlataformasCards([]);
     } finally {
       setLoadingPlataformaCards(false);
+    }
+  };
+
+  const handleDarEntradaPacote = async () => {
+    const caseGroup = entradaPacoteModal.caseGroup;
+    if (!caseGroup) return;
+    setEntradaPacoteModal((prev) => ({ ...prev, loading: true }));
+    try {
+      const ids = (caseGroup.pedidos || []).map((p: any) => p.id).filter(Boolean);
+      if (ids.length > 0) {
+        const { error } = await (supabase as any)
+          .from('pedidos')
+          .update({ pacote_disponivel: true })
+          .in('id', ids);
+        if (error) throw error;
+        // Atualiza localmente
+        setComumPedidos((prev) =>
+          prev.map((p: any) => ids.includes(p.id) ? { ...p, pacote_disponivel: true } : p),
+        );
+        setIncomumPedidos((prev) =>
+          prev.map((p: any) => ids.includes(p.id) ? { ...p, pacote_disponivel: true } : p),
+        );
+        // Atualiza também os cards da aba Enviar
+        setPlataformasCards((prev) =>
+          prev.map((pc: any) => ({
+            ...pc,
+            pedidos: (pc.pedidos || []).map((p: any) =>
+              ids.includes(p.id) ? { ...p, pacote_disponivel: true } : p,
+            ),
+          })),
+        );
+      }
+      toast({ title: 'Entrada registrada!', description: `Pacote "${caseGroup.label}" marcado como disponível.` });
+      setEntradaPacoteModal({ open: false, caseGroup: null, loading: false });
+    } catch (err) {
+      console.error('Erro ao dar entrada no pacote:', err);
+      toast({ title: 'Erro', description: 'Não foi possível registrar a entrada do pacote.', variant: 'destructive' });
+      setEntradaPacoteModal((prev) => ({ ...prev, loading: false }));
     }
   };
 
@@ -889,6 +977,8 @@ export function Logistica() {
     setTimeout(() => barcodeRef.current?.focus(), 50);
     // buscar saldo ao carregar a página
     fetchSaldoMelhorEnvio();
+    // buscar pedidos atrasados
+    fetchAtrasados();
 
     // Injetar fonte Poppins somente nesta página
     const link = document.createElement('link');
@@ -972,12 +1062,13 @@ export function Logistica() {
   };
 
   // Classifica um pedido como comum ou incomum
+  // Regra: incomum quando o pedido contém mais de 1 item
   const getPedidoType = (pedido: any): 'comum' | 'incomum' => {
     const itens = pedido?.itens_pedido || [];
     if (!itens.length) return 'comum';
 
     const totalUnidades = itens.reduce((acc: number, it: any) => acc + Math.max(1, Number(it?.quantidade ?? 1)), 0);
-    return totalUnidades > 2 ? 'incomum' : 'comum';
+    return totalUnidades > 1 ? 'incomum' : 'comum';
   };
 
   const getPedidoCaseItems = (pedido: any): Array<{ key: string; nome: string; quantidade: number; imgUrl: string | null }> => {
@@ -1130,8 +1221,101 @@ export function Logistica() {
     return Array.from(groups.values()).sort((a, b) => b.pedidos.length - a.pedidos.length);
   })();
 
-  const groupedComumCaseGroupsByType = groupCaseGroupsByType(comumCaseGroups);
-  const groupedIncomumCaseGroupsByType = groupCaseGroupsByType(incomumCaseGroups);
+  const produtosProduzirByType = groupedLogItemsByType.map((group) => {
+    const groupId = `tipo-${group.type.toLowerCase().replace(/\s+/g, '-')}`;
+    const produtos = (group.items || []).map((item: any, index: number) => {
+      const nomeProduto = item.produto?.nome || 'Produto';
+      const nomeVariacao = item.variacao?.nome || null;
+      const imgUrl = item.variacao?.img_url || item.produto?.img_url || null;
+      const quantidadeTotal = Number(item.quantidade_total ?? 0);
+      const baseKey = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
+      return {
+        itemKey: `${baseKey}-${index}`,
+        produtoId: item.produto_id ?? null,
+        variacaoId: item.variacao_id ?? null,
+        nomeProduto,
+        nomeVariacao,
+        imgUrl,
+        quantidadeTotal,
+        quantidadeEmbaladaInicial: Number(item.quantidade_embalada ?? 0),
+      };
+    });
+
+    return {
+      id: groupId,
+      nome: group.type,
+      produtos,
+    };
+  });
+
+  const isPedidoFullyEmbalado = (pedido: any): boolean => {
+    const itens = pedido?.itens_pedido || [];
+    if (!itens.length) return false;
+    return itens.every((it: any) => it?.embalado === true);
+  };
+
+  const isCaseGroupPronto = (caseGroup: any): boolean =>
+    (caseGroup.pedidos || []).every((p: any) => isPedidoFullyEmbalado(p));
+
+  // ── Prioridade de plataforma para ordenação dos pacotes ──────────────────
+  const getPlatformPriority = (pedido: any): number => {
+    if (pedido?.urgente) return 0;
+    const pid = pedido?.plataforma_id || '';
+    const pname = String(pedido?.plataformas?.nome || '').toLowerCase();
+    if (pid === MERCADO_LIVRE_PLATAFORMA_ID || pname.includes('mercado livre') || pname.includes('mercadolivre')) return 1;
+    if (pid === SHOPEE_PLATAFORMA_ID || pname.includes('shopee')) return 2;
+    if (pname.includes('tiktok')) return 3;
+    if (pname.includes('magalu') || pname.includes('magazine')) return 4;
+    if (pname.includes('yampi')) return 10;
+    return 5;
+  };
+
+  const getCaseGroupPriority = (caseGroup: any): number =>
+    Math.min(...(caseGroup.pedidos || []).map((p: any) => getPlatformPriority(p)), 99);
+
+  // ── Status de prazo baseado em data_logistica_urgente ────────────────────
+  type DeadlineStatus = 'atrasado' | 'hoje' | 'amanha' | null;
+
+  const getDeadlineStatus = (dateStr: string | null | undefined): DeadlineStatus => {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const todayEnd = new Date(todayStart.getTime() + 86400000 - 1);
+    const tomorrowEnd = new Date(todayStart.getTime() + 2 * 86400000 - 1);
+    if (d < todayStart) return 'atrasado';
+    if (d <= todayEnd) return 'hoje';
+    if (d <= tomorrowEnd) return 'amanha';
+    return null;
+  };
+
+  const getCaseGroupDeadlineStatus = (caseGroup: any): DeadlineStatus => {
+    const statuses: DeadlineStatus[] = (caseGroup.pedidos || [])
+      .map((p: any) => getDeadlineStatus(p?.data_logistica_urgente))
+      .filter(Boolean);
+    if (statuses.includes('atrasado')) return 'atrasado';
+    if (statuses.includes('hoje')) return 'hoje';
+    if (statuses.includes('amanha')) return 'amanha';
+    return null;
+  };
+
+  const sortCaseGroups = (groups: any[]): any[] => {
+    return [...groups].sort((a, b) => {
+      const prioA = getCaseGroupPriority(a);
+      const prioB = getCaseGroupPriority(b);
+      if (prioA !== prioB) return prioA - prioB;
+      const deadlineOrder: Record<string, number> = { atrasado: 0, hoje: 1, amanha: 2 };
+      const dA = deadlineOrder[getCaseGroupDeadlineStatus(a) ?? ''] ?? 9;
+      const dB = deadlineOrder[getCaseGroupDeadlineStatus(b) ?? ''] ?? 9;
+      if (dA !== dB) return dA - dB;
+      return b.pedidos.length - a.pedidos.length;
+    });
+  };
+
+  const sortedComumCaseGroups = sortCaseGroups(comumCaseGroups);
+  const sortedIncomumCaseGroups = sortCaseGroups(incomumCaseGroups);
+  const groupedComumCaseGroupsByType = groupCaseGroupsByType(sortedComumCaseGroups);
+  const groupedIncomumCaseGroupsByType = groupCaseGroupsByType(sortedIncomumCaseGroups);
 
   const dropdownHeaderStyles: Record<'produtos' | 'comuns' | 'incomuns', React.CSSProperties> = {
     produtos: { backgroundColor: '#0ea5e90f', borderColor: '#0284c7' },
@@ -1664,6 +1848,282 @@ export function Logistica() {
     setTimeout(() => barcodeRef.current?.focus(), 100);
   };
 
+  const getQuantidadeProduzida = (groupId: string, itemKey: string) => {
+    return Number(produzidosPorGrupo[groupId]?.[itemKey] ?? 0);
+  };
+
+  useEffect(() => {
+    setProduzidosPorGrupo((prev) => {
+      const next: Record<string, Record<string, number>> = {};
+
+      for (const group of produtosProduzirByType) {
+        const currentGroup = prev[group.id] || {};
+        const nextGroup: Record<string, number> = {};
+
+        for (const produto of group.produtos) {
+          const atual = Number(currentGroup[produto.itemKey] ?? 0);
+          const inicial = Number(produto.quantidadeEmbaladaInicial ?? 0);
+          nextGroup[produto.itemKey] = Math.max(atual, inicial);
+        }
+
+        next[group.id] = nextGroup;
+      }
+
+      return next;
+    });
+  }, [produtosProduzirByType]);
+
+  const abrirBaixaCategoriaModal = (groupId: string) => {
+    const group = produtosProduzirByType.find((g) => g.id === groupId);
+    if (!group || !group.produtos.length) return;
+
+    const firstDisponivel = group.produtos.find((produto: any) => {
+      const produzido = getQuantidadeProduzida(groupId, produto.itemKey);
+      return produzido < Number(produto.quantidadeTotal ?? 0);
+    });
+
+    const itemKeyInicial = firstDisponivel?.itemKey || group.produtos[0].itemKey;
+    const totalInicial = Number((firstDisponivel || group.produtos[0]).quantidadeTotal ?? 0);
+    const produzidoInicial = getQuantidadeProduzida(groupId, itemKeyInicial);
+    const restanteInicial = Math.max(0, totalInicial - produzidoInicial);
+
+    setBaixaCategoriaModal({
+      open: true,
+      groupId,
+      itemKey: itemKeyInicial,
+      quantidade: String(Math.max(1, restanteInicial > 0 ? 1 : 0)),
+    });
+  };
+
+  const executarBaixaProduto = async (groupId: string, produto: any, quantidade: string) => {
+    if (salvandoBaixaCategoria) return;
+
+    const group = produtosProduzirByType.find((g) => g.id === groupId);
+    if (!group || !produto) return;
+
+    const total = Number(produto.quantidadeTotal ?? 0);
+    const atual = getQuantidadeProduzida(groupId, produto.itemKey);
+    const restante = Math.max(0, total - atual);
+    const qtd = Number(quantidade);
+
+    if (!Number.isInteger(qtd) || qtd <= 0) {
+      toast({ title: 'Quantidade inválida', description: 'Informe uma quantidade inteira maior que zero.', variant: 'destructive' });
+      return;
+    }
+
+    if (qtd > restante) {
+      toast({ title: 'Quantidade acima do restante', description: `Restam ${restante} unidade(s) para este produto.`, variant: 'destructive' });
+      return;
+    }
+
+    setSalvandoBaixaCategoria(true);
+    try {
+      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+
+      let pedidosQuery: any = (supabase as any)
+        .from('pedidos')
+        .select('id')
+        .eq('status_id', LOGISTICA_STATUS_ID)
+        .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
+
+      if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+      if (filterPlataformaId) pedidosQuery = pedidosQuery.eq('plataforma_id', filterPlataformaId);
+
+      const { data: pedidosData, error: pedidosError } = await pedidosQuery;
+      if (pedidosError) throw pedidosError;
+
+      const pedidoIds = (pedidosData || []).map((p: any) => p.id).filter(Boolean);
+      if (!pedidoIds.length) {
+        toast({ title: 'Nenhum pedido encontrado', description: 'Não há pedidos elegíveis para baixar embalagem.', variant: 'destructive' });
+        return;
+      }
+
+      let itensQuery: any = (supabase as any)
+        .from('itens_pedido')
+        .select('id, pedido_id, criado_em')
+        .in('pedido_id', pedidoIds)
+        .or('embalado.is.null,embalado.eq.false')
+        .order('criado_em', { ascending: true })
+        .limit(qtd);
+
+      if (produto.variacaoId) {
+        itensQuery = itensQuery.eq('variacao_id', produto.variacaoId);
+      } else if (produto.produtoId) {
+        itensQuery = itensQuery.eq('produto_id', produto.produtoId).is('variacao_id', null);
+      } else {
+        toast({ title: 'Produto inválido', description: 'Não foi possível identificar o produto para dar baixa.', variant: 'destructive' });
+        return;
+      }
+
+      const { data: itensDisponiveis, error: itensError } = await itensQuery;
+      if (itensError) throw itensError;
+
+      const idsParaAtualizar = (itensDisponiveis || []).map((it: any) => it.id).filter(Boolean);
+      if (!idsParaAtualizar.length) {
+        toast({ title: 'Sem itens pendentes', description: 'Todos os itens deste produto já estão marcados como embalados.' });
+        return;
+      }
+
+      const { error: updateError } = await (supabase as any)
+        .from('itens_pedido')
+        .update({ embalado: true, atualizado_em: new Date().toISOString() } as any)
+        .in('id', idsParaAtualizar);
+      if (updateError) throw updateError;
+
+      const quantidadeAtualizada = idsParaAtualizar.length;
+      const itemKey = produto.itemKey;
+
+      setProduzidosPorGrupo((prev) => {
+        const groupMap = prev[groupId] || {};
+        const novoValor = Math.min(total, Number(groupMap[itemKey] ?? 0) + quantidadeAtualizada);
+        return { ...prev, [groupId]: { ...groupMap, [itemKey]: novoValor } };
+      });
+
+      const flashKey = `${groupId}:${itemKey}`;
+      setItemProduzidoFlash(flashKey);
+      setTimeout(() => setItemProduzidoFlash((curr) => (curr === flashKey ? null : curr)), 700);
+
+      toast({
+        title: quantidadeAtualizada < qtd ? 'Baixa parcial concluída' : 'Baixa concluída',
+        description: quantidadeAtualizada < qtd
+          ? `Foram marcados ${quantidadeAtualizada} item(ns) como embalados (solicitado: ${qtd}).`
+          : `${quantidadeAtualizada} item(ns) marcados como embalados.`,
+      });
+
+      await fetchLogItems();
+      await fetchPlataformaCards();
+    } catch (error) {
+      console.error('Erro ao dar baixa de embalagem:', error);
+      toast({ title: 'Erro ao dar baixa', description: 'Não foi possível atualizar os itens na tabela itens_pedido.', variant: 'destructive' });
+    } finally {
+      setSalvandoBaixaCategoria(false);
+    }
+  };
+
+  const confirmarBaixaCategoria = async () => {
+    const { groupId, itemKey, quantidade } = baixaCategoriaModal;
+    if (!groupId || !itemKey || salvandoBaixaCategoria) return;
+
+    const group = produtosProduzirByType.find((g) => g.id === groupId);
+    const produto = group?.produtos.find((p: any) => p.itemKey === itemKey);
+    if (!group || !produto) return;
+
+    const total = Number(produto.quantidadeTotal ?? 0);
+    const atual = getQuantidadeProduzida(groupId, itemKey);
+    const restante = Math.max(0, total - atual);
+    const qtd = Number(quantidade);
+
+    if (!Number.isInteger(qtd) || qtd <= 0) {
+      toast({ title: 'Quantidade inválida', description: 'Informe uma quantidade inteira maior que zero.', variant: 'destructive' });
+      return;
+    }
+
+    if (qtd > restante) {
+      toast({ title: 'Quantidade acima do restante', description: `Restam ${restante} unidade(s) para este produto.`, variant: 'destructive' });
+      return;
+    }
+
+    setSalvandoBaixaCategoria(true);
+    try {
+      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+
+      let pedidosQuery: any = (supabase as any)
+        .from('pedidos')
+        .select('id')
+        .eq('status_id', LOGISTICA_STATUS_ID)
+        .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
+
+      if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+      if (filterPlataformaId) pedidosQuery = pedidosQuery.eq('plataforma_id', filterPlataformaId);
+
+      const { data: pedidosData, error: pedidosError } = await pedidosQuery;
+      if (pedidosError) throw pedidosError;
+
+      const pedidoIds = (pedidosData || []).map((p: any) => p.id).filter(Boolean);
+      if (!pedidoIds.length) {
+        toast({ title: 'Nenhum pedido encontrado', description: 'Não há pedidos elegíveis para baixar embalagem.', variant: 'destructive' });
+        return;
+      }
+
+      let itensQuery: any = (supabase as any)
+        .from('itens_pedido')
+        .select('id, pedido_id, criado_em')
+        .in('pedido_id', pedidoIds)
+        .or('embalado.is.null,embalado.eq.false')
+        .order('criado_em', { ascending: true })
+        .limit(qtd);
+
+      if (produto.variacaoId) {
+        itensQuery = itensQuery.eq('variacao_id', produto.variacaoId);
+      } else if (produto.produtoId) {
+        itensQuery = itensQuery.eq('produto_id', produto.produtoId).is('variacao_id', null);
+      } else {
+        toast({ title: 'Produto inválido', description: 'Não foi possível identificar o produto para dar baixa.', variant: 'destructive' });
+        return;
+      }
+
+      const { data: itensDisponiveis, error: itensError } = await itensQuery;
+      if (itensError) throw itensError;
+
+      const idsParaAtualizar = (itensDisponiveis || []).map((it: any) => it.id).filter(Boolean);
+      if (!idsParaAtualizar.length) {
+        toast({ title: 'Sem itens pendentes', description: 'Todos os itens deste produto já estão marcados como embalados.' });
+        return;
+      }
+
+      const { error: updateError } = await (supabase as any)
+        .from('itens_pedido')
+        .update({ embalado: true, atualizado_em: new Date().toISOString() } as any)
+        .in('id', idsParaAtualizar);
+      if (updateError) throw updateError;
+
+      const quantidadeAtualizada = idsParaAtualizar.length;
+
+      setProduzidosPorGrupo((prev) => {
+        const groupMap = prev[groupId] || {};
+        const novoValor = Math.min(total, Number(groupMap[itemKey] ?? 0) + quantidadeAtualizada);
+        return {
+          ...prev,
+          [groupId]: {
+            ...groupMap,
+            [itemKey]: novoValor,
+          },
+        };
+      });
+
+      const flashKey = `${groupId}:${itemKey}`;
+      setItemProduzidoFlash(flashKey);
+      setTimeout(() => {
+        setItemProduzidoFlash((curr) => (curr === flashKey ? null : curr));
+      }, 700);
+
+      if (quantidadeAtualizada < qtd) {
+        toast({
+          title: 'Baixa parcial concluída',
+          description: `Foram marcados ${quantidadeAtualizada} item(ns) como embalados (solicitado: ${qtd}).`,
+        });
+      } else {
+        toast({
+          title: 'Baixa concluída',
+          description: `${quantidadeAtualizada} item(ns) marcados como embalados.`,
+        });
+      }
+
+      setBaixaCategoriaModal({ open: false, groupId: null, itemKey: '', quantidade: '1' });
+      await fetchLogItems();
+      await fetchPlataformaCards();
+    } catch (error) {
+      console.error('Erro ao confirmar baixa de embalagem:', error);
+      toast({
+        title: 'Erro ao dar baixa',
+        description: 'Não foi possível atualizar os itens na tabela itens_pedido.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSalvandoBaixaCategoria(false);
+    }
+  };
+
  return (
     <div className="flex h-full" style={{ fontFamily: "'Poppins', sans-serif" }}>
       <LogisticaSidebar />
@@ -1809,257 +2269,566 @@ export function Logistica() {
 
         {/* Cards: itens a enviar (view vw_itens_logistica) - show only when no pedido is active and no filtro por plataforma */}
         {!foundPedido && !modoListaPorPlataforma && (
-          <div className="mt-4">
-
-            {/* Seção: Produtos a Embalar */}
-            <div className="mb-5">
-              <button
-                type="button"
-                onClick={() => toggleSection('produtos')}
-                className="mb-3 flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left hover:bg-muted/30"
-                style={dropdownHeaderStyles.produtos}
-              >
-                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em', textShadow: '1px 1px 2px rgba(0,0,0,0.25)' }}>PRODUTOS A EMBALAR</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
-                    {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
-                  </span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${openSections.produtos ? 'rotate-180' : ''}`} />
-                </div>
-              </button>
-
-              {openSections.produtos && (
-                <div className="rounded-md border p-3" style={dropdownHeaderStyles.produtos}>
-                  {loadingLogItems ? (
-                    <div className="flex gap-2 flex-wrap">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
-                      ))}
+          <>
+          <div className="mt-4 rounded-lg border bg-card/70 p-3">
+            <div className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+              {[
+                { key: 'itens-produzir', label: 'Itens a embalar', step: 1 },
+                { key: 'pacotes', label: 'Pacotes', step: 2 },
+                { key: 'enviar', label: 'Enviar', step: 3 },
+              ].map((tab) => {
+                const active = logisticaMainTab === (tab.key as 'itens-produzir' | 'pacotes' | 'enviar');
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    onClick={() => setLogisticaMainTab(tab.key as 'itens-produzir' | 'pacotes' | 'enviar')}
+                    className={`w-full rounded-md border px-3 py-2 text-left transition-colors ${active ? 'border-primary bg-primary/10' : 'border-border bg-background hover:bg-muted'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                        {tab.step}
+                      </span>
+                      <div>
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Etapa {tab.step}</p>
+                        <p className="text-sm font-semibold">{tab.label}</p>
+                      </div>
                     </div>
-                  ) : logItemsError ? (
-                    <div className="text-sm text-red-500">Erro ao carregar produtos: {logItemsError}</div>
-                  ) : filteredLogItems.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {groupedLogItemsByType.map((group) => (
-                        <div key={group.type} className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {group.items.map((item: any, idx: number) => {
-                              const nomeProduto = item.produto?.nome || '—';
-                              const nomeVariacao = item.variacao?.nome || null;
-                              const sku = item.variacao?.sku || item.produto?.sku || null;
-                              const imgUrl = item.variacao?.img_url || item.produto?.img_url || null;
-
-                              return (
-                                <div
-                                  key={`${group.type}-${item.produto_id}-${item.variacao_id}-${idx}`}
-                                  className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                  onClick={() => fetchPedidosDoProduto({ produto_id: item.produto_id, variacao_id: item.variacao_id, nomeProduto, nomeVariacao, imgUrl })}
-                                >
-                                  <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                    ×{item.quantidade_total}
-                                  </span>
-
-                                  {imgUrl ? (
-                                    <img
-                                      src={imgUrl}
-                                      alt={nomeProduto}
-                                      className="h-14 w-14 rounded-md object-cover border"
-                                    />
-                                  ) : (
-                                    <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                                      sem foto
-                                    </div>
-                                  )}
-
-                                  <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                                    {nomeProduto}
-                                  </p>
-
-                                  {nomeVariacao && (
-                                    <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
-                                      {nomeVariacao}
-                                    </p>
-                                  )}
-
-                                  {sku && (
-                                    <span className="text-[9px] font-mono text-muted-foreground/70 truncate w-full text-center">
-                                      {sku}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="mb-6">
-              <button
-                type="button"
-                onClick={() => toggleSection('comuns')}
-                className="mb-3 flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left hover:bg-muted/30"
-                style={dropdownHeaderStyles.comuns}
-              >
-                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em', textShadow: '1px 1px 2px rgba(0,0,0,0.25)' }}>PACOTES COMUNS</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{comumCaseGroups.length} caso(s) comum(ns)</span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${openSections.comuns ? 'rotate-180' : ''}`} />
+            {logisticaMainTab === 'itens-produzir' && (
+              <div>
+                {atrasados.length > 0 && (() => {
+                  const atrasadosIds = new Set(atrasados.map((p: any) => p.id));
+                  const atrasadosPedidos = [...comumPedidos, ...incomumPedidos].filter((p: any) => atrasadosIds.has(p.id));
+                  if (atrasadosPedidos.length === 0) return null;
+
+                  // Agrupa os itens por produto+variacao
+                  const itemMap = new Map<string, { nome: string; nomeVariacao: string | null; imgUrl: string | null; quantidade: number }>();
+                  atrasadosPedidos.forEach((pedido: any) => {
+                    (pedido.itens_pedido || []).forEach((it: any) => {
+                      const key = `${it.produto_id ?? ''}-${it.variacao_id ?? ''}`;
+                      const nomeProduto = it.produto?.nome || '—';
+                      const nomeVariacao = it.variacao?.nome || null;
+                      const imgUrl = it.variacao?.img_url || it.produto?.img_url || null;
+                      const qtd = Number(it.quantidade ?? 1);
+                      const existing = itemMap.get(key);
+                      if (existing) { existing.quantidade += qtd; }
+                      else { itemMap.set(key, { nome: nomeProduto, nomeVariacao, imgUrl, quantidade: qtd }); }
+                    });
+                  });
+                  const itemsList = Array.from(itemMap.values());
+
+                  return (
+                    <div className="mb-4 rounded-lg border-2 border-red-500 bg-red-50 p-3">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white font-bold text-xs shrink-0">{atrasadosPedidos.length}</div>
+                        <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide">⚠️ Itens com prazo ultrapassado — {atrasadosPedidos.length} pedido(s)</h3>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {itemsList.map((item, idx) => (
+                          <div key={idx} className="flex flex-col items-center gap-1 rounded-lg border border-red-300 bg-white p-2 w-[72px] shadow-sm">
+                            {item.imgUrl ? (
+                              <img src={item.imgUrl} alt={item.nome} className="h-12 w-12 rounded object-cover border" />
+                            ) : (
+                              <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
+                            )}
+                            <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">{item.nome}</p>
+                            {item.nomeVariacao && (
+                              <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full">{item.nomeVariacao}</p>
+                            )}
+                            <span className="text-[10px] font-bold text-red-700">×{item.quantidade}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-bold tracking-wide">ITENS A PRODUZIR</h3>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" onClick={() => fetchPlataformaCards()} className="border rounded-md px-3 py-1.5 flex items-center gap-2">
+                      <RefreshCw className="h-4 w-4" />
+                      Atualizar
+                    </Button>
+                  </div>
                 </div>
-              </button>
 
-              {openSections.comuns && (
-                <div className="rounded-md border p-3" style={dropdownHeaderStyles.comuns}>
-                  {comumCaseGroups.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Nenhum pedido comum encontrado.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {groupedComumCaseGroupsByType.map((group) => (
-                        <div key={`comum-${group.type}`} className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {group.groups.map((caseGroup: any) => {
-                              const nomePreview = caseGroup.label;
-                              const imgPreview = caseGroup.imgUrl;
+                {(() => {
+                  const totalProdutos = produtosProduzirByType.reduce(
+                    (acc, grupo) => acc + grupo.produtos.reduce((subtotal: number, produto: any) => subtotal + Number(produto.quantidadeTotal ?? 0), 0),
+                    0,
+                  );
+                  const totalEmbalados = produtosProduzirByType.reduce((acc, grupo) => {
+                    return acc + grupo.produtos.reduce((subtotal: number, produto: any) => {
+                      return subtotal + getQuantidadeProduzida(grupo.id, produto.itemKey);
+                    }, 0);
+                  }, 0);
+                  const totalFaltam = Math.max(0, totalProdutos - totalEmbalados);
 
-                              return (
-                                <div
-                                  key={caseGroup.signature}
-                                  className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                  onClick={() => {
-                                    const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
-                                    setModoListaPorPlataforma(true);
-                                    setFilterPlataformaId('');
-                                    setPedidosFiltrados(groupedPedidos);
-                                    setPedidoAtualIndex(0);
-                                    setFoundPedido(groupedPedidos[0] || null);
-                                    setFoundItemScans({});
-                                    setItemInputs({});
-                                    setItemStatus({});
-                                    setTimeout(() => barcodeRef.current?.focus(), 50);
-                                  }}
-                                >
-                                  <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                    ×{caseGroup.pedidos.length}
-                                  </span>
+                  return (
+                    <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="rounded-lg border border-custom-600 bg-custom-50 p-3">
+                        <p className="text-xs text-custom-700 uppercase tracking-wide font-semibold">Total de produtos</p>
+                        <p className="text-2xl font-bold mt-1 text-custom-800">{totalProdutos}</p>
+                      </div>
+                      <div className="rounded-lg border border-green-300 bg-green-50 p-3">
+                        <p className="text-xs text-green-700 uppercase tracking-wide font-semibold">Já embalados</p>
+                        <p className="text-2xl font-bold mt-1 text-green-700">{totalEmbalados}</p>
+                      </div>
+                      <div className="rounded-lg border border-red-300 bg-red-50 p-3">
+                        <p className="text-xs text-red-700 uppercase tracking-wide font-semibold">Faltam embalar</p>
+                        <p className="text-2xl font-bold mt-1 text-red-700">{totalFaltam}</p>
+                      </div>
+                    </div>
+                  );
+                })()}
 
-                                  {imgPreview ? (
-                                    <img
-                                      src={imgPreview}
-                                      alt={nomePreview}
-                                      className="h-14 w-14 rounded-md object-cover border"
-                                    />
-                                  ) : (
-                                    <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                                      sem foto
-                                    </div>
-                                  )}
+                {produtosProduzirByType.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">Nenhum produto pendente para produção.</div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 w-full mx-auto items-start">
+                    {produtosProduzirByType.map((grupo) => {
+                      const totalQuantidadeGrupo = grupo.produtos.reduce((acc: number, produto: any) => acc + Number(produto.quantidadeTotal ?? 0), 0);
+                      const produzidosCount = grupo.produtos.reduce((acc: number, produto: any) => {
+                        return acc + getQuantidadeProduzida(grupo.id, produto.itemKey);
+                      }, 0);
+                      const faltamCount = Math.max(0, totalQuantidadeGrupo - produzidosCount);
+                      const grupoConcluido = totalQuantidadeGrupo > 0 && faltamCount === 0;
+                      const progressoPercent = totalQuantidadeGrupo > 0 ? Math.round((produzidosCount / totalQuantidadeGrupo) * 100) : 0;
+                      const currentPage = platformPage[grupo.id] ?? 1;
+                      const totalPages = Math.max(1, Math.ceil((grupo.produtos?.length ?? 0) / PLATFORM_PAGE_SIZE));
+                      const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
+                      const produtosPagina = (grupo.produtos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
 
-                                  <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                                    {nomePreview}
-                                  </p>
-                                  <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
-                                    {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
-                                  </p>
+                      const handleGoToPage = (e: React.MouseEvent, page: number) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (page < 1 || page > totalPages) return;
+                        setPlatformPage((s) => ({ ...s, [grupo.id]: page }));
+                      };
+
+                      return (
+                        <Card
+                          key={grupo.id}
+                          className={`p-3 select-none self-start transition-all shadow-sm ${grupoConcluido ? 'ring-2 ring-green-500 border-green-500 bg-green-50/40' : 'border-2 border-custom-600 hover:shadow-md'}`}
+                        >
+                          <CardContent className="flex items-center gap-3 p-0">
+                            <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${grupoConcluido ? 'bg-green-100' : 'bg-muted'}`}>
+                              <FaBoxesStacked className={`w-3.5 h-3.5 ${grupoConcluido ? 'text-green-700' : 'text-muted-foreground'}`} />
+                            </div>
+                            <div className="flex-1">
+                              <div className="font-semibold text-sm leading-tight">{grupo.nome}</div>
+                              <div className="text-xs text-muted-foreground mt-0.5">{grupo.produtos.length} produto(s)</div>
+                              <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold">
+                                <span className="rounded-md bg-green-100 text-green-700 px-1.5 py-0.5">Embalados: {produzidosCount}</span>
+                                <span className="rounded-md bg-red-100 text-red-700 px-1.5 py-0.5">Faltam: {faltamCount}</span>
+                              </div>
+                            </div>
+                          </CardContent>
+
+                          <div className="mt-3">
+                            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${progressoPercent}%` }} />
+                            </div>
+                            <div className="mt-1 text-[11px] text-muted-foreground">Progresso: {progressoPercent}%</div>
+                          </div>
+
+                          <div className="pt-2 border-t mt-2.5">
+                            {grupoConcluido && (
+                              <div className="mb-2 rounded-md border border-green-300 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1.5 animate-pulse">
+                                ✅ Todos os itens deste grupo foram embalados
+                              </div>
+                            )}
+
+                            {totalPages > 1 && (
+                              <div className="flex items-center justify-between mb-3 pb-3 border-b">
+                                <span className="text-xs text-muted-foreground">
+                                  {grupo.produtos.length} produtos • {currentPage}/{totalPages}
+                                </span>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    disabled={currentPage <= 1}
+                                    onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                    className="px-3 py-1 text-base border rounded disabled:opacity-40 hover:bg-muted"
+                                  >
+                                    ‹
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={currentPage >= totalPages}
+                                    onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                    className="px-3 py-1 text-base border rounded disabled:opacity-40 hover:bg-muted"
+                                  >
+                                    ›
+                                  </button>
                                 </div>
-                              );
-                            })}
+                              </div>
+                            )}
+                            {produtosPagina.length === 0 ? (
+                              <div className="text-sm text-muted-foreground">Nenhum produto disponível.</div>
+                            ) : (
+                              <div className="space-y-2">
+                                {produtosPagina.map((produto: any) => {
+                                  const produzidoQty = getQuantidadeProduzida(grupo.id, produto.itemKey);
+                                  const produzido = produzidoQty >= Number(produto.quantidadeTotal ?? 0);
+                                  const faltamItem = Math.max(0, Number(produto.quantidadeTotal ?? 0) - produzidoQty);
+                                  const flashAtivo = itemProduzidoFlash === `${grupo.id}:${produto.itemKey}`;
+
+                                  const inlineQtyKey = `${grupo.id}:${produto.itemKey}`;
+
+                                  return (
+                                    <div key={produto.itemKey} className={`rounded-md border px-3 py-3 transition-all ${flashAtivo ? 'bg-green-100 border-green-500 animate-pulse' : produzido ? 'bg-green-50 border-green-300' : 'border-red-200 bg-red-50/30'}`}>
+                                      <div className="flex items-start gap-3">
+                                        {produto.imgUrl ? (
+                                          <img src={produto.imgUrl} alt={produto.nomeProduto} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
+                                        ) : (
+                                          <div className="h-10 w-10 rounded border bg-muted flex items-center justify-center text-[9px] text-muted-foreground flex-shrink-0">sem foto</div>
+                                        )}
+                                        <div className="flex-1 min-w-0">
+                                          <span className="text-xs font-semibold block leading-tight">{produto.nomeProduto}</span>
+                                          {produto.nomeVariacao && (
+                                            <span className="text-[11px] text-muted-foreground block">{produto.nomeVariacao}</span>
+                                          )}
+                                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${produzido ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                              Emb.: {produzidoQty}/{produto.quantidadeTotal}
+                                            </span>
+                                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${produzido ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                              {produzido ? 'EMBALADO' : `FALTAM ${faltamItem}`}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                      {!produzido && (
+                                        <div className="mt-2.5">
+                                          <input
+                                            type="number"
+                                            min="1"
+                                            max={faltamItem}
+                                            value={produtoInputQty[inlineQtyKey] ?? ''}
+                                            onChange={(e) => setProdutoInputQty((prev) => ({ ...prev, [inlineQtyKey]: e.target.value }))}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                const qty = produtoInputQty[inlineQtyKey]?.trim() || '1';
+                                                executarBaixaProduto(grupo.id, produto, qty);
+                                                setProdutoInputQty((prev) => ({ ...prev, [inlineQtyKey]: '' }));
+                                              }
+                                            }}
+                                            placeholder={`Qtd (máx ${faltamItem}) → Enter`}
+                                            disabled={salvandoBaixaCategoria}
+                                            className="w-full text-xs border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white disabled:opacity-50"
+                                          />
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {logisticaMainTab === 'pacotes' && (
+              <>
+                {(() => {
+                  const overdueCaseGroups = [
+                    ...sortedComumCaseGroups.filter((cg: any) => getCaseGroupDeadlineStatus(cg) === 'atrasado'),
+                    ...sortedIncomumCaseGroups.filter((cg: any) => getCaseGroupDeadlineStatus(cg) === 'atrasado'),
+                  ];
+                  if (!overdueCaseGroups.length) return null;
+                  return (
+                    <div className="mb-4 rounded-lg border-2 border-red-500 bg-red-50 p-3">
+                      <div className="flex items-center gap-2 mb-3">
+                        <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white font-bold text-xs shrink-0">{overdueCaseGroups.length}</div>
+                        <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide">⚠️ Pacotes com prazo ultrapassado</h3>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {overdueCaseGroups.map((caseGroup: any) => {
+                          const pronto = isCaseGroupPronto(caseGroup);
+                          const temUrgente = (caseGroup.pedidos as any[]).some((p: any) => p.urgente);
+                          const pacoteDisponivel = (caseGroup.pedidos as any[]).every((p: any) => p.pacote_disponivel);
+                          return (
+                            <div
+                              key={caseGroup.signature}
+                              className={`relative flex flex-col items-center gap-1 rounded-lg border-2 p-2 w-24 shadow-sm transition-shadow cursor-pointer hover:shadow-md ${
+                                pacoteDisponivel ? 'border-green-500 bg-green-50' : pronto ? 'border-red-400 bg-white' : 'border-red-400 bg-white opacity-60 cursor-not-allowed'
+                              }`}
+                              onClick={() => {
+                                if (!pronto) return;
+                                setEntradaPacoteModal({ open: true, caseGroup, loading: false });
+                              }}
+                            >
+                              <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-red-600 text-white font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                ×{caseGroup.pedidos.length}
+                              </span>
+                              {caseGroup.imgUrl ? (
+                                <img src={caseGroup.imgUrl} alt={caseGroup.label} className="h-12 w-12 rounded-md object-cover border" />
+                              ) : (
+                                <div className="h-12 w-12 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
+                              )}
+                              <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">{caseGroup.label}</p>
+                              <div className="flex flex-wrap justify-center gap-0.5 w-full">
+                                {temUrgente && <span className="text-[8px] font-bold bg-purple-600 text-white rounded px-1 py-0.5">URGENTE</span>}
+                                <span className="text-[8px] font-bold bg-red-600 text-white rounded px-1 py-0.5">ATRASADO</span>
+                                {pacoteDisponivel && <span className="text-[8px] font-bold bg-green-600 text-white rounded px-1 py-0.5">✓ DISPONÍVEL</span>}
+                              </div>
+                              {!pronto && <p className="text-[8px] text-red-600 font-semibold text-center w-full">Insuficientes embalados</p>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })()}
+                <div className="mb-4 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pacotesSubTab === 'comuns' ? 'default' : 'outline'}
+                    onClick={() => setPacotesSubTab('comuns')}
+                  >
+                    Comuns
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pacotesSubTab === 'incomuns' ? 'default' : 'outline'}
+                    onClick={() => setPacotesSubTab('incomuns')}
+                  >
+                    Incomuns
+                  </Button>
+                </div>
+
+                {pacotesSubTab === 'comuns' && (
+                  <div className="mb-6">
+                    <div className="rounded-md border p-3" style={dropdownHeaderStyles.comuns}>
+                      {comumCaseGroups.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">Nenhum pedido comum encontrado.</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {groupedComumCaseGroupsByType.map((group) => (
+                            <div key={`comum-${group.type}`} className="space-y-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
+                              <div className="flex flex-wrap gap-2">
+                                {group.groups.map((caseGroup: any) => {
+                                  const nomePreview = caseGroup.label;
+                                  const imgPreview = caseGroup.imgUrl;
+                                  const pronto = isCaseGroupPronto(caseGroup);
+                                  const deadline = getCaseGroupDeadlineStatus(caseGroup);
+                                  const temUrgente = (caseGroup.pedidos as any[]).some((p: any) => p.urgente);
+                                  const pacoteDisponivel = (caseGroup.pedidos as any[]).every((p: any) => p.pacote_disponivel);
+
+                                  return (
+                                    <div
+                                      key={caseGroup.signature}
+                                      className={`relative flex flex-col items-center gap-1.5 rounded-lg border p-2 w-24 shadow-sm transition-shadow ${
+                                        pacoteDisponivel
+                                          ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
+                                          : pronto
+                                          ? 'bg-card hover:shadow-md cursor-pointer'
+                                          : 'bg-card opacity-45 cursor-not-allowed'
+                                      }`}
+                                      onClick={() => {
+                                        if (!pronto) return;
+                                        setEntradaPacoteModal({ open: true, caseGroup, loading: false });
+                                      }}
+                                    >
+                                      <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                        ×{caseGroup.pedidos.length}
+                                      </span>
+
+                                      {imgPreview ? (
+                                        <img
+                                          src={imgPreview}
+                                          alt={nomePreview}
+                                          className="h-14 w-14 rounded-md object-cover border"
+                                        />
+                                      ) : (
+                                        <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                          sem foto
+                                        </div>
+                                      )}
+
+                                      <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                        {nomePreview}
+                                      </p>
+                                      <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                                        {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                                      </p>
+
+                                      {/* Badges de prazo, urgência e disponibilidade */}
+                                      <div className="flex flex-wrap justify-center gap-0.5 w-full">
+                                        {pacoteDisponivel && (
+                                          <span className="text-[8px] font-bold bg-green-600 text-white rounded px-1 py-0.5 leading-tight">✓ DISPONÍVEL</span>
+                                        )}
+                                        {temUrgente && (
+                                          <span className="text-[8px] font-bold bg-purple-600 text-white rounded px-1 py-0.5 leading-tight">URGENTE</span>
+                                        )}
+                                        {deadline === 'atrasado' && (
+                                          <span className="text-[8px] font-bold bg-red-600 text-white rounded px-1 py-0.5 leading-tight">ATRASADO</span>
+                                        )}
+                                        {deadline === 'hoje' && (
+                                          <span className="text-[8px] font-bold bg-orange-500 text-white rounded px-1 py-0.5 leading-tight">HOJE</span>
+                                        )}
+                                        {deadline === 'amanha' && (
+                                          <span className="text-[8px] font-bold bg-yellow-400 text-gray-800 rounded px-1 py-0.5 leading-tight">AMANHÃ</span>
+                                        )}
+                                      </div>
+
+                                      {!pronto && (
+                                        <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
+                                          Itens insuficientes embalados
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {pacotesSubTab === 'incomuns' && (
+                  <div className="mb-6">
+                    <div className="rounded-md border p-3" style={dropdownHeaderStyles.incomuns}>
+                      {incomumCaseGroups.length === 0 ? (
+                        <div className="text-sm text-muted-foreground">Nenhum pedido incomum encontrado.</div>
+                      ) : (
+                        <div className="space-y-3">
+                          {groupedIncomumCaseGroupsByType.map((group) => (
+                            <div key={`incomum-${group.type}`} className="space-y-2">
+                              <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
+                              <div className="flex flex-wrap gap-2">
+                                {group.groups.map((caseGroup: any) => {
+                                  const nomePreview = caseGroup.label;
+                                  const imgPreview = caseGroup.imgUrl;
+                                  const pronto = isCaseGroupPronto(caseGroup);
+                                  const deadline = getCaseGroupDeadlineStatus(caseGroup);
+                                  const temUrgente = (caseGroup.pedidos as any[]).some((p: any) => p.urgente);
+                                  const pacoteDisponivel = (caseGroup.pedidos as any[]).every((p: any) => p.pacote_disponivel);
+
+                                  return (
+                                    <div
+                                      key={caseGroup.signature}
+                                      className={`relative flex flex-col items-center gap-1.5 rounded-lg border p-2 w-24 shadow-sm transition-shadow ${
+                                        pacoteDisponivel
+                                          ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
+                                          : pronto
+                                          ? 'bg-card hover:shadow-md cursor-pointer'
+                                          : 'bg-card opacity-45 cursor-not-allowed'
+                                      }`}
+                                      onClick={() => {
+                                        if (!pronto) return;
+                                        setEntradaPacoteModal({ open: true, caseGroup, loading: false });
+                                      }}
+                                    >
+                                      <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                        ×{caseGroup.pedidos.length}
+                                      </span>
+
+                                      {imgPreview ? (
+                                        <img
+                                          src={imgPreview}
+                                          alt={nomePreview}
+                                          className="h-14 w-14 rounded-md object-cover border"
+                                        />
+                                      ) : (
+                                        <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                          sem foto
+                                        </div>
+                                      )}
+
+                                      <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                        {nomePreview}
+                                      </p>
+                                      <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                                        {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                                      </p>
+
+                                      {/* Badges de disponibilidade, prazo e urgência */}
+                                      <div className="flex flex-wrap justify-center gap-0.5 w-full">
+                                        {pacoteDisponivel && (
+                                          <span className="text-[8px] font-bold bg-green-600 text-white rounded px-1 py-0.5 leading-tight">✓ DISPONÍVEL</span>
+                                        )}
+                                        {temUrgente && (
+                                          <span className="text-[8px] font-bold bg-purple-600 text-white rounded px-1 py-0.5 leading-tight">URGENTE</span>
+                                        )}
+                                        {deadline === 'atrasado' && (
+                                          <span className="text-[8px] font-bold bg-red-600 text-white rounded px-1 py-0.5 leading-tight">ATRASADO</span>
+                                        )}
+                                        {deadline === 'hoje' && (
+                                          <span className="text-[8px] font-bold bg-orange-500 text-white rounded px-1 py-0.5 leading-tight">HOJE</span>
+                                        )}
+                                        {deadline === 'amanha' && (
+                                          <span className="text-[8px] font-bold bg-yellow-400 text-gray-800 rounded px-1 py-0.5 leading-tight">AMANHÃ</span>
+                                        )}
+                                      </div>
+
+                                      {!pronto && (
+                                        <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
+                                          Itens insuficientes embalados
+                                        </p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+
+            {logisticaMainTab === 'enviar' && (
+              <div className="mt-6">
+              {atrasados.length > 0 && (
+                <div className="mb-4 rounded-lg border-2 border-red-500 bg-red-50 p-3">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white font-bold text-xs shrink-0">{atrasados.length}</div>
+                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide">⚠️ Pedidos com prazo ultrapassado</h3>
+                  </div>
+                  <div className="space-y-1">
+                    {atrasados.map((pedido: any) => {
+                      const dataUrgente = new Date(pedido.data_logistica_urgente);
+                      const now = new Date(); now.setHours(0,0,0,0);
+                      const diasAtraso = Math.ceil((now.getTime() - dataUrgente.getTime()) / 86400000);
+                      return (
+                        <div key={pedido.id} className="flex items-center justify-between rounded-md border border-red-300 bg-white px-3 py-1.5 cursor-pointer hover:bg-red-50 transition-colors"
+                          onClick={() => { setBarcode(pedido.id_externo || pedido.id); setTimeout(() => barcodeRef.current?.focus(), 50); }}
+                        >
+                          <div className="flex items-center gap-2">
+                            {pedido.plataformas?.img_url && <img src={pedido.plataformas.img_url} alt={pedido.plataformas.nome} className="h-4 w-4 rounded object-cover" />}
+                            <span className="text-sm font-semibold text-red-800">{pedido.id_externo || pedido.id}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-red-700">Prazo: {dataUrgente.toLocaleDateString('pt-BR')}</span>
+                            <span className="rounded-full bg-red-600 text-white text-[10px] font-bold px-2 py-0.5">{diasAtraso > 0 ? `${diasAtraso}d atrasado` : 'Vence hoje'}</span>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      );
+                    })}
+                  </div>
                 </div>
               )}
-            </div>
-
-            <div className="mt-6">
-              <button
-                type="button"
-                onClick={() => toggleSection('incomuns')}
-                className="mb-3 flex w-full items-center justify-between rounded-md border bg-card px-3 py-2 text-left hover:bg-muted/30"
-                style={dropdownHeaderStyles.incomuns}
-              >
-                <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em', textShadow: '1px 1px 2px rgba(0,0,0,0.25)' }}>PACOTES INCOMUNS</h3>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">{incomumCaseGroups.length} caso(s) incomum(ns)</span>
-                  <ChevronDown className={`h-4 w-4 transition-transform ${openSections.incomuns ? 'rotate-180' : ''}`} />
-                </div>
-              </button>
-
-              {openSections.incomuns && (
-                <div className="rounded-md border p-3" style={dropdownHeaderStyles.incomuns}>
-                  {incomumCaseGroups.length === 0 ? (
-                    <div className="text-sm text-muted-foreground">Nenhum pedido incomum encontrado.</div>
-                  ) : (
-                    <div className="space-y-3">
-                      {groupedIncomumCaseGroupsByType.map((group) => (
-                        <div key={`incomum-${group.type}`} className="space-y-2">
-                          <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
-                          <div className="flex flex-wrap gap-2">
-                            {group.groups.map((caseGroup: any) => {
-                              const nomePreview = caseGroup.label;
-                              const imgPreview = caseGroup.imgUrl;
-
-                              return (
-                                <div
-                                  key={caseGroup.signature}
-                                  className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                  onClick={() => {
-                                    const groupedPedidos = sortPedidos(caseGroup.pedidos || []);
-                                    setModoListaPorPlataforma(true);
-                                    setFilterPlataformaId('');
-                                    setPedidosFiltrados(groupedPedidos);
-                                    setPedidoAtualIndex(0);
-                                    setFoundPedido(groupedPedidos[0] || null);
-                                    setFoundItemScans({});
-                                    setItemInputs({});
-                                    setItemStatus({});
-                                    setTimeout(() => barcodeRef.current?.focus(), 50);
-                                  }}
-                                >
-                                  <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                    ×{caseGroup.pedidos.length}
-                                  </span>
-
-                                  {imgPreview ? (
-                                    <img
-                                      src={imgPreview}
-                                      alt={nomePreview}
-                                      className="h-14 w-14 rounded-md object-cover border"
-                                    />
-                                  ) : (
-                                    <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                                      sem foto
-                                    </div>
-                                  )}
-
-                                  <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                                    {nomePreview}
-                                  </p>
-                                  <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
-                                    {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
-                                  </p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold" style={{ fontSize: '13px', fontWeight: 600, letterSpacing: '0.04em' }}>ITENS A ENVIAR</h3>
                 <div className="flex items-center gap-2">
@@ -2075,13 +2844,14 @@ export function Logistica() {
               ) : plataformasCards.length === 0 ? (
                 <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
               ) : (
-                <div className={`grid grid-cols-1 sm:grid-cols-2 ${plataformasCards.length >= 5 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 w-full mx-auto items-start`}>
+                <div className="space-y-4">
                   {plataformasCards.map((pc, idx) => {
                     const currentPage = platformPage[pc.id] ?? 1;
                     const totalPages = Math.max(1, Math.ceil((pc.pedidos?.length ?? 0) / PLATFORM_PAGE_SIZE));
                     const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
                     const pedidosPagina = (pc.pedidos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
                     const cardDropdownKey = `${pc.id || 'sem-id'}-${idx}`;
+                    const isOpen = openPlatformId === cardDropdownKey;
 
                     const handleGoToPage = (e: React.MouseEvent, page: number) => {
                       e.preventDefault();
@@ -2092,183 +2862,213 @@ export function Logistica() {
 
                     const isSyntheticCard = pc.id === 'urgentes' || pc.id === 'leads';
 
-                    return (
-                    <Card
-                      key={pc.id}
-                      className="p-3 cursor-pointer select-none self-start"
-                      onClick={async (e) => {
-                        e.preventDefault();
-                        const next = openPlatformId === cardDropdownKey ? null : cardDropdownKey;
-                        setOpenPlatformId(next);
-                        if (next) {
-                          setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
-                          try {
-                            const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                            if (ids.length > 0) await fetchItemsForPedidoIds(ids);
-                          } catch (err) { console.error(err); }
-                        }
-                      }}
-                    >
-                      <CardContent className="flex items-center gap-3 p-0">
-                        <div className="w-7 h-7 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
-                          {pc.img_url ? (
-                            <img src={pc.img_url} alt={pc.nome} className="w-7 h-7 object-cover" />
-                          ) : pc.id === 'urgentes' ? (
-                            <TriangleAlert className="w-4 h-4 text-red-500" />
-                          ) : pc.id === 'leads' ? (
-                            <Users className="w-4 h-4 text-gray-600" />
-                          ) : (
-                            <FaBoxesStacked className="w-4 h-4 text-gray-500" />
-                          )}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-semibold text-sm">{pc.nome}</div>
-                          <div className="text-xs text-muted-foreground">{pc.count} pedido(s)</div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button
-                            type="button"
-                            size="sm"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              setOpenPlatformId(null);
-                              if (isSyntheticCard) {
-                                setLoadingPedidosFiltrados(true);
-                                try {
-                                  const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                  const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                                  setModoListaPorPlataforma(true);
-                                  setFilterPlataformaId('');
-                                  setPedidosFiltrados(fullList);
-                                  setPedidoAtualIndex(0);
-                                  setFoundPedido(fullList[0] || null);
-                                  setFoundItemScans({});
-                                  setItemInputs({});
-                                  setItemStatus({});
-                                } catch (err) {
-                                  console.error('Erro ao buscar pedidos do card:', err);
-                                } finally {
-                                  setLoadingPedidosFiltrados(false);
-                                }
-                              } else {
-                                setFilterPlataformaId(pc.id);
-                                try { await fetchPedidosPorPlataforma(pc.id); } catch (_) {}
-                              }
-                            }}
-                          >
-                            Enviar
-                          </Button>
-                          <div className="p-1.5" aria-hidden>
-                            <ChevronDown className={`h-4 w-4 transition-transform ${openPlatformId === cardDropdownKey ? 'rotate-180' : ''}`} />
-                          </div>
-                        </div>
-                      </CardContent>
+                    const sectionStyle =
+                      pc.id === 'urgentes'
+                        ? { backgroundColor: '#ff00000e', borderColor: '#ff0000' }
+                        : /mercado livre/i.test(pc.nome)
+                        ? { backgroundColor: '#ffd9000e', borderColor: '#ffd900' }
+                        : /shopee/i.test(pc.nome)
+                        ? { backgroundColor: '#ee440010', borderColor: '#ee4400' }
+                        : /yampi/i.test(pc.nome)
+                        ? { backgroundColor: '#ff88c30e', borderColor: '#ff0080' }
+                        : pc.id === 'leads'
+                        ? { backgroundColor: '#00a86b0e', borderColor: '#00a86b' }
+                        : { backgroundColor: '#6366f10e', borderColor: '#6366f1' };
 
-                      {openPlatformId === cardDropdownKey && (
-                        <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
-                          {totalPages > 1 && (
-                            <div className="flex items-center justify-between mb-3 pb-3 border-b">
-                              <span className="text-sm text-muted-foreground">
-                                {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
-                              </span>
-                              <div className="flex items-center gap-2">
-                                <button
-                                  type="button"
-                                  disabled={currentPage <= 1}
-                                  onClick={(e) => handleGoToPage(e, currentPage - 1)}
-                                  className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                                >
-                                  ‹
-                                </button>
-                                <button
-                                  type="button"
-                                  disabled={currentPage >= totalPages}
-                                  onClick={(e) => handleGoToPage(e, currentPage + 1)}
-                                  className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
-                                >
-                                  ›
-                                </button>
+                    const sectionLabel =
+                      pc.id === 'urgentes'
+                        ? 'URGENTES'
+                        : pc.id === 'leads'
+                        ? 'COMERCIAL'
+                        : (pc.nome || '').toUpperCase();
+
+                    return (
+                      <Card key={pc.id} className="overflow-hidden" style={sectionStyle}>
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between gap-3">
+                            <CardTitle className="flex items-center gap-2 text-sm tracking-wide md:text-base">
+                              <div className="w-6 h-6 rounded-full overflow-hidden bg-white/60 flex items-center justify-center flex-shrink-0">
+                                {pc.img_url ? (
+                                  <img src={pc.img_url} alt={pc.nome} className="w-6 h-6 object-cover" />
+                                ) : pc.id === 'urgentes' ? (
+                                  <TriangleAlert className="w-4 h-4 text-red-500" />
+                                ) : pc.id === 'leads' ? (
+                                  <Users className="w-4 h-4 text-gray-600" />
+                                ) : (
+                                  <FaBoxesStacked className="w-4 h-4 text-gray-500" />
+                                )}
                               </div>
+                              {sectionLabel}
+                            </CardTitle>
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-muted-foreground">{pc.count} pedido(s)</span>
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setOpenPlatformId(null);
+                                  if (isSyntheticCard) {
+                                    setLoadingPedidosFiltrados(true);
+                                    try {
+                                      const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                      const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                      setModoListaPorPlataforma(true);
+                                      setFilterPlataformaId('');
+                                      setPedidosFiltrados(fullList);
+                                      setPedidoAtualIndex(0);
+                                      setFoundPedido(fullList[0] || null);
+                                      setFoundItemScans({});
+                                      setItemInputs({});
+                                      setItemStatus({});
+                                    } catch (err) {
+                                      console.error('Erro ao buscar pedidos do card:', err);
+                                    } finally {
+                                      setLoadingPedidosFiltrados(false);
+                                    }
+                                  } else {
+                                    setFilterPlataformaId(pc.id);
+                                    try { await fetchPedidosPorPlataforma(pc.id); } catch (_) {}
+                                  }
+                                }}
+                              >
+                                Enviar
+                              </Button>
+                              <button
+                                type="button"
+                                className="p-1.5"
+                                onClick={async (e) => {
+                                  e.preventDefault();
+                                  const next = isOpen ? null : cardDropdownKey;
+                                  setOpenPlatformId(next);
+                                  if (next) {
+                                    setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
+                                    try {
+                                      const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                      if (ids.length > 0) await fetchItemsForPedidoIds(ids);
+                                    } catch (err) { console.error(err); }
+                                  }
+                                }}
+                                aria-label="Ver pedidos"
+                              >
+                                <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                              </button>
                             </div>
-                          )}
-                          {pedidosPagina.length === 0 ? (
-                            <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
-                          ) : (
-                            <div className="space-y-2">
-                              {pedidosPagina.map((p: any) => {
-                                const items = platformOrderItems[p.id] || [];
-                                return (
-                                  <div key={p.id} className="rounded border px-3 py-2.5">
-                                    <div className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-3 min-w-0">
-                                        <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
-                                        <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        className="text-sm text-primary underline-offset-4 hover:underline"
-                                        onClick={async (e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          setOpenPlatformId(null);
-                                          if (isSyntheticCard) {
-                                            try {
-                                              const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                              const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                                              const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
-                                              setModoListaPorPlataforma(true);
-                                              setFilterPlataformaId('');
-                                              setPedidosFiltrados(fullList);
-                                              setPedidoAtualIndex(startIdx);
-                                              setFoundPedido(fullList[startIdx] || null);
-                                              setFoundItemScans({});
-                                              setItemInputs({});
-                                              setItemStatus({});
-                                              setTimeout(() => barcodeRef.current?.focus(), 50);
-                                            } catch (err) {
-                                              console.error('Erro ao buscar pedidos do card:', err);
-                                            }
-                                          } else {
-                                            targetPedidoIdRef.current = p.id;
-                                            setFilterPlataformaId(pc.id);
-                                          }
-                                        }}
-                                      >
-                                        Abrir
-                                      </button>
-                                    </div>
-                                    {items.length > 0 && (
-                                      <div className="flex flex-wrap gap-2 border-t mt-3 pt-3">
-                                        {items.map((item: any, idx: number) => (
-                                          <div key={idx} className="flex flex-col items-center gap-1 max-w-[60px]">
-                                            {item.img_url ? (
-                                              <img src={item.img_url} alt={item.nome || ''} className="h-12 w-12 rounded object-cover border" />
-                                            ) : (
-                                              <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">sem foto</div>
-                                            )}
-                                            <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
-                                            {(item.quantidade ?? 1) > 1 && (
-                                              <span className="text-[10px] font-semibold text-muted-foreground">×{item.quantidade}</span>
-                                            )}
-                                          </div>
-                                        ))}
-                                      </div>
-                                    )}
+                          </div>
+                          <p className="text-xs text-black/60 mt-1">Selecione um intervalo para ver os pedidos detalhados.</p>
+                        </CardHeader>
+
+                        {isOpen && (
+                          <CardContent className="pt-0">
+                            <div className="rounded-lg border bg-white/70 p-2" onClick={(e) => e.stopPropagation()}>
+                              {totalPages > 1 && (
+                                <div className="flex items-center justify-between mb-3 pb-3 border-b">
+                                  <span className="text-sm text-muted-foreground">
+                                    {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={currentPage <= 1}
+                                      onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                    >
+                                      ‹
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={currentPage >= totalPages}
+                                      onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                    >
+                                      ›
+                                    </button>
                                   </div>
-                                );
-                              })}
+                                </div>
+                              )}
+                              {pedidosPagina.length === 0 ? (
+                                <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {pedidosPagina.map((p: any) => {
+                                    const items = platformOrderItems[p.id] || [];
+                                    const pacoteOk = p.pacote_disponivel === true;
+                                    return (
+                                      <div key={p.id} className={`rounded border px-3 py-2.5 bg-white transition-opacity ${!pacoteOk ? 'opacity-40 pointer-events-none' : ''}`}>
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-3 min-w-0">
+                                            <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
+                                            <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
+                                            {!pacoteOk && <span className="rounded-full bg-orange-100 text-orange-700 px-2 py-0.5 text-xs font-semibold">Aguardando pacote</span>}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            className="text-sm text-primary underline-offset-4 hover:underline"
+                                            onClick={async (e) => {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              setOpenPlatformId(null);
+                                              if (isSyntheticCard) {
+                                                try {
+                                                  const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                                  const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                                  const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
+                                                  setModoListaPorPlataforma(true);
+                                                  setFilterPlataformaId('');
+                                                  setPedidosFiltrados(fullList);
+                                                  setPedidoAtualIndex(startIdx);
+                                                  setFoundPedido(fullList[startIdx] || null);
+                                                  setFoundItemScans({});
+                                                  setItemInputs({});
+                                                  setItemStatus({});
+                                                  setTimeout(() => barcodeRef.current?.focus(), 50);
+                                                } catch (err) {
+                                                  console.error('Erro ao buscar pedidos do card:', err);
+                                                }
+                                              } else {
+                                                targetPedidoIdRef.current = p.id;
+                                                setFilterPlataformaId(pc.id);
+                                              }
+                                            }}
+                                          >
+                                            Abrir
+                                          </button>
+                                        </div>
+                                        {items.length > 0 && (
+                                          <div className="flex flex-wrap gap-2 border-t mt-3 pt-3">
+                                            {items.map((item: any, itemIdx: number) => (
+                                              <div key={itemIdx} className="flex flex-col items-center gap-1 max-w-[60px]">
+                                                {item.img_url ? (
+                                                  <img src={item.img_url} alt={item.nome || ''} className="h-12 w-12 rounded object-cover border" />
+                                                ) : (
+                                                  <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">sem foto</div>
+                                                )}
+                                                <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
+                                                {(item.quantidade ?? 1) > 1 && (
+                                                  <span className="text-[10px] font-semibold text-muted-foreground">×{item.quantidade}</span>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </Card>
+                          </CardContent>
+                        )}
+                      </Card>
                     );
                   })}
                 </div>
               )}
             </div>
+            )}
 
           </div>
+          </>
         )}
 
         {/* Estado vazio/carregando do modo de pedidos por plataforma */}
@@ -2353,7 +3153,15 @@ export function Logistica() {
                     )}
                   </div>
                 </CardHeader>
-                <CardContent className="mt-3">
+                <div className="relative">
+                {foundPedido.pacote_disponivel !== true && (
+                  <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 rounded-b-lg bg-white/80 backdrop-blur-sm">
+                    <span className="text-4xl">📦</span>
+                    <p className="text-base font-semibold text-gray-700">Pacote ainda não disponível</p>
+                    <p className="text-sm text-muted-foreground text-center max-w-xs">Dê entrada no pacote na aba <strong>Pacotes</strong> antes de bipar e imprimir a etiqueta.</p>
+                  </div>
+                )}
+                <CardContent className={`mt-3 ${foundPedido.pacote_disponivel !== true ? 'pointer-events-none opacity-30' : ''}`}>
                   {/* Badges dos grupos (antes da lista de itens) */}
                   {(() => {
                     const items = foundPedido.itens_pedido || [];
@@ -2501,7 +3309,7 @@ export function Logistica() {
                     })()}
                   </div>
                 </CardContent>
-                {allItemsBipado && (
+                {allItemsBipado && foundPedido.pacote_disponivel === true && (
                   <div className="p-4 flex justify-center">
                     {shouldShowMLButton ? (
                       // Botão Etiqueta Mercado Livre
@@ -2530,6 +3338,7 @@ export function Logistica() {
                     )}
                   </div>
                 )}
+                </div>
               </Card>
             </div>
           )}
@@ -2834,6 +3643,159 @@ export function Logistica() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowVariacoesModal(false)}>
               Cancelar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Dar baixa por categoria */}
+      <Dialog
+        open={baixaCategoriaModal.open}
+        onOpenChange={(open) => {
+          if (!open) setBaixaCategoriaModal({ open: false, groupId: null, itemKey: '', quantidade: '1' });
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Dar baixa na categoria</DialogTitle>
+          </DialogHeader>
+
+          {(() => {
+            const group = produtosProduzirByType.find((g) => g.id === baixaCategoriaModal.groupId);
+            const selected = group?.produtos.find((p: any) => p.itemKey === baixaCategoriaModal.itemKey);
+            const produzido = group && selected ? getQuantidadeProduzida(group.id, selected.itemKey) : 0;
+            const total = Number(selected?.quantidadeTotal ?? 0);
+            const restante = Math.max(0, total - produzido);
+
+            return (
+              <div className="space-y-4 py-2">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Produto</label>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={baixaCategoriaModal.itemKey}
+                    onChange={(e) => {
+                      const itemKey = e.target.value;
+                      if (!group) return;
+                      const nextSelected = group.produtos.find((p: any) => p.itemKey === itemKey);
+                      const nextTotal = Number(nextSelected?.quantidadeTotal ?? 0);
+                      const nextProduzido = nextSelected ? getQuantidadeProduzida(group.id, nextSelected.itemKey) : 0;
+                      const nextRestante = Math.max(0, nextTotal - nextProduzido);
+
+                      setBaixaCategoriaModal((prev) => ({
+                        ...prev,
+                        itemKey,
+                        quantidade: String(Math.max(1, nextRestante > 0 ? 1 : 0)),
+                      }));
+                    }}
+                  >
+                    {(group?.produtos || []).map((produto: any) => {
+                      const prodQtd = group ? getQuantidadeProduzida(group.id, produto.itemKey) : 0;
+                      const prodRestante = Math.max(0, Number(produto.quantidadeTotal ?? 0) - prodQtd);
+                      return (
+                        <option key={produto.itemKey} value={produto.itemKey}>
+                          {produto.nomeProduto}{produto.nomeVariacao ? ` - ${produto.nomeVariacao}` : ''} ({prodQtd}/{produto.quantidadeTotal}, faltam {prodRestante})
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  <p>Total: <strong>{total}</strong></p>
+                  <p>Já embalado: <strong className="text-green-700">{produzido}</strong></p>
+                  <p>Faltam: <strong className="text-red-700">{restante}</strong></p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Quantidade embalada agora</label>
+                  <Input
+                    type="number"
+                    min={1}
+                    max={Math.max(1, restante)}
+                    value={baixaCategoriaModal.quantidade}
+                    onChange={(e) => setBaixaCategoriaModal((prev) => ({ ...prev, quantidade: e.target.value }))}
+                  />
+                </div>
+              </div>
+            );
+          })()}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={salvandoBaixaCategoria}
+              onClick={() => setBaixaCategoriaModal({ open: false, groupId: null, itemKey: '', quantidade: '1' })}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmarBaixaCategoria}
+              disabled={salvandoBaixaCategoria}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {salvandoBaixaCategoria ? 'Salvando...' : 'Confirmar baixa'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Dar Entrada no Pacote */}
+      <Dialog
+        open={entradaPacoteModal.open}
+        onOpenChange={(open) => { if (!open) setEntradaPacoteModal({ open: false, caseGroup: null, loading: false }); }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              📦 Dar entrada no pacote
+            </DialogTitle>
+          </DialogHeader>
+
+          {entradaPacoteModal.caseGroup && (
+            <div className="py-4 space-y-4">
+              <div className="flex flex-col items-center gap-3">
+                {entradaPacoteModal.caseGroup.imgUrl ? (
+                  <img
+                    src={entradaPacoteModal.caseGroup.imgUrl}
+                    alt={entradaPacoteModal.caseGroup.label}
+                    className="h-20 w-20 rounded-lg object-cover border shadow-sm"
+                  />
+                ) : (
+                  <div className="h-20 w-20 rounded-lg border bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                    sem foto
+                  </div>
+                )}
+                <div className="text-center">
+                  <p className="font-semibold text-base">{entradaPacoteModal.caseGroup.label}</p>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {entradaPacoteModal.caseGroup.pedidos.length} pedido(s) • {entradaPacoteModal.caseGroup.totalUnidades} unidade(s)
+                  </p>
+                </div>
+              </div>
+              <div className="rounded-lg border bg-muted/30 px-4 py-3 text-sm text-center text-muted-foreground">
+                Confirme que o pacote chegou e está disponível para envio.
+                O status será marcado como <span className="font-semibold text-green-600">disponível</span>.
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={entradaPacoteModal.loading}
+              onClick={() => setEntradaPacoteModal({ open: false, caseGroup: null, loading: false })}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              disabled={entradaPacoteModal.loading}
+              className="bg-green-600 hover:bg-green-700 text-white"
+              onClick={() => void handleDarEntradaPacote()}
+            >
+              {entradaPacoteModal.loading ? 'Registrando...' : '✓ Confirmar entrada'}
             </Button>
           </DialogFooter>
         </DialogContent>

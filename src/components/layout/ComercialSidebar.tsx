@@ -11,6 +11,7 @@ const items = [
   { id: 'pedidos', label: 'Lista de Pedidos', icon: FaListUl },
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'leads', label: 'Lista de Leads', icon: HiMiniUsers },
+  { id: 'tipos-lead', label: 'Tipos de Lead', icon: HiMiniUsers },
   { id: 'cancelados', label: 'Pedidos Cancelados', icon: GoXCircleFill },
   { id: 'enviados', label: 'Pedidos Enviados', icon: BsSendCheckFill },
   { id: 'retornados', label: 'Pedidos Retornados', icon: TbTruckReturn },
@@ -27,6 +28,11 @@ export function ComercialSidebar() {
     // Special-case: open the dedicated Leads page
     if (id === 'leads') {
       navigate('/leads');
+      return;
+    }
+
+    if (id === 'tipos-lead') {
+      navigate('/tipos-de-lead');
       return;
     }
 
@@ -52,7 +58,7 @@ export function ComercialSidebar() {
     next.set('view', id)
     // If we're currently on a dedicated route like /leads or /pedidos-enviados, navigate to the Comercial root
     // otherwise keep current pathname (expecting /comercial)
-    const targetPath = (location.pathname === '/leads' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados' || location.pathname === '/pedidos-retornados') ? '/comercial' : location.pathname || '/comercial';
+    const targetPath = (location.pathname === '/leads' || location.pathname === '/tipos-de-lead' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados' || location.pathname === '/pedidos-retornados') ? '/comercial' : location.pathname || '/comercial';
     navigate({ pathname: targetPath, search: next.toString() })
   }
 
@@ -81,6 +87,8 @@ export function ComercialSidebar() {
               let isActive = false;
               if (location.pathname === '/leads') {
                 isActive = it.id === 'leads';
+              } else if (location.pathname === '/tipos-de-lead') {
+                isActive = it.id === 'tipos-lead';
               } else if (location.pathname === '/pedidos-cancelados') {
                 isActive = it.id === 'cancelados';
               } else if (location.pathname === '/pedidos-enviados') {

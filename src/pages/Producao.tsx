@@ -170,6 +170,16 @@ const URGENTES_DAY_BY_RANGE: Partial<Record<DateRangeKey, 0 | 1 | 2>> = {
   r21_30: 2,
 };
 
+const getDataLogisticaUrgente = (rangeKey: DateRangeKey | null): string | null => {
+  if (rangeKey === null || rangeKey === undefined) return null;
+  const day = URGENTES_DAY_BY_RANGE[rangeKey];
+  if (day === undefined) return null;
+  const d = new Date();
+  d.setDate(d.getDate() + day);
+  d.setHours(23, 59, 59, 999);
+  return d.toISOString();
+};
+
 const COMERCIAL_FAIXA_BY_RANGE: Partial<Record<DateRangeKey, 'r1_3' | 'r3_5' | 'r5_plus'>> = {
   r1_10: 'r1_3',
   r11_20: 'r3_5',
@@ -969,6 +979,9 @@ export function ProductionPage() {
   const [orderIdsModalData, setOrderIdsModalData] = useState<string[]>([]);
   const [orderIdsModalTitle, setOrderIdsModalTitle] = useState('');
   const [orderIdsModalSection, setOrderIdsModalSection] = useState<SectionKey | null>(null);
+  const [orderIdsModalRangeKey, setOrderIdsModalRangeKey] = useState<DateRangeKey | null>(null);
+  const [modalDeadlineDate, setModalDeadlineDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [perOrderDeadlineDates, setPerOrderDeadlineDates] = useState<Record<string, string>>({});
   const [modalItemsByExternalId, setModalItemsByExternalId] = useState<Map<string, ProducaoItem[]>>(new Map());
   const [orderIdsPage, setOrderIdsPage] = useState(1);
   const [openOrderIds, setOpenOrderIds] = useState<Set<string>>(new Set());
@@ -1483,6 +1496,21 @@ export function ProductionPage() {
               } catch (histErr) {
                 console.warn('Falha ao registrar histórico:', histErr);
               }
+              if (orderIdsModalSection === 'urgentes') {
+                const dataUrgente = getDataLogisticaUrgente(orderIdsModalRangeKey);
+                if (dataUrgente) {
+                  try { await (supabase as any).from('pedidos').update({ data_logistica_urgente: dataUrgente }).in('id', primaryIds); } catch (_) {}
+                }
+              } else {
+                const today = new Date().toISOString().split('T')[0];
+                for (const entry of groupEntries) {
+                  const ds = perOrderDeadlineDates[entry.externalId] || modalDeadlineDate || today;
+                  const dataUrgente = new Date(`${ds}T23:59:59`).toISOString();
+                  if (entry.primaryId) {
+                    try { await (supabase as any).from('pedidos').update({ data_logistica_urgente: dataUrgente }).eq('id', entry.primaryId); } catch (_) {}
+                  }
+                }
+              }
             }
           } catch (updErr) {
             console.warn('Falha ao atualizar pedidos:', updErr);
@@ -1584,6 +1612,18 @@ export function ProductionPage() {
                 .from('pedidos')
                 .update({ status_id: '3473cae9-47c8-4b85-96af-b41fe0e15fa9', etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f' })
                 [primaryPedidoId ? 'eq' : 'eq'](primaryPedidoId ? 'id' : 'id_externo', updatePid);
+              if (primaryPedidoId) {
+                let dataUrgente: string | null = null;
+                if (orderIdsModalSection === 'urgentes') {
+                  dataUrgente = getDataLogisticaUrgente(orderIdsModalRangeKey);
+                } else {
+                  const ds = perOrderDeadlineDates[pedidoId] || modalDeadlineDate || new Date().toISOString().split('T')[0];
+                  dataUrgente = new Date(`${ds}T23:59:59`).toISOString();
+                }
+                if (dataUrgente) {
+                  try { await (supabase as any).from('pedidos').update({ data_logistica_urgente: dataUrgente }).eq('id', primaryPedidoId); } catch (_) {}
+                }
+              }
             } catch (updErr) {
               console.warn('Falha ao atualizar status/etiqueta do pedido ML:', updErr);
             }
@@ -1629,6 +1669,18 @@ export function ProductionPage() {
             .eq('id_externo', pid);
         }
         try { await registrarHistoricoMovimentacao(pid, 'Etiqueta processada no Melhor Envio'); } catch (_) {}
+        if (primaryPedidoId) {
+          let dataUrgente: string | null = null;
+          if (orderIdsModalSection === 'urgentes') {
+            dataUrgente = getDataLogisticaUrgente(orderIdsModalRangeKey);
+          } else {
+            const ds = perOrderDeadlineDates[pedidoId] || modalDeadlineDate || new Date().toISOString().split('T')[0];
+            dataUrgente = new Date(`${ds}T23:59:59`).toISOString();
+          }
+          if (dataUrgente) {
+            try { await (supabase as any).from('pedidos').update({ data_logistica_urgente: dataUrgente }).eq('id', primaryPedidoId); } catch (_) {}
+          }
+        }
       } catch (updErr) {
         console.warn('Falha ao atualizar etiqueta_envio_id:', updErr);
       }
@@ -2007,10 +2059,13 @@ export function ProductionPage() {
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel}`);
     setOrderIdsModalSection(section);
+    setOrderIdsModalRangeKey(rangeKey);
     setOrderIdsModalData(orderIds);
     setModalProductFilter(null);
     setModalTab('only');
     setOrderIdsPage(1);
+    setModalDeadlineDate(new Date().toISOString().split('T')[0]);
+    setPerOrderDeadlineDates({});
     setOrderIdsModalOpen(true);
   };
 
@@ -2031,10 +2086,13 @@ export function ProductionPage() {
 
     setOrderIdsModalTitle(`${sectionLabel} • ${rangeLabel} • ${productLabel}`);
     setOrderIdsModalSection(section);
+    setOrderIdsModalRangeKey(rangeKey);
     setOrderIdsModalData(orderIds);
     setModalProductFilter(filter);
     setModalTab('only');
     setOrderIdsPage(1);
+    setModalDeadlineDate(new Date().toISOString().split('T')[0]);
+    setPerOrderDeadlineDates({});
     setOrderIdsModalOpen(true);
   };
 
@@ -2442,12 +2500,37 @@ export function ProductionPage() {
             </div>
       </div>
 
-      <Dialog open={orderIdsModalOpen} onOpenChange={(open) => { setOrderIdsModalOpen(open); if (!open) { setModalProductFilter(null); setModalTab('only'); setSelectedOrderIds(new Set()); setOpenOrderIds(new Set()); setSearchTerm(''); setOrderIdsModalSection(null); } }}>
+      <Dialog open={orderIdsModalOpen} onOpenChange={(open) => { setOrderIdsModalOpen(open); if (!open) { setModalProductFilter(null); setModalTab('only'); setSelectedOrderIds(new Set()); setOpenOrderIds(new Set()); setSearchTerm(''); setOrderIdsModalSection(null); setOrderIdsModalRangeKey(null); setModalDeadlineDate(new Date().toISOString().split('T')[0]); setPerOrderDeadlineDates({}); } }}>
         <DialogContent className="!w-[96vw] !max-w-[96vw] lg:!w-[92vw] lg:!max-w-[92vw] px-2 sm:px-3">
           <DialogHeader>
             <DialogTitle className="text-lg">Pedidos — Gerar Etiquetas</DialogTitle>
             <div className="text-sm text-muted-foreground mt-0.5">{orderIdsModalTitle}</div>
           </DialogHeader>
+
+          {/* Data de saída — exibida apenas para seções que não são urgentes */}
+          {orderIdsModalSection !== 'urgentes' && (
+            <div className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
+              <label htmlFor="modal-deadline-date" className="text-sm font-medium whitespace-nowrap">
+                Data de saída:
+              </label>
+              <input
+                id="modal-deadline-date"
+                type="date"
+                value={modalDeadlineDate}
+                onChange={(e) => setModalDeadlineDate(e.target.value)}
+                className="flex-1 min-w-0 rounded-md border bg-background px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+              {modalDeadlineDate !== new Date().toISOString().split('T')[0] && (
+                <button
+                  type="button"
+                  onClick={() => setModalDeadlineDate(new Date().toISOString().split('T')[0])}
+                  className="text-xs text-muted-foreground hover:text-foreground transition-colors whitespace-nowrap"
+                >
+                  Hoje
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Busca */}
           <div className="relative">
@@ -2622,6 +2705,20 @@ export function ProductionPage() {
                                 {allProducts.length} {allProducts.length === 1 ? 'item' : 'itens'}
                               </span>
                             </div>
+
+                            {/* Input de data individual (não urgentes) */}
+                            {orderIdsModalSection !== 'urgentes' && !hasGeneratedLabel && (
+                              <input
+                                type="date"
+                                value={perOrderDeadlineDates[orderId] ?? modalDeadlineDate}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setPerOrderDeadlineDates((prev) => ({ ...prev, [orderId]: e.target.value }));
+                                }}
+                                className="shrink-0 rounded-md border bg-background px-2 py-1 text-xs outline-none focus:ring-2 focus:ring-ring w-[120px]"
+                              />
+                            )}
 
                             {/* Botão gerar etiqueta — ocultar quando há seleção */}
                             {!hasSelection && (

@@ -14,6 +14,7 @@ import PedidoContabilidade from "./pages/PedidoContabilidade";
 import NovoPedido from "./pages/NovoPedido";
 import InformacoesEntrega from "./pages/InformacoesEntrega";
 import Leads from "./pages/Leads";
+import TiposDeLead from "./pages/TiposDeLead";
 import PedidosEnviados from "./pages/PedidosEnviados";
 import PedidosCancelados from "./pages/PedidosCancelados";
 import PedidosRetornados from "./pages/PedidosRetornados";
@@ -81,6 +82,7 @@ const App = () => {
               <Route path="producao" element={<Producao />} />
               <Route path="configuracoes" element={<Configuracoes />} />
               <Route path="leads" element={<Leads />} />
+              <Route path="tipos-de-lead" element={<TiposDeLead />} />
               <Route path="pedidos-cancelados" element={<PedidosCancelados />} />
               <Route path="pedidos-enviados" element={<PedidosEnviados />} />
               <Route path="pedidos-retornados" element={<PedidosRetornados />} />
