@@ -2390,7 +2390,7 @@ export function Logistica() {
                 {produtosProduzirByType.length === 0 ? (
                   <div className="text-sm text-muted-foreground">Nenhum produto pendente para produção.</div>
                 ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3 w-full mx-auto items-start">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 w-full mx-auto items-start">
                     {produtosProduzirByType.map((grupo) => {
                       const totalQuantidadeGrupo = grupo.produtos.reduce((acc: number, produto: any) => acc + Number(produto.quantidadeTotal ?? 0), 0);
                       const produzidosCount = grupo.produtos.reduce((acc: number, produto: any) => {
@@ -2414,7 +2414,7 @@ export function Logistica() {
                       return (
                         <Card
                           key={grupo.id}
-                          className={`p-3 select-none self-start transition-all shadow-sm ${grupoConcluido ? 'ring-2 ring-green-500 border-green-500 bg-green-50/40' : 'border-2 border-custom-600 hover:shadow-md'}`}
+                          className={`p-5 select-none self-start transition-all shadow-sm ${grupoConcluido ? 'ring-1 ring-green-400 border-green-400 bg-green-50/40' : 'border border-custom-600/60 hover:shadow-md'}`}
                         >
                           <CardContent className="flex items-center gap-3 p-0">
                             <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${grupoConcluido ? 'bg-green-100' : 'bg-muted'}`}>
@@ -2472,7 +2472,7 @@ export function Logistica() {
                             {produtosPagina.length === 0 ? (
                               <div className="text-sm text-muted-foreground">Nenhum produto disponível.</div>
                             ) : (
-                              <div className="space-y-2">
+                              <div className="space-y-3">
                                 {produtosPagina.map((produto: any) => {
                                   const produzidoQty = getQuantidadeProduzida(grupo.id, produto.itemKey);
                                   const produzido = produzidoQty >= Number(produto.quantidadeTotal ?? 0);
