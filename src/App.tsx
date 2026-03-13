@@ -25,6 +25,7 @@ import { TermoPrivacidade } from "./pages/TermoPrivacidade";
 import Documentacao from "./pages/Documentacao";
 import { Contabilidade } from "./pages/Contabilidade";
 import { Comercial } from "./pages/Comercial";
+import { DashboardComercial } from "./pages/DashboardComercial";
 import { Logistica } from "./pages/Logistica";
 import { EnvioPorEtiqueta } from "./pages/EnvioPorEtiqueta";
 import { Estoque } from "./pages/Estoque";
@@ -73,6 +74,7 @@ const App = () => {
               <Route index element={<Dashboard />} />
               <Route path="pedido-contabilidade/:id" element={<PedidoContabilidade />} />
               <Route path="comercial" element={<Comercial />} />
+              <Route path="dashboard-comercial" element={<DashboardComercial />} />
               <Route path="pedido/:id" element={<Pedido />} />
               <Route path="logistica" element={<Logistica />} />
               <Route path="envio-por-etiqueta" element={<EnvioPorEtiqueta />} />

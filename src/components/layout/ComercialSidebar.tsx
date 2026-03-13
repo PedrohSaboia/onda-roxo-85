@@ -35,6 +35,12 @@ export function ComercialSidebar() {
       navigate('/tipos-de-lead');
       return;
     }
+    
+    // Special-case: open the dedicated DashboardComercial page
+    if (id === 'dashboard') {
+      navigate('/dashboard-comercial');
+      return;
+    }
 
     // Special-case: open the dedicated PedidosCancelados page
     if (id === 'cancelados') {
@@ -89,6 +95,8 @@ export function ComercialSidebar() {
                 isActive = it.id === 'leads';
               } else if (location.pathname === '/tipos-de-lead') {
                 isActive = it.id === 'tipos-lead';
+              } else if (location.pathname === '/dashboard-comercial') {
+                isActive = it.id === 'dashboard';
               } else if (location.pathname === '/pedidos-cancelados') {
                 isActive = it.id === 'cancelados';
               } else if (location.pathname === '/pedidos-enviados') {
