@@ -5,13 +5,13 @@ import { GoXCircleFill } from 'react-icons/go'
 import { HiMiniUsers } from 'react-icons/hi2'
 import { FaListUl } from 'react-icons/fa'
 import { TbTruckReturn } from 'react-icons/tb'
-import { BarChart3 } from 'lucide-react'
+import { BarChart3, Tags } from 'lucide-react'
 
 const items = [
   { id: 'pedidos', label: 'Lista de Pedidos', icon: FaListUl },
   { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
   { id: 'leads', label: 'Lista de Leads', icon: HiMiniUsers },
-  { id: 'tipos-lead', label: 'Tipos de Lead', icon: HiMiniUsers },
+  { id: 'tipos-lead', label: 'Tipos de Lead', icon: Tags },
   { id: 'cancelados', label: 'Pedidos Cancelados', icon: GoXCircleFill },
   { id: 'enviados', label: 'Pedidos Enviados', icon: BsSendCheckFill },
   { id: 'retornados', label: 'Pedidos Retornados', icon: TbTruckReturn },
