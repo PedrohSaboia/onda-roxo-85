@@ -4651,28 +4651,16 @@ export default function Pedido() {
                             );
                             if (found) formaPagId = Number(found.id);
                           }
-                          const entradaPayload: Record<string, any> = {
+                          const { error: entradaErr } = await (supabase as any).from('entrada_valores').insert({
                             pedido_id: pedido.id,
                             valor: Number(difference.toFixed(2)),
                             valor_antigo: Number(currentTotal.toFixed(2)),
                             responsavel_id: user?.id || null,
                             forma_pag: formaPagId,
                             created_at: new Date(`${upSellDate}T12:00:00`).toISOString(),
-                          };
-                          const { error: entradaErr } = await (supabase as any).from('entrada_valores').insert(entradaPayload);
-                          if (entradaErr) {
-                            // Se coluna valor_antigo não existe, tenta sem ela
-                            if (String(entradaErr?.code || '') === '42703' || String(entradaErr?.message || '').toLowerCase().includes('valor_antigo')) {
-                              const { valor_antigo, ...payloadSemVA } = entradaPayload;
-                              const { error: fallbackErr } = await (supabase as any).from('entrada_valores').insert(payloadSemVA);
-                              if (fallbackErr) console.error('[UpSell] Falha fallback entrada_valores:', fallbackErr);
-                              else console.log('[UpSell] entrada_valores inserido (sem valor_antigo)');
-                            } else {
-                              console.error('[UpSell] Falha ao inserir entrada_valores:', entradaErr);
-                            }
-                          } else {
-                            console.log('[UpSell] entrada_valores inserido com sucesso');
-                          }
+                          });
+                          if (entradaErr) console.error('[UpSell] Falha ao inserir entrada_valores:', entradaErr);
+                          else console.log('[UpSell] entrada_valores inserido com sucesso');
                         } catch (entradaEx) {
                           console.error('[UpSell] Exceção ao inserir entrada_valores:', entradaEx);
                         }
@@ -4880,19 +4868,16 @@ export default function Pedido() {
                             forma_pag: formaPagId,
                             created_at: new Date(`${upSellDate}T12:00:00`).toISOString(),
                           };
-                          const { error: entradaErr } = await (supabase as any).from('entrada_valores').insert(entradaPayload);
-                          if (entradaErr) {
-                            if (String(entradaErr?.code || '') === '42703' || String(entradaErr?.message || '').toLowerCase().includes('valor_antigo')) {
-                              const { valor_antigo, ...payloadSemVA } = entradaPayload;
-                              const { error: fallbackErr } = await (supabase as any).from('entrada_valores').insert(payloadSemVA);
-                              if (fallbackErr) console.error('[UpSell] Falha fallback entrada_valores:', fallbackErr);
-                              else console.log('[UpSell] entrada_valores inserido (sem valor_antigo)');
-                            } else {
-                              console.error('[UpSell] Falha ao inserir entrada_valores:', entradaErr);
-                            }
-                          } else {
-                            console.log('[UpSell] entrada_valores inserido com sucesso');
-                          }
+                          const { error: entradaErr } = await (supabase as any).from('entrada_valores').insert({
+                            pedido_id: pedido.id,
+                            valor: Number(difference.toFixed(2)),
+                            valor_antigo: Number(currentTotal.toFixed(2)),
+                            responsavel_id: user?.id || null,
+                            forma_pag: formaPagId,
+                            created_at: new Date(`${upSellDate}T12:00:00`).toISOString(),
+                          });
+                          if (entradaErr) console.error('[UpSell] Falha ao inserir entrada_valores:', entradaErr);
+                          else console.log('[UpSell] entrada_valores inserido com sucesso');
                         } catch (entradaEx) {
                           console.error('[UpSell] Exceção ao inserir entrada_valores:', entradaEx);
                         }

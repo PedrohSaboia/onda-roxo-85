@@ -201,6 +201,16 @@ export function Comercial() {
     faturamento_total_yampi: number;
   };
 
+  type EntradaValoresUpsellMetricsRow = {
+    total_upsells: number;
+    faturamento_acrescido: number;
+    media_valor_acrescido: number;
+    ticket_medio_antes: number;
+    ticket_medio_depois: number;
+    maior_upsell: number;
+    menor_upsell: number;
+  };
+
   type DailyChartStyle = 'linha' | 'barras' | 'pizza';
 
   const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
@@ -212,6 +222,7 @@ export function Comercial() {
   const [carrinhoConvertedByResponsavel, setCarrinhoConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
   const [yampiUpsellMetrics, setYampiUpsellMetrics] = useState<YampiUpsellMetricsRow | null>(null);
   const [yampiUpsellIncrementoMetrics, setYampiUpsellIncrementoMetrics] = useState<YampiUpsellIncrementoRow | null>(null);
+  const [entradaValoresUpsellMetrics, setEntradaValoresUpsellMetrics] = useState<EntradaValoresUpsellMetricsRow | null>(null);
   const [custoComercial, setCustoComercial] = useState<number>(0);
   const [loadingPixDashboard, setLoadingPixDashboard] = useState(false);
   const [pixDashboardError, setPixDashboardError] = useState<string | null>(null);
@@ -371,6 +382,7 @@ export function Comercial() {
           { data: yampiUpsellData, error: yampiUpsellError },
           { data: custoData, error: custoError },
           { data: upsellIncrementoData, error: upsellIncrementoError },
+          { data: entradaValoresUpsellData, error: entradaValoresUpsellError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -432,6 +444,10 @@ export function Comercial() {
             p_data_fim: endDate.toISOString(),
             p_timezone: 'America/Sao_Paulo',
           }),
+          (supabase as any).rpc('comercial_get_metricas_entrada_valores_upsell', {
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -444,6 +460,7 @@ export function Comercial() {
         if (yampiUpsellError) throw yampiUpsellError;
         if (custoError) throw custoError;
         if (upsellIncrementoError) throw upsellIncrementoError;
+        if (entradaValoresUpsellError) console.warn('[EntradaValores] RPC error:', entradaValoresUpsellError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -456,6 +473,7 @@ export function Comercial() {
         setYampiUpsellMetrics((yampiUpsellData?.[0] || null) as YampiUpsellMetricsRow | null);
         setCustoComercial(Number(custoData?.[0]?.custo_total ?? 0));
         setYampiUpsellIncrementoMetrics((upsellIncrementoData?.[0] || null) as YampiUpsellIncrementoRow | null);
+        setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
       } catch (err: any) {
         if (!mounted) return;
         setPixDashboardError(err?.message || String(err));
@@ -469,6 +487,7 @@ export function Comercial() {
         setYampiUpsellMetrics(null);
         setCustoComercial(0);
         setYampiUpsellIncrementoMetrics(null);
+        setEntradaValoresUpsellMetrics(null);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -2137,9 +2156,10 @@ export function Comercial() {
                   const leadsSocial          = Number(whatsappMetrics?.total_periodo ?? 0);
 
                   const taxaUpsell           = Number(yampiUpsellMetrics?.taxa_inclusao_itens_pct ?? 0);
-                  const ticketUpsell         = Number(yampiUpsellMetrics?.ticket_medio_com_inclusao ?? 0);
                   const totalPedidosYampi    = Number(yampiUpsellMetrics?.total_pedidos_yampi ?? 0);
-                  const faturamentoUpsell    = totalPedidosYampi * (taxaUpsell / 100) * ticketUpsell;
+                  // Financeiro de up-sell: vem exclusivamente de entrada_valores
+                  const faturamentoUpsell    = Number(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0);
+                  const ticketUpsell         = Number(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0);
 
                   const faturamentoComercial = faturamentoPix + faturamentoCarrinho + faturamentoSocial;
                   const faturamentoTotal     = faturamentoSite + faturamentoComercial;
@@ -2510,13 +2530,13 @@ export function Comercial() {
                           {/* Upsell puro */}
                           <Card className="border-l-4 border-l-purple-500 shadow-md bg-purple-50/30">
                             <CardHeader className="pb-1">
-                              <CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Upsell (upgrade)</CardTitle>
+                              <CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Up-sell (upgrade)</CardTitle>
                             </CardHeader>
                             <CardContent className="pt-0">
                               <div className="text-2xl font-bold text-purple-700">{yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0}</div>
                               <p className="text-[11px] text-muted-foreground mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_upsell_pct ?? 0)} dos pedidos</p>
-                              <p className="text-[11px] text-purple-600 font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_com_upsell ?? 0)}</p>
-                              <p className="text-[10px] text-muted-foreground">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_com_upsell ?? 0)}</p>
+                              <p className="text-[11px] text-purple-600 font-semibold mt-1">{formatCurrency(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0)}</p>
+                              <p className="text-[10px] text-muted-foreground">Ticket após: {formatCurrency(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0)}</p>
                             </CardContent>
                           </Card>
 
