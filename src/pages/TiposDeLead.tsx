@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Tags, Plus, Trash2, Bot, Upload } from 'lucide-react';
+import { Tags, Plus, Trash2, Bot, ImageUp, X } from 'lucide-react';
 
 type TipoLead = {
   id: number;
@@ -21,11 +21,12 @@ export default function TiposDeLead() {
   const { toast } = useToast();
 
   const [nome, setNome] = useState('');
-  const [foto, setFoto] = useState('');
+  const [fotoFile, setFotoFile] = useState<File | null>(null);
+  const [fotoPreview, setFotoPreview] = useState('');
   const [isTypeBot, setIsTypeBot] = useState(false);
   const [idType, setIdType] = useState('');
   const [saving, setSaving] = useState(false);
-  const [uploadingFoto, setUploadingFoto] = useState(false);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [tipos, setTipos] = useState<TipoLead[]>([]);
@@ -34,30 +35,11 @@ export default function TiposDeLead() {
 
   const resetForm = () => {
     setNome('');
-    setFoto('');
+    setFotoFile(null);
+    setFotoPreview('');
     setIsTypeBot(false);
     setIdType('');
-  };
-
-  const handleImageUpload = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      toast({ title: 'Arquivo inválido', description: 'Selecione uma imagem (jpg, png, webp...)', variant: 'destructive' });
-      return;
-    }
-    setUploadingFoto(true);
-    try {
-      const ext = file.name.split('.').pop();
-      const filename = `tipo-lead-${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-      const { error: uploadError } = await supabase.storage.from('imagens').upload(filename, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from('imagens').getPublicUrl(filename);
-      setFoto(urlData.publicUrl);
-      toast({ title: 'Imagem enviada', description: 'Imagem carregada com sucesso.' });
-    } catch (err: any) {
-      toast({ title: 'Erro ao enviar imagem', description: err?.message || 'Não foi possível fazer upload', variant: 'destructive' });
-    } finally {
-      setUploadingFoto(false);
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const loadTipos = async () => {
@@ -100,9 +82,24 @@ export default function TiposDeLead() {
 
     setSaving(true);
     try {
+      let imgUrl: string | null = null;
+      if (fotoFile) {
+        const ext = fotoFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${ext}`;
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from('tipos-lead')
+          .upload(fileName, fotoFile, { upsert: true });
+        if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from('tipos-lead').getPublicUrl(uploadData.path);
+        imgUrl = publicUrl;
+      }
+
       const { error } = await (supabase as any)
-        .from('tipo_de_lead')
-        .insert({ nome: nome.trim(), img_url: foto.trim() || null, id_type: parsedIdType });
+        .rpc('insert_tipo_de_lead', {
+          p_nome: nome.trim(),
+          p_img_url: imgUrl,
+          p_id_type: parsedIdType
+        });
       if (error) throw error;
       toast({ title: 'Tipo criado', description: `"${nome.trim()}" foi cadastrado com sucesso.` });
       resetForm();
@@ -117,8 +114,11 @@ export default function TiposDeLead() {
   const handleDelete = async (id: number, nomeTipo: string) => {
     setDeletingId(id);
     try {
-      const { error } = await (supabase as any).from('tipo_de_lead').delete().eq('id', id);
+      const { data, error } = await (supabase as any).rpc('delete_tipo_de_lead', { p_id: id });
       if (error) throw error;
+      if (!data) {
+        throw new Error('Tipo de lead não encontrado');
+      }
       toast({ title: 'Tipo removido', description: `"${nomeTipo}" foi excluído.` });
       setTipos(prev => prev.filter(t => t.id !== id));
     } catch (err: any) {
@@ -166,55 +166,53 @@ export default function TiposDeLead() {
 
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
-                  <Upload className="h-3 w-3" /> Foto
+                  <ImageUp className="h-3 w-3" /> Foto
                 </Label>
+
+                {fotoPreview ? (
+                  <div className="relative w-full h-32 rounded-lg overflow-hidden border">
+                    <img src={fotoPreview} alt="preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => { setFotoFile(null); setFotoPreview(''); if (fileInputRef.current) fileInputRef.current.value = ''; }}
+                      className="absolute top-1.5 right-1.5 flex items-center justify-center w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer bg-muted/20 hover:bg-muted/40 transition-colors"
+                    onClick={() => fileInputRef.current?.click()}
+                    onDragOver={(e) => e.preventDefault()}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      const file = e.dataTransfer.files?.[0];
+                      if (file && file.type.startsWith('image/')) {
+                        setFotoFile(file);
+                        setFotoPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  >
+                    <ImageUp className="h-6 w-6 text-muted-foreground/60 mb-1.5" />
+                    <span className="text-xs text-muted-foreground font-medium">Clique ou arraste uma imagem</span>
+                    <span className="text-[11px] text-muted-foreground/60 mt-0.5">PNG, JPG, WEBP</span>
+                  </div>
+                )}
+
                 <input
                   ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); e.target.value = ''; }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      setFotoFile(file);
+                      setFotoPreview(URL.createObjectURL(file));
+                    }
+                  }}
                 />
-                <div
-                  className="relative border-2 border-dashed rounded-lg p-3 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors"
-                  onClick={() => !uploadingFoto && fileInputRef.current?.click()}
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleImageUpload(f); }}
-                >
-                  {foto ? (
-                    <div className="flex items-center gap-3">
-                      <img
-                        src={foto}
-                        alt="preview"
-                        className="h-12 w-12 rounded-lg object-cover border flex-shrink-0"
-                        onError={(e) => (e.currentTarget.style.display = 'none')}
-                      />
-                      <div className="text-left flex-1 min-w-0">
-                        <p className="text-xs font-medium text-green-600">Imagem enviada</p>
-                        <p className="text-[11px] text-muted-foreground truncate max-w-[140px]">{foto.split('/').pop()}</p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-red-600 hover:bg-red-50 flex-shrink-0"
-                        onClick={(e) => { e.stopPropagation(); setFoto(''); }}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  ) : uploadingFoto ? (
-                    <div className="py-3">
-                      <div className="h-6 w-6 rounded-full border-2 border-blue-500 border-t-transparent animate-spin mx-auto mb-1.5" />
-                      <p className="text-xs text-muted-foreground">Enviando imagem...</p>
-                    </div>
-                  ) : (
-                    <div className="py-3">
-                      <Upload className="h-6 w-6 text-muted-foreground/40 mx-auto mb-1.5" />
-                      <p className="text-xs font-medium text-muted-foreground">Clique ou arraste uma imagem</p>
-                      <p className="text-[11px] text-muted-foreground/60 mt-0.5">PNG, JPG, WEBP...</p>
-                    </div>
-                  )}
-                </div>
               </div>
 
               <div className="flex items-center justify-between rounded-lg border bg-muted/30 px-4 py-3">

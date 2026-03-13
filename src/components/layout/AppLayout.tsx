@@ -3,13 +3,26 @@ import { AppHeader } from './AppHeader';
 import { useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useEmpresaColors } from '@/hooks/useEmpresaColors';
 import { useAuth } from '@/hooks/useAuth';
+import { usePushNotifications } from '@/hooks/usePushNotifications';
 
 export function AppLayout() {
   const location = useLocation();
-  const { empresaId } = useAuth();
+  const { empresaId, user } = useAuth();
+  const { status, subscribe } = usePushNotifications();
   
   // Load and apply empresa colors dynamically
   useEmpresaColors(empresaId);
+
+  // Solicitar permissão de push automaticamente assim que o usuário logar
+  useEffect(() => {
+    if (!user) return;
+    if (status !== 'idle') return;
+    if (!('Notification' in window)) return;
+    // Se já foi concedida, inscrever diretamente; caso contrário, pede permissão
+    if (Notification.permission === 'denied') return;
+    subscribe();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, status]);
   
   const getModuleFromPath = () => {
     const path = location.pathname.replace(/\/$/, '');

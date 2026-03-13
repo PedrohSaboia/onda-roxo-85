@@ -151,6 +151,22 @@ export function Comercial() {
     ticket_medio_periodo: number;
   };
 
+  type TypeBotMetricsRow = {
+    tipo_de_lead_id: number;
+    tipo_de_lead_nome: string;
+    id_type: number;
+    total_periodo: number;
+    total_hoje: number;
+    total_ontem: number;
+    total_7_dias: number;
+    total_30_dias: number;
+    total_mes_atual: number;
+    total_vendidos_periodo: number;
+    taxa_conversao_periodo: number;
+    valor_total_periodo: number;
+    ticket_medio_periodo: number;
+  };
+
   type PixDailyRow = {
     dia: string;
     total_entradas: number;
@@ -215,6 +231,7 @@ export function Comercial() {
 
   const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
   const [whatsappMetrics, setWhatsappMetrics] = useState<PixMetricsRow | null>(null);
+  const [typebotsMetrics, setTypebotsMetrics] = useState<TypeBotMetricsRow[]>([]);
   const [pixDailySeries, setPixDailySeries] = useState<PixDailyRow[]>([]);
   const [carrinhoDailySeries, setCarrinhoDailySeries] = useState<PixDailyRow[]>([]);
   const [whatsappDailySeries, setWhatsappDailySeries] = useState<PixDailyRow[]>([]);
@@ -374,6 +391,7 @@ export function Comercial() {
         const [
           { data: metricasData, error: metricasError },
           { data: metricasWhatsappData, error: metricasWhatsappError },
+          { data: metricasTypebotsData, error: metricasTypebotsError },
           { data: seriePixData, error: seriePixError },
           { data: serieCarrinhoData, error: serieCarrinhoError },
           { data: serieWhatsappData, error: serieWhatsappError },
@@ -391,6 +409,12 @@ export function Comercial() {
             p_timezone: 'America/Sao_Paulo',
           }),
           (supabase as any).rpc('comercial_get_metricas_leads_whatsapp', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
+          (supabase as any).rpc('comercial_get_metricas_leads_typebots', {
             p_empresa_id: empresaId ?? null,
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
@@ -451,10 +475,11 @@ export function Comercial() {
         ]);
 
         if (metricasError) throw metricasError;
-  if (metricasWhatsappError) throw metricasWhatsappError;
+        if (metricasWhatsappError) throw metricasWhatsappError;
+        if (metricasTypebotsError) throw metricasTypebotsError;
         if (seriePixError) throw seriePixError;
         if (serieCarrinhoError) throw serieCarrinhoError;
-  if (serieWhatsappError) throw serieWhatsappError;
+        if (serieWhatsappError) throw serieWhatsappError;
         if (convertidosError) throw convertidosError;
         if (convertidosCarrinhoError) throw convertidosCarrinhoError;
         if (yampiUpsellError) throw yampiUpsellError;
@@ -464,7 +489,8 @@ export function Comercial() {
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
-  setWhatsappMetrics((metricasWhatsappData?.[0] || null) as PixMetricsRow | null);
+        setWhatsappMetrics((metricasWhatsappData?.[0] || null) as PixMetricsRow | null);
+        setTypebotsMetrics((metricasTypebotsData || []) as TypeBotMetricsRow[]);
         setPixDailySeries((seriePixData || []) as PixDailyRow[]);
         setCarrinhoDailySeries((serieCarrinhoData || []) as PixDailyRow[]);
   setWhatsappDailySeries((serieWhatsappData || []) as PixDailyRow[]);
@@ -479,6 +505,7 @@ export function Comercial() {
         setPixDashboardError(err?.message || String(err));
         setPixMetrics(null);
         setWhatsappMetrics(null);
+        setTypebotsMetrics([]);
         setPixDailySeries([]);
         setCarrinhoDailySeries([]);
         setWhatsappDailySeries([]);
@@ -2326,28 +2353,28 @@ export function Comercial() {
 
                       {/* ── LINHA 1: Faturamento ─────────────────────────────────── */}
                       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                        <Card className="border-l-4 border-l-violet-500 shadow-sm">
+                        <Card className="border-l-4 border-l-violet-500 shadow-md">
                           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Site</CardTitle></CardHeader>
                           <CardContent className="pt-0">
                             <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{formatCurrency(faturamentoSite)}</div>
                             <p className="text-[11px] text-muted-foreground mt-0.5">Total Yampi no período</p>
                           </CardContent>
                         </Card>
-                        <Card className="border-l-4 border-l-sky-500 shadow-sm">
+                        <Card className="border-l-4 border-l-sky-500 shadow-md">
                           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Comercial</CardTitle></CardHeader>
                           <CardContent className="pt-0">
                             <div className="text-2xl font-bold text-sky-700 dark:text-sky-300">{formatCurrency(faturamentoComercial)}</div>
                             <p className="text-[11px] text-muted-foreground mt-0.5">PIX + Carrinho + Social</p>
                           </CardContent>
                         </Card>
-                        <Card className="border-l-4 border-l-emerald-500 shadow-sm">
+                        <Card className="border-l-4 border-l-emerald-500 shadow-md">
                           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Total</CardTitle></CardHeader>
                           <CardContent className="pt-0">
                             <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(faturamentoTotal)}</div>
                             <p className="text-[11px] text-muted-foreground mt-0.5">Site + Comercial</p>
                           </CardContent>
                         </Card>
-                        <Card className="border-l-4 border-l-amber-500 shadow-sm">
+                        <Card className="border-l-4 border-l-amber-500 shadow-md">
                           <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Participação Comercial</CardTitle></CardHeader>
                           <CardContent className="pt-0">
                             <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{formatPercent(participacao)}</div>
@@ -2765,6 +2792,78 @@ export function Comercial() {
                           </div>
                         );
                       })()}
+
+                      {/* ── TYPEBOTS (dinâmico) ───────────────────────────────────── */}
+                      {typebotsMetrics.length > 0 && typebotsMetrics.map((tbMetric) => {
+                        const leadsTypeBot = Number(tbMetric.total_periodo ?? 0);
+                        const vendidosTypeBot = Number(tbMetric.total_vendidos_periodo ?? 0);
+                        const taxaTypeBot = Number(tbMetric.taxa_conversao_periodo ?? 0);
+                        const ticketTypeBot = Number(tbMetric.ticket_medio_periodo ?? 0);
+                        const faturamentoTypeBot = Number(tbMetric.valor_total_periodo ?? 0);
+                        const naoConvTypeBot = leadsTypeBot - vendidosTypeBot;
+                        const recPorLeadTypeBot = leadsTypeBot > 0 ? faturamentoTypeBot / leadsTypeBot : 0;
+
+                        return (
+                          <div key={tbMetric.tipo_de_lead_id} className="rounded-xl bg-white border border-slate-200 shadow-md p-5 space-y-4">
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                                {tbMetric.tipo_de_lead_nome} (TypeBot {tbMetric.id_type})
+                              </p>
+                              <Badge variant="secondary" className="text-[10px]">Type ID: {tbMetric.id_type}</Badge>
+                            </div>
+                            <div className="space-y-3">
+                              {/* Linha 1 */}
+                              <div className="grid grid-cols-3 gap-3">
+                                <Card className="border-l-4 border-l-blue-500 shadow-sm">
+                                  <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Leads Captados</CardTitle></CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{leadsTypeBot}</div>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">Entradas no período</p>
+                                  </CardContent>
+                                </Card>
+                                <Card className="border-l-4 border-l-cyan-600 shadow-sm">
+                                  <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Taxa Conversão</CardTitle></CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300">{formatPercent(taxaTypeBot)}</div>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">{vendidosTypeBot} convertidos</p>
+                                  </CardContent>
+                                </Card>
+                                <Card className="border-l-4 border-l-indigo-500 shadow-sm">
+                                  <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ticket Médio</CardTitle></CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{formatCurrency(ticketTypeBot)}</div>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">Por lead convertido</p>
+                                  </CardContent>
+                                </Card>
+                              </div>
+                              {/* Linha 2 */}
+                              <div className="grid grid-cols-3 gap-3">
+                                <Card className="border-l-4 border-l-blue-400 shadow-md bg-blue-50/40 dark:bg-blue-950/20">
+                                  <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Total</CardTitle></CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="text-2xl font-bold text-blue-800 dark:text-blue-200">{formatCurrency(faturamentoTypeBot)}</div>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">Recuperado no período</p>
+                                  </CardContent>
+                                </Card>
+                                <Card className="border-l-4 border-l-purple-500 shadow-sm bg-purple-50/40 dark:bg-purple-950/20">
+                                  <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Receita por Lead</CardTitle></CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">{formatCurrency(recPorLeadTypeBot)}</div>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">Faturamento ÷ leads captados</p>
+                                  </CardContent>
+                                </Card>
+                                <Card className="border-l-4 border-l-rose-400 shadow-sm bg-rose-50/40 dark:bg-rose-950/20">
+                                  <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Não Convertidos</CardTitle></CardHeader>
+                                  <CardContent className="pt-0">
+                                    <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{naoConvTypeBot}</div>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">{leadsTypeBot > 0 ? formatPercent(100 - taxaTypeBot) : '—'} dos leads perdidos</p>
+                                  </CardContent>
+                                </Card>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
 
                       {/* ── RANKINGS por responsável ─────────────────────────────── */}
                       <div className="flex items-center gap-2 pt-1">
