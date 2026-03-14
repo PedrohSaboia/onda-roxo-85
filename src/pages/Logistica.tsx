@@ -804,31 +804,47 @@ export function Logistica() {
     if (!caseGroup) return;
     setEntradaPacoteModal((prev) => ({ ...prev, loading: true }));
     try {
-      const ids = (caseGroup.pedidos || []).map((p: any) => p.id).filter(Boolean);
-      if (ids.length > 0) {
-        const { error } = await (supabase as any)
-          .from('pedidos')
-          .update({ pacote_disponivel: true })
-          .in('id', ids);
-        if (error) throw error;
-        // Atualiza localmente
-        setComumPedidos((prev) =>
-          prev.map((p: any) => ids.includes(p.id) ? { ...p, pacote_disponivel: true } : p),
-        );
-        setIncomumPedidos((prev) =>
-          prev.map((p: any) => ids.includes(p.id) ? { ...p, pacote_disponivel: true } : p),
-        );
-        // Atualiza também os cards da aba Enviar
-        setPlataformasCards((prev) =>
-          prev.map((pc: any) => ({
-            ...pc,
-            pedidos: (pc.pedidos || []).map((p: any) =>
-              ids.includes(p.id) ? { ...p, pacote_disponivel: true } : p,
-            ),
-          })),
-        );
+      // Libera apenas UM pedido pendente do grupo por vez
+      const pedidoPendente = (caseGroup.pedidos || []).find((p: any) => !p.pacote_disponivel);
+      
+      if (!pedidoPendente) {
+        toast({ title: 'Aviso', description: 'Todos os pedidos deste grupo já foram liberados.', variant: 'destructive' });
+        setEntradaPacoteModal({ open: false, caseGroup: null, loading: false });
+        return;
       }
-      toast({ title: 'Entrada registrada!', description: `Pacote "${caseGroup.label}" marcado como disponível.` });
+      
+      const pedidoId = pedidoPendente.id;
+      
+      const { error } = await (supabase as any)
+        .from('pedidos')
+        .update({ pacote_disponivel: true })
+        .eq('id', pedidoId);
+        
+      if (error) throw error;
+      
+      // Atualiza localmente
+      setComumPedidos((prev) =>
+        prev.map((p: any) => p.id === pedidoId ? { ...p, pacote_disponivel: true } : p),
+      );
+      setIncomumPedidos((prev) =>
+        prev.map((p: any) => p.id === pedidoId ? { ...p, pacote_disponivel: true } : p),
+      );
+      // Atualiza também os cards da aba Enviar
+      setPlataformasCards((prev) =>
+        prev.map((pc: any) => ({
+          ...pc,
+          pedidos: (pc.pedidos || []).map((p: any) =>
+            p.id === pedidoId ? { ...p, pacote_disponivel: true } : p,
+          ),
+        })),
+      );
+      
+      const pedidosRestantes = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel && p.id !== pedidoId).length;
+      const mensagemRestante = pedidosRestantes > 0 
+        ? ` ${pedidosRestantes} pacote(s) do mesmo tipo ainda aguardando.` 
+        : ' Último pacote deste tipo liberado!';
+      
+      toast({ title: 'Entrada registrada!', description: `Pacote "${caseGroup.label}" marcado como disponível.${mensagemRestante}` });
       setEntradaPacoteModal({ open: false, caseGroup: null, loading: false });
     } catch (err) {
       console.error('Erro ao dar entrada no pacote:', err);
@@ -1251,11 +1267,49 @@ export function Logistica() {
   const isPedidoFullyEmbalado = (pedido: any): boolean => {
     const itens = pedido?.itens_pedido || [];
     if (!itens.length) return false;
-    return itens.every((it: any) => it?.embalado === true);
+    // Alterado: agora retorna true se pelo menos UM item está embalado
+    return itens.some((it: any) => it?.embalado === true);
   };
 
-  const isCaseGroupPronto = (caseGroup: any): boolean =>
-    (caseGroup.pedidos || []).every((p: any) => isPedidoFullyEmbalado(p));
+  const isCaseGroupPronto = (caseGroup: any): boolean => {
+    // Verifica se há itens embalados suficientes para liberar pelo menos um pacote
+    // considerando os itens já consumidos pelos pacotes já liberados
+    
+    const pedidosPendentes = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel);
+    if (pedidosPendentes.length === 0) return false; // Todos já liberados
+    
+    // Pega os itens necessários para UM pacote (todos os pedidos do grupo têm a mesma composição)
+    const caseItems = getPedidoCaseItems(pedidosPendentes[0]);
+    
+    // Conta quantos itens embalados disponíveis existem no total (de TODOS os pedidos do grupo)
+    const itensEmbaladasDisponiveis = new Map<string, number>();
+    (caseGroup.pedidos || []).forEach((pedido: any) => {
+      (pedido?.itens_pedido || []).forEach((item: any) => {
+        if (item?.embalado === true) {
+          const refKey = String(item?.variacao_id || item?.produto_id || item?.id || 'sem-ref');
+          const qtd = Math.max(1, Number(item?.quantidade ?? 1));
+          itensEmbaladasDisponiveis.set(refKey, (itensEmbaladasDisponiveis.get(refKey) || 0) + qtd);
+        }
+      });
+    });
+    
+    // Subtrai os itens já consumidos pelos pedidos liberados
+    const pedidosLiberados = (caseGroup.pedidos || []).filter((p: any) => p.pacote_disponivel === true);
+    pedidosLiberados.forEach((pedido: any) => {
+      (pedido?.itens_pedido || []).forEach((item: any) => {
+        const refKey = String(item?.variacao_id || item?.produto_id || item?.id || 'sem-ref');
+        const qtd = Math.max(1, Number(item?.quantidade ?? 1));
+        const atual = itensEmbaladasDisponiveis.get(refKey) || 0;
+        itensEmbaladasDisponiveis.set(refKey, Math.max(0, atual - qtd));
+      });
+    });
+    
+    // Verifica se há itens suficientes para completar pelo menos UM pacote pendente
+    return caseItems.every((caseItem) => {
+      const disponiveis = itensEmbaladasDisponiveis.get(caseItem.key) || 0;
+      return disponiveis >= caseItem.quantidade;
+    });
+  };
 
   // ── Prioridade de plataforma para ordenação dos pacotes ──────────────────
   const getPlatformPriority = (pedido: any): number => {
@@ -2570,7 +2624,7 @@ export function Logistica() {
                               }}
                             >
                               <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-red-600 text-white font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                ×{caseGroup.pedidos.length}
+                                ×{caseGroup.pedidos.filter((p: any) => !p.pacote_disponivel).length}
                               </span>
                               {caseGroup.imgUrl ? (
                                 <img src={caseGroup.imgUrl} alt={caseGroup.label} className="h-12 w-12 rounded-md object-cover border" />
@@ -2645,7 +2699,7 @@ export function Logistica() {
                                       }}
                                     >
                                       <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                        ×{caseGroup.pedidos.length}
+                                        ×{caseGroup.pedidos.filter((p: any) => !p.pacote_disponivel).length}
                                       </span>
 
                                       {imgPreview ? (
@@ -2738,7 +2792,7 @@ export function Logistica() {
                                       }}
                                     >
                                       <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                        ×{caseGroup.pedidos.length}
+                                        ×{caseGroup.pedidos.filter((p: any) => !p.pacote_disponivel).length}
                                       </span>
 
                                       {imgPreview ? (
