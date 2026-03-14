@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Zap, CreditCard, RefreshCw, CheckCircle2, ShoppingCart, Mail, MessageCircle, Users, TrendingUp, DollarSign } from 'lucide-react';
 import { FaCalendarAlt } from 'react-icons/fa';
 import { format, parseISO, startOfMonth, subMonths, isSameDay, isWithinInterval, differenceInDays, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
+import IconDashboard from '@/components/icons/IconDashboard';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { ResponsiveContainer, AreaChart, Area, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -461,7 +462,7 @@ export function DashboardComercial() {
     const diaLabel = row?.dia ? format(parseISO(`${row.dia}T00:00:00`), "dd/MM/yyyy", { locale: ptBR }) : row?.dia_label;
 
     return (
-      <div className="bg-white border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs">
+      <div className="bg-custom-800 border border-slate-200 rounded-lg shadow-lg px-3 py-2 text-xs">
         <p className="font-semibold mb-1">{diaLabel}</p>
         <p><span className="text-blue-600">●</span> Entradas: <strong>{entradas}</strong></p>
         <p><span className="text-green-600">●</span> Vendidos: <strong>{vendidos}</strong></p>
@@ -476,21 +477,21 @@ export function DashboardComercial() {
         <ComercialSidebar />
       </div>
 
-      <div className="flex-1 overflow-y-auto bg-muted/10">
+      <div className="flex-1 overflow-y-auto hide-scrollbar bg-custom-900">
         <div className="p-6 space-y-6">
           <div className="flex items-center justify-between gap-4">
-            <h1 className="text-2xl font-bold flex items-center gap-2">
-              <BarChart3 className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <IconDashboard className="h-6 w-6" />
               Dashboard Comercial
             </h1>
 
             <div className="flex flex-col items-end gap-1">
                 <Popover open={dashboardPickerOpen} onOpenChange={setDashboardPickerOpen}>
                   <PopoverTrigger asChild>
-                    <Button className="w-fit flex items-center justify-center gap-2 bg-custom-600 text-white hover:bg-custom-700">
+                    <Button className="w-fit flex items-center justify-center gap-2 bg-white text-custom-800 hover:bg-white/90">
                       <FaCalendarAlt className="h-4 w-4" />
-                      <span className="text-sm">{format(parseISO(dashboardDateStart), 'dd/MM/yy', { locale: ptBR })} → {format(parseISO(dashboardDateEnd), 'dd/MM/yy', { locale: ptBR })}</span>
-                      <ChevronDown className="h-4 w-4 opacity-50" />
+                      <span className="text-sm font-bold">{format(parseISO(dashboardDateStart), 'dd/MM/yy', { locale: ptBR })} → {format(parseISO(dashboardDateEnd), 'dd/MM/yy', { locale: ptBR })}</span>
+                      <ChevronDown className="h-4 w-4 opacity-100" />
                     </Button>
                   </PopoverTrigger>
                   <PopoverContent className="w-auto p-0" align="start">
@@ -555,9 +556,6 @@ export function DashboardComercial() {
                     </div>
                   </PopoverContent>
                 </Popover>
-                <p className="text-xs text-muted-foreground">
-                  Período aplicado: {format(parseISO(`${dashboardRangeApplied.start}T00:00:00`), 'dd/MM/yyyy')} até {format(parseISO(`${dashboardRangeApplied.end}T00:00:00`), 'dd/MM/yyyy')}
-                </p>
               </div>
           </div>
 
@@ -632,11 +630,11 @@ export function DashboardComercial() {
                         { label: 'Redes Sociais', value: faturamentoSocial, pct: receitaIncremental > 0 ? (faturamentoSocial  / receitaIncremental) * 100 : 0, color: '#4ade80' },
                       ].filter(i => i.value > 0);
                       return (
-                        <div className="rounded-xl bg-white border border-slate-200 p-5 grid grid-cols-1 xl:grid-cols-3 gap-6 shadow-lg">
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-500 p-5 grid grid-cols-1 xl:grid-cols-3 gap-6 shadow-lg">
 
                           {/* ── Coluna esquerda: faturamentos ── */}
                           <div className="space-y-3">
-                            <p className="text-xs font-bold uppercase tracking-widest text-purple-600 mb-3">Marketing + Comercial</p>
+                            <p className="text-xs font-bold uppercase tracking-widest text-white mb-3">Marketing + Comercial</p>
 
                             {[
                               { label: 'Faturamento Site',      value: faturamentoSite,      color: '#7c3aed' },
@@ -665,7 +663,7 @@ export function DashboardComercial() {
                             ))}
 
                             <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
-                              <span className="text-xs text-slate-500">Faturamento Total</span>
+                              <span className="text-xs text-custom-200">Faturamento Total</span>
                               <span className="text-lg font-bold text-slate-900">{formatCurrency(faturamentoTotal)}</span>
                             </div>
                           </div>
@@ -690,7 +688,7 @@ export function DashboardComercial() {
                                   </div>
                                   <div className="flex items-center gap-3 flex-shrink-0">
                                     <span className="font-bold" style={{ color: item.color }}>{formatPercent(item.pct)}</span>
-                                    <span className="text-slate-500 text-xs w-24 text-right">{formatCurrency(item.value)}</span>
+                                    <span className="text-custom-200 text-xs w-24 text-right">{formatCurrency(item.value)}</span>
                                   </div>
                                 </div>
                               ))}
@@ -741,7 +739,7 @@ export function DashboardComercial() {
                                 </PieChart>
                               </ResponsiveContainer>
                               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                <span className="text-[10px] text-slate-500 uppercase tracking-wider">Total</span>
+                                <span className="text-[10px] text-custom-200 uppercase tracking-wider">Total</span>
                                 <span className="text-base font-extrabold text-slate-900 leading-tight text-center px-2">{formatCurrency(receitaIncremental)}</span>
                               </div>
                             </div>
@@ -749,8 +747,8 @@ export function DashboardComercial() {
                               {heroItems.map((item) => (
                                 <div key={item.label} className="flex items-center gap-1.5">
                                   <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                                  <span className="text-[11px] text-slate-500 truncate">{item.label}</span>
-                                  <span className="text-[11px] font-bold ml-auto" style={{ color: item.color }}>{item.pct.toFixed(0)}%</span>
+                                  <span className="text-[14px] text-custom-200 truncate">{item.label}</span>
+                                  <span className="text-[14px] font-bold ml-auto" style={{ color: item.color }}>{item.pct.toFixed(0)}%</span>
                                 </div>
                               ))}
                             </div>
@@ -759,57 +757,634 @@ export function DashboardComercial() {
                       );
                     })()}
 
+                    {/* ── RESUMO RECUPERAÇÃO: PIX + CARRINHO ───────────────── */}
+                    {(() => {
+                      const _pixTotal    = Number(pixMetrics?.total_periodo ?? 0);
+                      const _pixRec      = Number(pixMetrics?.total_vendidos_periodo ?? 0);
+                      return (
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+                          {/* Comercial Rec PIX */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 border p-0 space-y-3">
+                            <p className="text-[15px] font-bold px-4 pt-4 uppercase tracking-widest text-white">Comercial Rec PIX</p>
+                            <div className="border-t border-custom-600 bg-custom-800/60 p-3 grid grid-cols-2 gap-3 divide-x divide-custom-600/40">
+                              {/* Coluna esquerda */}
+                              <div className="space-y-3 pr-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <Zap className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">PIX Cancelados</span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{_pixTotal}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <CreditCard className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">PIX Recuperados</span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{_pixRec}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Coluna direita */}
+                              <div className="space-y-3 pl-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <RefreshCw className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Taxa Rec PIX</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatPercent(taxaPix)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <CheckCircle2 className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Ticket Médio</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-purple-300 flex-shrink-0">{formatCurrency(ticketPix)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Comercial Rec Carrinho */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 space-y-3">
+                            <p className="text-[15px] font-bold px-4 pt-4 uppercase tracking-widest text-white">Comercial Rec Carrinho</p>
+                            <div className="border-t border-custom-600 bg-custom-800/60 p-3 grid grid-cols-2 gap-3 divide-x divide-custom-600/40">
+                              {/* Coluna esquerda */}
+                              <div className="space-y-3 pr-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <ShoppingCart className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Carrinhos Abandonados</span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{totalEntCarrinho}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <CreditCard className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Carrinhos Recuperados</span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{totalVendCarrinho}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                              </div>
+                              {/* Coluna direita */}
+                              <div className="space-y-3 pl-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <RefreshCw className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Taxa Rec Carrinho</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-purple-300 flex-shrink-0">{formatPercent(taxaCarrinho)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <Mail className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-purple-200 font-semibold leading-tight">{formatCurrency(faturamentoCarrinho)}</span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{totalVendCarrinho}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+
+
+
+                    {/* == LINHA 2: PIX detalhado + WhatsApp == */}
+                    {(() => {
+                      const _leadsS   = Number(whatsappMetrics?.total_periodo ?? 0);
+                      const _vendS    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
+                      const _naoConvS = _leadsS - _vendS;
+                      const _pctConv  = _leadsS > 0 ? (_vendS / _leadsS) * 100 : 0;
+                      const _pctNao   = _leadsS > 0 ? (_naoConvS / _leadsS) * 100 : 0;
+                      const _pixRec   = Number(pixMetrics?.total_vendidos_periodo ?? 0);
+                      return (
+                        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+
+                          {/* ── Comercial Rec PIX (detalhado) ── */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 space-y-0">
+                            <p className="text-[15px] font-bold px-4 pt-4 pb-3 uppercase tracking-widest text-white">Comercial Rec PIX</p>
+                            {/* Linha topo: 2 stats inline */}
+                            <div className="border-t border-custom-600 bg-custom-800/60 px-3 pt-3 pb-2 grid grid-cols-2 gap-3 divide-x divide-custom-600/40">
+                              <div className="flex items-center justify-between gap-2 pr-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                    <Zap className="h-3.5 w-3.5 text-white" />
+                                  </span>
+                                  <span className="text-[14px] text-white leading-tight">PIX Recuperados</span>
+                                </div>
+                                <div className="flex-shrink-0 text-right">
+                                  <span className="text-sm font-bold text-white">{_pixRec}</span>
+                                  <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-between gap-2 pl-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                    <CreditCard className="h-3.5 w-3.5 text-white" />
+                                  </span>
+                                  <span className="text-[14px] text-white leading-tight">Ticket Médio</span>
+                                </div>
+                                <span className="text-sm font-bold text-white flex-shrink-0">{formatCurrency(ticketPix)}</span>
+                              </div>
+                            </div>
+                            {/* Corpo: métricas + barra */}
+                            <div className="px-3 pb-3 grid grid-cols-2 gap-3 divide-x divide-custom-600/40">
+                              {/* Coluna esquerda */}
+                              <div className="space-y-2 pr-2 pt-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-6 w-6 rounded-full bg-primary/70 flex-shrink-0">
+                                      <TrendingUp className="h-3 w-3 text-white" />
+                                    </span>
+                                    <span className="text-[13px] text-custom-200 leading-tight">Ticket Médio Rec PIX</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatCurrency(ticketPix)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-6 w-6 rounded-full bg-primary/70 flex-shrink-0">
+                                      <DollarSign className="h-3 w-3 text-white" />
+                                    </span>
+                                    <span className="text-[13px] text-custom-200 leading-tight">Faturamento Total Rec PIX</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatCurrency(faturamentoPix)}</span>
+                                </div>
+                              </div>
+                              {/* Coluna direita */}
+                              <div className="space-y-2 pl-2 pt-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-[13px] text-custom-200">Faturamento Total</span>
+                                  <span className="text-sm font-bold text-purple-300">{formatCurrency(faturamentoPix)}</span>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="h-1.5 w-full rounded-full bg-custom-700 overflow-hidden">
+                                    <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, taxaPix)}%` }} />
+                                  </div>
+                                  <span className="text-[12px] text-custom-200">{formatPercent(taxaPix)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* ── WhatsApp / Rede Social ── */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 space-y-3">
+                            <p className="text-[15px] font-bold px-4 pt-4 uppercase tracking-widest text-white">WhatsApp - Rede Social</p>
+                            <div className="border-t border-custom-600 bg-custom-800/60 p-3 grid grid-cols-2 gap-3 divide-x divide-custom-600/40">
+                              {/* Coluna esquerda */}
+                              <div className="space-y-3 pr-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <Users className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Leads Captados</span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{_leadsS}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <MessageCircle className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">
+                                      Convertidos{' '}
+                                      <span className="text-custom-200 text-[12px]">({_pctConv.toFixed(1)}%)</span>
+                                    </span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{_vendS}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <RefreshCw className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">
+                                      Não Conv.{' '}
+                                      <span className="text-custom-200 text-[12px]">({_pctNao.toFixed(1)}%)</span>
+                                    </span>
+                                  </div>
+                                  <div className="flex-shrink-0 text-right">
+                                    <span className="text-sm font-bold text-white">{_naoConvS}</span>
+                                    <span className="text-[10px] text-custom-200 ml-0.5">QTD</span>
+                                  </div>
+                                </div>
+                                <div className="pt-1">
+                                  <div className="h-1.5 w-full rounded-full bg-custom-700 overflow-hidden">
+                                    <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, _pctConv)}%` }} />
+                                  </div>
+                                  <span className="text-[12px] text-custom-200 mt-0.5 block">{formatCurrency(faturamentoSocial)}</span>
+                                </div>
+                              </div>
+                              {/* Coluna direita */}
+                              <div className="space-y-3 pl-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <TrendingUp className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Taxa Conversão</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatPercent(taxaSocial)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <CreditCard className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Ticket Médio</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatCurrency(ticketSocial)}</span>
+                                </div>
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
+                                      <DollarSign className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    <span className="text-[14px] text-white leading-tight">Faturamento Total</span>
+                                  </div>
+                                  <span className="text-sm font-bold text-purple-300 flex-shrink-0">{formatCurrency(faturamentoSocial)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── REC PIX: linha 5 cards ───────────────────────────────── */}
+                    {(() => {
+                      const _pixTotal = Number(pixMetrics?.total_periodo ?? 0);
+                      const _pixRec2  = Number(pixMetrics?.total_vendidos_periodo ?? 0);
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 px-1">REC PIX</p>
+                          <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+                            {/* Pix Cancelados */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <Zap className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Pix Cancelados</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{_pixTotal}</p>
+                              </div>
+                            </div>
+                            {/* Pix Recuperados */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <CheckCircle2 className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Pix Recuperados</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{_pixRec2}</p>
+                              </div>
+                            </div>
+                            {/* Taxa Rec Pix */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <TrendingUp className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Taxa Rec Pix</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaPix)}</p>
+                              </div>
+                            </div>
+                            {/* Ticket Médio */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <CreditCard className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketPix)}</p>
+                              </div>
+                            </div>
+                            {/* Faturamento Rec Pix */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <DollarSign className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Faturamento Rec Pix</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoPix)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── REC CARRINHO: linha 5 cards ──────────────────────────── */}
+                    <div className="space-y-2">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 px-1">REC CARRINHO</p>
+                      <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+                        {/* Carrinhos Abandonados */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <ShoppingCart className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Carrinhos Abandonados</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{totalEntCarrinho}</p>
+                          </div>
+                        </div>
+                        {/* Carrinhos Recuperados */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <CheckCircle2 className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Carrinhos Recuperados</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{totalVendCarrinho}</p>
+                          </div>
+                        </div>
+                        {/* Taxa Rec Carrinho */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <TrendingUp className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Taxa Rec Carrinho</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaCarrinho)}</p>
+                          </div>
+                        </div>
+                        {/* Ticket Médio */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <CreditCard className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
+                            <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketCarrinho)}</p>
+                          </div>
+                        </div>
+                        {/* Faturamento Rec Carrinho */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <DollarSign className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Faturamento Rec Carrinho</p>
+                            <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoCarrinho)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ── WHATSAPP + REDES SOCIAIS: linha 5 cards ──────────────── */}
+                    {(() => {
+                      const _leadsS2   = Number(whatsappMetrics?.total_periodo ?? 0);
+                      const _vendS2    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
+                      const recPorLead = _leadsS2 > 0 ? faturamentoSocial / _leadsS2 : 0;
+                      return (
+                        <div className="space-y-2">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 px-1">WHATSAPP + REDES SOCIAIS</p>
+                          <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
+                            {/* Leads Captados */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <Users className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Leads Captados</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{_leadsS2}</p>
+                              </div>
+                            </div>
+                            {/* Taxa Conversão */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <TrendingUp className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Taxa Conversão</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaSocial)}</p>
+                              </div>
+                            </div>
+                            {/* Ticket Médio */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <CreditCard className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketSocial)}</p>
+                              </div>
+                            </div>
+                            {/* Faturamento Total */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <DollarSign className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Faturamento Total</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoSocial)}</p>
+                              </div>
+                            </div>
+                            {/* Receita por Lead — destaque roxo */}
+                            <div className="rounded-xl bg-primary border border-primary px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-white/15 flex-shrink-0 mt-0.5">
+                                <TrendingUp className="h-4 w-4 text-white" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-white/80 leading-tight">Receita por Lead</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(recPorLead)}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* ── ORIGEM + RANKING + ROI ───────────────────────────────── */}
+                    {(() => {
+                      const roi = custoComercial > 0 ? receitaIncremental / custoComercial : 0;
+                      const topVendedoras = [...pixConvertedByResponsavel]
+                        .sort((a, b) => Number(b.valor_total_convertido) - Number(a.valor_total_convertido))
+                        .slice(0, 5);
+                      const maxVal = topVendedoras.length > 0 ? Number(topVendedoras[0].valor_total_convertido) : 1;
+                      const initials = (name: string) => name?.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() ?? '?';
+                      return (
+                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+                          {/* Origem da Receita Comercial */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                            <p className="text-[13px] font-bold uppercase tracking-widest text-white">Origem da Receita Comercial</p>
+                            <div className="flex items-center gap-3">
+                              <div className="relative h-[110px] w-[110px] flex-shrink-0">
+                                <ResponsiveContainer width="100%" height="100%">
+                                  <PieChart>
+                                    <Pie data={origemData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={36} outerRadius={52} paddingAngle={3}>
+                                      {origemData.map((entry, index) => (
+                                        <Cell key={`cell-${index}`} fill={entry.color} />
+                                      ))}
+                                    </Pie>
+                                    <Tooltip
+                                      wrapperStyle={{ zIndex: 50 }}
+                                      contentStyle={{ borderRadius: 8, fontSize: 12, background: '#1e1b4b', border: 'none', color: '#fff' }}
+                                      formatter={(value: any) => [formatCurrency(Number(value)), '']}
+                                      labelFormatter={() => ''}
+                                    />
+                                  </PieChart>
+                                </ResponsiveContainer>
+                              </div>
+                              <div className="flex-1 space-y-1.5">
+                                {origemData.map((entry) => {
+                                  const pct = receitaIncremental > 0 ? Math.round((entry.value / receitaIncremental) * 100) : 0;
+                                  return (
+                                    <div key={entry.name} className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
+                                        <span className="text-[12px] text-custom-200 truncate">{entry.name}</span>
+                                      </div>
+                                      <span className="text-[12px] font-bold text-white flex-shrink-0">{pct}%</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Ranking Vendedoras */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                            <p className="text-[13px] font-bold uppercase tracking-widest text-white">Ranking Vendedoras</p>
+                            <div className="space-y-2">
+                              {topVendedoras.length === 0 ? (
+                                <p className="text-sm text-custom-200">Sem dados no período.</p>
+                              ) : (
+                                topVendedoras.map((row, idx) => {
+                                  const barPct = maxVal > 0 ? (Number(row.valor_total_convertido) / maxVal) * 100 : 0;
+                                  return (
+                                    <div key={idx} className="flex items-center gap-3">
+                                      <span className="text-[12px] font-bold text-custom-200 w-3 flex-shrink-0">{idx + 1}</span>
+                                      <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-white text-[11px] font-bold flex-shrink-0">
+                                        {initials(row.responsavel_nome ?? '?')}
+                                      </span>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="flex items-center justify-between gap-1">
+                                          <span className="text-[12px] text-white font-medium truncate">{row.responsavel_nome}</span>
+                                          <span className="text-[12px] font-bold text-white flex-shrink-0">{formatCurrency(Number(row.valor_total_convertido))}</span>
+                                        </div>
+                                        <div className="h-1 w-full rounded-full bg-custom-700 overflow-hidden mt-0.5">
+                                          <div className="h-full rounded-full bg-primary" style={{ width: `${barPct}%` }} />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          </div>
+
+                          {/* ROI do Comercial */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 flex flex-col justify-between">
+                            <p className="text-[13px] font-bold uppercase tracking-widest text-white">ROI do Comercial</p>
+                            <div className="flex items-end justify-between gap-3 mt-3">
+                              <div>
+                                <div className="flex items-baseline gap-1">
+                                  <span className="text-5xl font-extrabold text-white">{roi > 0 ? roi.toFixed(1) : '—'}</span>
+                                  {roi > 0 && <span className="text-2xl font-bold text-white">x</span>}
+                                  {roi > 1 && <TrendingUp className="h-6 w-6 text-primary ml-1" />}
+                                </div>
+                                <div className="mt-3 space-y-1">
+                                  <p className="text-[13px] text-custom-200">Receita: <span className="font-bold text-white">{formatCurrency(receitaIncremental)}</span></p>
+                                  <p className="text-[13px] text-custom-200">Custo: <span className="font-bold text-white">{formatCurrency(custoComercial)}</span></p>
+                                </div>
+                              </div>
+                              <div className="flex items-end gap-1 pb-1">
+                                <div className="w-3 rounded-t bg-primary/40" style={{ height: '28px' }} />
+                                <div className="w-3 rounded-t bg-primary/70" style={{ height: '44px' }} />
+                                <div className="w-3 rounded-t bg-primary" style={{ height: '60px' }} />
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* ── LINHA 1: Faturamento ─────────────────────────────────── */}
                     <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                      <Card className="border-l-4 border-l-violet-500 shadow-md">
-                        <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Site</CardTitle></CardHeader>
-                        <CardContent className="pt-0">
-                          <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{formatCurrency(faturamentoSite)}</div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">Total Yampi no período</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="border-l-4 border-l-sky-500 shadow-md">
-                        <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Comercial</CardTitle></CardHeader>
-                        <CardContent className="pt-0">
-                          <div className="text-2xl font-bold text-sky-700 dark:text-sky-300">{formatCurrency(faturamentoComercial)}</div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">PIX + Carrinho + Social</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="border-l-4 border-l-emerald-500 shadow-md">
-                        <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Total</CardTitle></CardHeader>
-                        <CardContent className="pt-0">
-                          <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{formatCurrency(faturamentoTotal)}</div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">Site + Comercial</p>
-                        </CardContent>
-                      </Card>
-                      <Card className="border-l-4 border-l-amber-500 shadow-md">
-                        <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Participação Comercial</CardTitle></CardHeader>
-                        <CardContent className="pt-0">
-                          <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{formatPercent(participacao)}</div>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">Comercial ÷ Total</p>
-                        </CardContent>
-                      </Card>
+                      <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
+                        <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Site</p>
+                        <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoSite)}</p>
+                        <p className="text-[12px] text-custom-200 mt-0.5">Total Yampi no período</p>
+                      </div>
+                      <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
+                        <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Comercial</p>
+                        <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoComercial)}</p>
+                        <p className="text-[12px] text-custom-200 mt-0.5">PIX + Carrinho + Social</p>
+                      </div>
+                      <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
+                        <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
+                        <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoTotal)}</p>
+                        <p className="text-[12px] text-custom-200 mt-0.5">Site + Comercial</p>
+                      </div>
+                      <div className="rounded-xl bg-primary border border-primary px-4 py-3">
+                        <p className="text-[11px] text-white/80 uppercase tracking-wide">Participação Comercial</p>
+                        <p className="text-2xl font-bold text-white">{formatPercent(participacao)}</p>
+                        <p className="text-[12px] text-white/70 mt-0.5">Comercial ÷ Total</p>
+                      </div>
                     </div>
+
+
 
                     {/* ── GRÁFICOS CENTRAIS ─────────────────────────────────────── */}
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                       {/* Origem da Receita Comercial */}
-                      <Card className="border shadow-xl overflow-hidden flex flex-col">
-                        <CardHeader className="pb-1 pt-5 px-6">
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 overflow-hidden flex flex-col">
+                        <div className="pb-1 pt-5 px-6">
                           <div className="flex items-center justify-between">
                             <div>
-                              <CardTitle className="text-base font-bold">Origem da Receita Comercial</CardTitle>
-                              <p className="text-xs text-muted-foreground mt-0.5">Distribuição por canal no período</p>
+                              <p className="text-base font-bold text-white">Origem da Receita Comercial</p>
+                              <p className="text-xs text-custom-200 mt-0.5">Distribuição por canal no período</p>
                             </div>
                             <div className="text-right">
-                              <div className="text-[11px] text-muted-foreground uppercase tracking-wider">Total</div>
-                              <div className="text-lg font-bold">{formatCurrency(receitaIncremental)}</div>
+                              <div className="text-[14px] text-custom-200 uppercase tracking-wider">Total</div>
+                              <div className="text-lg font-bold text-white">{formatCurrency(receitaIncremental)}</div>
                             </div>
                           </div>
-                        </CardHeader>
-                        <CardContent className="px-6 pb-6 pt-2 flex-1 flex flex-col justify-center">
+                        </div>
+                        <div className="px-6 pb-6 pt-2 flex-1 flex flex-col justify-center">
                           {origemData.length === 0 ? (
-                            <p className="text-sm text-muted-foreground py-8 text-center">Sem dados no período.</p>
+                            <p className="text-sm text-white py-8 text-center">Sem dados no período.</p>
                           ) : (
                             <div className="flex flex-col lg:flex-row items-center gap-6 mt-2">
                               {/* Donut chart */}
@@ -853,7 +1428,7 @@ export function DashboardComercial() {
                                 </ResponsiveContainer>
                                 {/* Label central */}
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                  <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Fontes</span>
+                                  <span className="text-[14px] text-custom-200 uppercase tracking-wider">Fontes</span>
                                 </div>
                               </div>
 
@@ -869,15 +1444,14 @@ export function DashboardComercial() {
                                         <div className="flex items-center justify-between gap-2">
                                           <div className="flex items-center gap-2.5 min-w-0">
                                             <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                                            <span className="text-sm font-semibold truncate">{entry.name}</span>
+                                            <span className="text-sm font-semibold text-white truncate">{entry.name}</span>
                                           </div>
                                           <div className="flex items-baseline gap-2 flex-shrink-0">
-                                            <span className="text-sm font-bold">{formatCurrency(entry.value)}</span>
-                                            <span className="text-[11px] text-muted-foreground w-10 text-right">{pct.toFixed(1)}%</span>
+                                            <span className="text-sm font-bold text-white">{formatCurrency(entry.value)}</span>
+                                            <span className="text-[14px] text-custom-200 w-10 text-right">{pct.toFixed(1)}%</span>
                                           </div>
                                         </div>
-                                        {/* Barra de progresso */}
-                                        <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                                        <div className="h-1.5 w-full rounded-full bg-custom-700 overflow-hidden">
                                           <div
                                             className="h-full rounded-full transition-all duration-700"
                                             style={{ width: `${pct}%`, backgroundColor: entry.color }}
@@ -889,131 +1463,104 @@ export function DashboardComercial() {
                               </div>
                             </div>
                           )}
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
 
                       {/* Receita Incremental Comercial */}
-                      <Card className="border shadow-md">
-                        <CardHeader>
-                          <CardTitle className="text-base">Receita Incremental Comercial</CardTitle>
-                          <p className="text-xs text-muted-foreground">Quanto o comercial cria de dinheiro que não existiria sem a intervenção.</p>
-                        </CardHeader>
-                        <CardContent className="space-y-3">
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600">
+                        <div className="p-5">
+                          <p className="text-base font-bold text-white">Receita Incremental Comercial</p>
+                          <p className="text-xs text-custom-200">Quanto o comercial cria de dinheiro que não existiria sem a intervenção.</p>
+                        </div>
+                        <div className="px-5 pb-5 space-y-3">
                           {[
                             { label: 'Upsell',         value: faturamentoUpsell,  color: 'bg-violet-500', desc: `${totalPedidosYampi} ped × ${formatPercent(taxaUpsell)} × ${formatCurrency(ticketUpsell)}` },
                             { label: '+ PIX Rec.',     value: faturamentoPix,     color: 'bg-blue-500',   desc: `${pixMetrics?.total_vendidos_periodo ?? 0} vendidos` },
                             { label: '+ Carrinho Rec.',value: faturamentoCarrinho,color: 'bg-orange-500', desc: `${totalVendCarrinho} vendidos` },
                             { label: '+ Social',       value: faturamentoSocial,  color: 'bg-emerald-500',desc: `${leadsSocial} leads` },
                           ].map((item) => (
-                            <div key={item.label} className="flex items-center justify-between gap-3 rounded-md border px-3 py-2.5">
+                            <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-custom-600 bg-custom-900/50 px-3 py-2.5">
                               <div className="flex items-center gap-2 min-w-0">
                                 <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${item.color}`} />
                                 <div className="min-w-0">
-                                  <p className="text-sm font-semibold">{item.label}</p>
-                                  <p className="text-[11px] text-muted-foreground">{item.desc}</p>
+                                  <p className="text-sm font-semibold text-white">{item.label}</p>
+                                  <p className="text-[12px] text-custom-200">{item.desc}</p>
                                 </div>
                               </div>
-                              <span className="text-sm font-bold text-right">{formatCurrency(item.value)}</span>
+                              <span className="text-sm font-bold text-white text-right">{formatCurrency(item.value)}</span>
                             </div>
                           ))}
-                          <div className="rounded-lg border-2 border-green-500 bg-green-500/20 px-4 py-3 flex items-center justify-between">
-                            <span className="font-bold text-base">Receita Incremental</span>
-                            <span className="text-xl font-bold text-green-500">{formatCurrency(receitaIncremental)}</span>
+                          <div className="rounded-xl border-2 border-primary bg-primary/20 px-4 py-3 flex items-center justify-between">
+                            <span className="font-bold text-base text-white">Receita Incremental</span>
+                            <span className="text-xl font-bold text-primary">{formatCurrency(receitaIncremental)}</span>
                           </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* ── LINHA 2: Upsell ──────────────────────────────────────── */}
-                    <div className="rounded-xl bg-white border border-slate-200 shadow-md p-5 space-y-4">
-                      <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Upsell Yampi</p>
 
-                      {/* Linha 1: métricas gerais (legado) */}
+                    {/* ── LINHA 2: Upsell ──────────────────────────────────────── */}
+                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Upsell Yampi</p>
+
+                      {/* Linha 1: métricas gerais */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <Card className="border-l-4 border-l-violet-500 shadow-sm">
-                          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Taxa Upsell</CardTitle></CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{formatPercent(taxaUpsell)}</div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0} de {totalPedidosYampi} pedidos</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="border-l-4 border-l-fuchsia-500 shadow-sm">
-                          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ticket Médio Upsell</CardTitle></CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold text-fuchsia-700 dark:text-fuchsia-300">{formatCurrency(ticketUpsell)}</div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">Sem upsell: {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</p>
-                          </CardContent>
-                        </Card>
-                        <Card className="border-l-4 border-l-rose-500 shadow-sm">
-                          <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Upsell</CardTitle></CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{formatCurrency(faturamentoUpsell)}</div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsell)} × {formatCurrency(ticketUpsell)}</p>
-                          </CardContent>
-                        </Card>
+                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Upsell</p>
+                          <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsell)}</p>
+                          <p className="text-[12px] text-custom-200 mt-0.5">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0} de {totalPedidosYampi} pedidos</p>
+                        </div>
+                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio Upsell</p>
+                          <p className="text-2xl font-bold text-white">{formatCurrency(ticketUpsell)}</p>
+                          <p className="text-[12px] text-custom-200 mt-0.5">Sem upsell: {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</p>
+                        </div>
+                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Upsell</p>
+                          <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoUpsell)}</p>
+                          <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsell)} × {formatCurrency(ticketUpsell)}</p>
+                        </div>
                       </div>
 
                       {/* Separador */}
                       <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-border" />
-                        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/60 px-2">Detalhamento por tipo</span>
-                        <div className="h-px flex-1 bg-border" />
+                        <div className="h-px flex-1 bg-custom-600" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest text-custom-200/60 px-2">Detalhamento por tipo</span>
+                        <div className="h-px flex-1 bg-custom-600" />
                       </div>
 
                       {/* Linha 2: Upsell puro vs Incremento puro vs Ambos vs Sem alteração */}
                       <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                        {/* Upsell puro */}
-                        <Card className="border-l-4 border-l-purple-500 shadow-md bg-purple-50/30">
-                          <CardHeader className="pb-1">
-                            <CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Up-sell (upgrade)</CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold text-purple-700">{yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0}</div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_upsell_pct ?? 0)} dos pedidos</p>
-                            <p className="text-[11px] text-purple-600 font-semibold mt-1">{formatCurrency(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0)}</p>
-                            <p className="text-[10px] text-muted-foreground">Ticket após: {formatCurrency(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0)}</p>
-                          </CardContent>
-                        </Card>
-
-                        {/* Incremento puro */}
-                        <Card className="border-l-4 border-l-sky-500 shadow-md bg-sky-50/30">
-                          <CardHeader className="pb-1">
-                            <CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Incremento (novo item)</CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold text-sky-700">{yampiUpsellIncrementoMetrics?.pedidos_com_incremento ?? 0}</div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_incremento_pct ?? 0)} dos pedidos</p>
-                            <p className="text-[11px] text-sky-600 font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_com_incremento ?? 0)}</p>
-                            <p className="text-[10px] text-muted-foreground">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_com_incremento ?? 0)}</p>
-                          </CardContent>
-                        </Card>
-
-                        {/* Ambos */}
-                        <Card className="border-l-4 border-l-amber-500 shadow-md bg-amber-50/30">
-                          <CardHeader className="pb-1">
-                            <CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ambos</CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold text-amber-700">{yampiUpsellIncrementoMetrics?.pedidos_com_ambos ?? 0}</div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_ambos_pct ?? 0)} dos pedidos</p>
-                            <p className="text-[10px] text-muted-foreground mt-1">Upsell + novo item</p>
-                          </CardContent>
-                        </Card>
-
-                        {/* Sem alteração */}
-                        <Card className="border-l-4 border-l-slate-400 shadow-md bg-slate-50/30">
-                          <CardHeader className="pb-1">
-                            <CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Sem alteração</CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="text-2xl font-bold text-slate-600">{yampiUpsellIncrementoMetrics?.pedidos_sem_alteracao ?? 0}</div>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_sem_alteracao_pct ?? 0)} dos pedidos</p>
-                            <p className="text-[11px] text-slate-500 font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_sem_alteracao ?? 0)}</p>
-                            <p className="text-[10px] text-muted-foreground">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_sem_alteracao ?? 0)}</p>
-                          </CardContent>
-                        </Card>
+                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Up-sell (upgrade)</p>
+                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0}</p>
+                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_upsell_pct ?? 0)} dos pedidos</p>
+                          <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0)}</p>
+                          <p className="text-[11px] text-custom-200">Ticket após: {formatCurrency(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0)}</p>
+                        </div>
+                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Incremento (novo item)</p>
+                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_incremento ?? 0}</p>
+                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_incremento_pct ?? 0)} dos pedidos</p>
+                          <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_com_incremento ?? 0)}</p>
+                          <p className="text-[11px] text-custom-200">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_com_incremento ?? 0)}</p>
+                        </div>
+                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ambos</p>
+                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_ambos ?? 0}</p>
+                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_ambos_pct ?? 0)} dos pedidos</p>
+                          <p className="text-[11px] text-custom-200 mt-1">Upsell + novo item</p>
+                        </div>
+                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Sem alteração</p>
+                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_sem_alteracao ?? 0}</p>
+                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_sem_alteracao_pct ?? 0)} dos pedidos</p>
+                          <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_sem_alteracao ?? 0)}</p>
+                          <p className="text-[11px] text-custom-200">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_sem_alteracao ?? 0)}</p>
+                        </div>
                       </div>
                     </div>
+
 
                     {/* ── PIX ──────────────────────────────────────────────────── */}
                     {(() => {
@@ -1022,56 +1569,42 @@ export function DashboardComercial() {
                       const naoConvPix        = leadsPix - vendidosPix;
                       const recPorLeadPix     = leadsPix > 0 ? faturamentoPix / leadsPix : 0;
                       return (
-                        <div className="rounded-xl bg-white border border-slate-200 shadow-md p-5 space-y-4">
-                          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Rec PIX</p>
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Rec PIX</p>
                           <div className="space-y-3">
-                          {/* Linha 1 */}
                           <div className="grid grid-cols-3 gap-3">
-                            <Card className="border-l-4 border-l-blue-500 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Leads Captados</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{leadsPix}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Entradas no período</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-cyan-500 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Taxa Conversão</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300">{formatPercent(taxaPix)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{vendidosPix} convertidos</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-indigo-500 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ticket Médio</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{formatCurrency(ticketPix)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Por lead convertido</p>
-                              </CardContent>
-                            </Card>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
+                              <p className="text-2xl font-bold text-white">{leadsPix}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Entradas no período</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
+                              <p className="text-2xl font-bold text-white">{formatPercent(taxaPix)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{vendidosPix} convertidos</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(ticketPix)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Por lead convertido</p>
+                            </div>
                           </div>
-                          {/* Linha 2 */}
                           <div className="grid grid-cols-3 gap-3">
-                            <Card className="border-l-4 border-l-blue-400 shadow-md bg-blue-50/40 dark:bg-blue-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Total</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-blue-800 dark:text-blue-200">{formatCurrency(faturamentoPix)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Recuperado no período</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-violet-500 shadow-sm bg-violet-50/40 dark:bg-violet-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Receita por Lead</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{formatCurrency(recPorLeadPix)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Faturamento ÷ leads captados</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-rose-400 shadow-sm bg-rose-50/40 dark:bg-rose-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Não Convertidos</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{naoConvPix}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{leadsPix > 0 ? formatPercent(100 - taxaPix) : '—'} dos leads perdidos</p>
-                              </CardContent>
-                            </Card>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoPix)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
+                            </div>
+                            <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadPix)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ leads captados</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
+                              <p className="text-2xl font-bold text-white">{naoConvPix}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{leadsPix > 0 ? formatPercent(100 - taxaPix) : '—'} dos leads perdidos</p>
+                            </div>
                           </div>
                           </div>
                         </div>
@@ -1083,56 +1616,42 @@ export function DashboardComercial() {
                       const naoConvCarrinho    = totalEntCarrinho - totalVendCarrinho;
                       const recPorLeadCarrinho = totalEntCarrinho > 0 ? faturamentoCarrinho / totalEntCarrinho : 0;
                       return (
-                        <div className="rounded-xl bg-white border border-slate-200 shadow-md p-5 space-y-4">
-                          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Rec Carrinho</p>
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Rec Carrinho</p>
                           <div className="space-y-3">
-                          {/* Linha 1 */}
                           <div className="grid grid-cols-3 gap-3">
-                            <Card className="border-l-4 border-l-orange-500 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Leads Captados</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">{totalEntCarrinho}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Carrinhos no período</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-amber-500 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Taxa Conversão</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-amber-700 dark:text-amber-300">{formatPercent(taxaCarrinho)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{totalVendCarrinho} convertidos</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-yellow-600 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ticket Médio</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-yellow-700 dark:text-yellow-400">{formatCurrency(ticketCarrinho)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Por carrinho convertido</p>
-                              </CardContent>
-                            </Card>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
+                              <p className="text-2xl font-bold text-white">{totalEntCarrinho}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Carrinhos no período</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
+                              <p className="text-2xl font-bold text-white">{formatPercent(taxaCarrinho)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{totalVendCarrinho} convertidos</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(ticketCarrinho)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Por carrinho convertido</p>
+                            </div>
                           </div>
-                          {/* Linha 2 */}
                           <div className="grid grid-cols-3 gap-3">
-                            <Card className="border-l-4 border-l-orange-400 shadow-md bg-orange-50/40 dark:bg-orange-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Total</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-orange-800 dark:text-orange-200">{formatCurrency(faturamentoCarrinho)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Recuperado no período</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-violet-500 shadow-sm bg-violet-50/40 dark:bg-violet-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Receita por Lead</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{formatCurrency(recPorLeadCarrinho)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Faturamento ÷ carrinhos captados</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-rose-400 shadow-sm bg-rose-50/40 dark:bg-rose-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Não Convertidos</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{naoConvCarrinho}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{totalEntCarrinho > 0 ? formatPercent(100 - taxaCarrinho) : '—'} dos carrinhos perdidos</p>
-                              </CardContent>
-                            </Card>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoCarrinho)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
+                            </div>
+                            <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadCarrinho)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ carrinhos captados</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
+                              <p className="text-2xl font-bold text-white">{naoConvCarrinho}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{totalEntCarrinho > 0 ? formatPercent(100 - taxaCarrinho) : '—'} dos carrinhos perdidos</p>
+                            </div>
                           </div>
                           </div>
                         </div>
@@ -1145,56 +1664,42 @@ export function DashboardComercial() {
                       const naoConvSocial     = leadsSocial - vendidosSocial;
                       const recPorLeadSocial  = leadsSocial > 0 ? faturamentoSocial / leadsSocial : 0;
                       return (
-                        <div className="rounded-xl bg-white border border-slate-200 shadow-md p-5 space-y-4">
-                          <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Social (WhatsApp)</p>
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Social (WhatsApp)</p>
                           <div className="space-y-3">
-                          {/* Linha 1 */}
                           <div className="grid grid-cols-3 gap-3">
-                            <Card className="border-l-4 border-l-emerald-500 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Leads Captados</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{leadsSocial}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Entradas no período</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-green-600 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Taxa Conversão</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-green-700 dark:text-green-300">{formatPercent(taxaSocial)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{vendidosSocial} convertidos</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-teal-500 shadow-sm">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ticket Médio</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-teal-700 dark:text-teal-300">{formatCurrency(ticketSocial)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Por lead convertido</p>
-                              </CardContent>
-                            </Card>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
+                              <p className="text-2xl font-bold text-white">{leadsSocial}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Entradas no período</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
+                              <p className="text-2xl font-bold text-white">{formatPercent(taxaSocial)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{vendidosSocial} convertidos</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(ticketSocial)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Por lead convertido</p>
+                            </div>
                           </div>
-                          {/* Linha 2 */}
                           <div className="grid grid-cols-3 gap-3">
-                            <Card className="border-l-4 border-l-emerald-400 shadow-md bg-emerald-50/40 dark:bg-emerald-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Total</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-emerald-800 dark:text-emerald-200">{formatCurrency(faturamentoSocial)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Recuperado no período</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-violet-500 shadow-sm bg-violet-50/40 dark:bg-violet-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Receita por Lead</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-violet-700 dark:text-violet-300">{formatCurrency(recPorLeadSocial)}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">Faturamento ÷ leads captados</p>
-                              </CardContent>
-                            </Card>
-                            <Card className="border-l-4 border-l-rose-400 shadow-sm bg-rose-50/40 dark:bg-rose-950/20">
-                              <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Não Convertidos</CardTitle></CardHeader>
-                              <CardContent className="pt-0">
-                                <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{naoConvSocial}</div>
-                                <p className="text-[11px] text-muted-foreground mt-0.5">{leadsSocial > 0 ? formatPercent(100 - taxaSocial) : '—'} dos leads perdidos</p>
-                              </CardContent>
-                            </Card>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoSocial)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
+                            </div>
+                            <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadSocial)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ leads captados</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
+                              <p className="text-2xl font-bold text-white">{naoConvSocial}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{leadsSocial > 0 ? formatPercent(100 - taxaSocial) : '—'} dos leads perdidos</p>
+                            </div>
                           </div>
                           </div>
                         </div>
@@ -1212,61 +1717,47 @@ export function DashboardComercial() {
                       const recPorLeadTypeBot = leadsTypeBot > 0 ? faturamentoTypeBot / leadsTypeBot : 0;
 
                       return (
-                        <div key={tbMetric.tipo_de_lead_id} className="rounded-xl bg-white border border-slate-200 shadow-md p-5 space-y-4">
+                        <div key={tbMetric.tipo_de_lead_id} className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
                           <div className="flex items-center justify-between">
-                            <p className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">
                               {tbMetric.tipo_de_lead_nome} (TypeBot {tbMetric.id_type})
                             </p>
-                            <Badge variant="secondary" className="text-[10px]">Type ID: {tbMetric.id_type}</Badge>
+                            <Badge variant="secondary" className="text-[10px] bg-custom-700 text-white border-custom-600">Type ID: {tbMetric.id_type}</Badge>
                           </div>
                           <div className="space-y-3">
-                            {/* Linha 1 */}
                             <div className="grid grid-cols-3 gap-3">
-                              <Card className="border-l-4 border-l-blue-500 shadow-sm">
-                                <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Leads Captados</CardTitle></CardHeader>
-                                <CardContent className="pt-0">
-                                  <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">{leadsTypeBot}</div>
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">Entradas no período</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="border-l-4 border-l-cyan-600 shadow-sm">
-                                <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Taxa Conversão</CardTitle></CardHeader>
-                                <CardContent className="pt-0">
-                                  <div className="text-2xl font-bold text-cyan-700 dark:text-cyan-300">{formatPercent(taxaTypeBot)}</div>
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">{vendidosTypeBot} convertidos</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="border-l-4 border-l-indigo-500 shadow-sm">
-                                <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Ticket Médio</CardTitle></CardHeader>
-                                <CardContent className="pt-0">
-                                  <div className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{formatCurrency(ticketTypeBot)}</div>
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">Por lead convertido</p>
-                                </CardContent>
-                              </Card>
+                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
+                                <p className="text-2xl font-bold text-white">{leadsTypeBot}</p>
+                                <p className="text-[12px] text-custom-200 mt-0.5">Entradas no período</p>
+                              </div>
+                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
+                                <p className="text-2xl font-bold text-white">{formatPercent(taxaTypeBot)}</p>
+                                <p className="text-[12px] text-custom-200 mt-0.5">{vendidosTypeBot} convertidos</p>
+                              </div>
+                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
+                                <p className="text-2xl font-bold text-white">{formatCurrency(ticketTypeBot)}</p>
+                                <p className="text-[12px] text-custom-200 mt-0.5">Por lead convertido</p>
+                              </div>
                             </div>
-                            {/* Linha 2 */}
                             <div className="grid grid-cols-3 gap-3">
-                              <Card className="border-l-4 border-l-blue-400 shadow-md bg-blue-50/40 dark:bg-blue-950/20">
-                                <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Faturamento Total</CardTitle></CardHeader>
-                                <CardContent className="pt-0">
-                                  <div className="text-2xl font-bold text-blue-800 dark:text-blue-200">{formatCurrency(faturamentoTypeBot)}</div>
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">Recuperado no período</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="border-l-4 border-l-purple-500 shadow-sm bg-purple-50/40 dark:bg-purple-950/20">
-                                <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Receita por Lead</CardTitle></CardHeader>
-                                <CardContent className="pt-0">
-                                  <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">{formatCurrency(recPorLeadTypeBot)}</div>
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">Faturamento ÷ leads captados</p>
-                                </CardContent>
-                              </Card>
-                              <Card className="border-l-4 border-l-rose-400 shadow-sm bg-rose-50/40 dark:bg-rose-950/20">
-                                <CardHeader className="pb-1"><CardTitle className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Não Convertidos</CardTitle></CardHeader>
-                                <CardContent className="pt-0">
-                                  <div className="text-2xl font-bold text-rose-700 dark:text-rose-300">{naoConvTypeBot}</div>
-                                  <p className="text-[11px] text-muted-foreground mt-0.5">{leadsTypeBot > 0 ? formatPercent(100 - taxaTypeBot) : '—'} dos leads perdidos</p>
-                                </CardContent>
-                              </Card>
+                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
+                                <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoTypeBot)}</p>
+                                <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
+                              </div>
+                              <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
+                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
+                                <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadTypeBot)}</p>
+                                <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ leads captados</p>
+                              </div>
+                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
+                                <p className="text-2xl font-bold text-white">{naoConvTypeBot}</p>
+                                <p className="text-[12px] text-custom-200 mt-0.5">{leadsTypeBot > 0 ? formatPercent(100 - taxaTypeBot) : '—'} dos leads perdidos</p>
+                              </div>
                             </div>
                           </div>
                         </div>
@@ -1275,86 +1766,79 @@ export function DashboardComercial() {
 
                     {/* ── RANKINGS por responsável ─────────────────────────────── */}
                     <div className="flex items-center gap-2 pt-1">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-2">Rankings</span>
-                      <div className="h-px flex-1 bg-border" />
+                      <div className="h-px flex-1 bg-custom-600" />
+                      <span className="text-xs font-semibold uppercase tracking-widest text-custom-200 px-2">Rankings</span>
+                      <div className="h-px flex-1 bg-custom-600" />
                     </div>
                     <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      <Card className="border shadow-md">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Convertidos PIX por responsável</CardTitle>
-                          <p className="text-xs text-muted-foreground">Ranking por volume de conversão no período.</p>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
+                        <p className="text-base font-bold text-white mb-0.5">Convertidos PIX por responsável</p>
+                        <p className="text-xs text-custom-200 mb-3">Ranking por volume de conversão no período.</p>
+                        <div className="space-y-2">
                           {pixConvertedByResponsavel.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">Nenhuma conversão encontrada.</p>
+                            <p className="text-sm text-custom-200">Nenhuma conversão encontrada.</p>
                           ) : (
                             pixConvertedByResponsavel.map((row, idx) => (
-                              <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-md border bg-muted/10 px-2.5 py-2 hover:bg-muted/20 transition-colors">
+                              <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-xl border border-custom-600 bg-custom-900/50 px-2.5 py-2 hover:bg-custom-700/40 transition-colors">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-medium truncate">{row.responsavel_nome}</span>
-                                  <span className="text-sm font-bold">{row.total_convertidos}</span>
+                                  <span className="text-sm font-medium text-white truncate">{row.responsavel_nome}</span>
+                                  <span className="text-sm font-bold text-white">{row.total_convertidos}</span>
                                 </div>
-                                <div className="mt-1 text-[11px] text-muted-foreground flex items-center justify-between gap-2">
+                                <div className="mt-1 text-[12px] text-custom-200 flex items-center justify-between gap-2">
                                   <span>{formatCurrency(row.valor_total_convertido)}</span>
                                   <span>Ticket: {formatCurrency(row.ticket_medio_convertido)}</span>
                                 </div>
                               </div>
                             ))
                           )}
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
 
-                      <Card className="border shadow-md">
-                        <CardHeader className="pb-2">
-                          <CardTitle className="text-base">Convertidos Carrinho Ab por responsável</CardTitle>
-                          <p className="text-xs text-muted-foreground">Ranking por volume de conversão no período.</p>
-                        </CardHeader>
-                        <CardContent className="space-y-2">
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
+                        <p className="text-base font-bold text-white mb-0.5">Convertidos Carrinho Ab por responsável</p>
+                        <p className="text-xs text-custom-200 mb-3">Ranking por volume de conversão no período.</p>
+                        <div className="space-y-2">
                           {carrinhoConvertedByResponsavel.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">Nenhuma conversão de Carrinho Ab encontrada no período.</p>
+                            <p className="text-sm text-custom-200">Nenhuma conversão de Carrinho Ab encontrada no período.</p>
                           ) : (
                             carrinhoConvertedByResponsavel.map((row, idx) => (
-                              <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-md border bg-muted/10 px-2.5 py-2 hover:bg-muted/20 transition-colors">
+                              <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-xl border border-custom-600 bg-custom-900/50 px-2.5 py-2 hover:bg-custom-700/40 transition-colors">
                                 <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-medium truncate">{row.responsavel_nome}</span>
-                                  <span className="text-sm font-bold">{row.total_convertidos}</span>
+                                  <span className="text-sm font-medium text-white truncate">{row.responsavel_nome}</span>
+                                  <span className="text-sm font-bold text-white">{row.total_convertidos}</span>
                                 </div>
-                                <div className="mt-1 text-[11px] text-muted-foreground flex items-center justify-between gap-2">
+                                <div className="mt-1 text-[12px] text-custom-200 flex items-center justify-between gap-2">
                                   <span>{formatCurrency(row.valor_total_convertido)}</span>
                                   <span>Ticket: {formatCurrency(row.ticket_medio_convertido)}</span>
                                 </div>
                               </div>
                             ))
                           )}
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     </div>
 
                     {/* ── GRÁFICOS DIÁRIOS ─────────────────────────────────────── */}
                     <div className="flex items-center gap-2 pt-1">
-                      <div className="h-px flex-1 bg-border" />
-                      <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground px-2">Evolução diária</span>
-                      <div className="h-px flex-1 bg-border" />
+                      <div className="h-px flex-1 bg-custom-600" />
+                      <span className="text-xs font-semibold uppercase tracking-widest text-custom-200 px-2">Evolução diária</span>
+                      <div className="h-px flex-1 bg-custom-600" />
                     </div>
                     <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
                       {/* PIX diário */}
-                      <Card className="border shadow-md">
-                        <CardHeader>
-                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                            <CardTitle className="text-base">PIX diário</CardTitle>
-                            <div className="flex items-center gap-1">
-                              <Button type="button" size="sm" variant={pixDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('linha')}>Linha</Button>
-                              <Button type="button" size="sm" variant={pixDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('barras')}>Barras</Button>
-                              <Button type="button" size="sm" variant={pixDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('pizza')}>Pizza</Button>
-                            </div>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
+                          <p className="text-base font-bold text-white">PIX diário</p>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" size="sm" variant={pixDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('linha')}>Linha</Button>
+                            <Button type="button" size="sm" variant={pixDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('barras')}>Barras</Button>
+                            <Button type="button" size="sm" variant={pixDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('pizza')}>Pizza</Button>
                           </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="mb-2 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground flex flex-wrap gap-x-4 gap-y-1">
-                            <span><strong className="text-foreground">Média/dia:</strong> {mediaEntradasDia}</span>
-                            <span><strong className="text-foreground">Pico:</strong> {Math.max(0, ...pixDailySeries.map((r) => Number(r.total_entradas || 0)))}</span>
-                          </div>
+                        </div>
+                        <div className="mb-2 rounded-xl border border-custom-600 bg-custom-900/50 px-3 py-2 text-xs text-custom-200 flex flex-wrap gap-x-4 gap-y-1">
+                          <span><strong className="text-white">Média/dia:</strong> {mediaEntradasDia}</span>
+                          <span><strong className="text-white">Pico:</strong> {Math.max(0, ...pixDailySeries.map((r) => Number(r.total_entradas || 0)))}</span>
+                        </div>
                           <div className="h-[200px]">
                             {pixDailyChartStyle === 'linha' && (
                               <ResponsiveContainer width="100%" height="100%">
@@ -1414,23 +1898,19 @@ export function DashboardComercial() {
                               </ResponsiveContainer>
                             )}
                           </div>
-                        </CardContent>
-                      </Card>
+                      </div>
 
                       {/* Carrinho diário */}
-                      <Card className="border shadow-md">
-                        <CardHeader>
-                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                            <CardTitle className="text-base">Carrinho diário</CardTitle>
-                            <div className="flex items-center gap-1">
-                              <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('linha')}>Linha</Button>
-                              <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('barras')}>Barras</Button>
-                              <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('pizza')}>Pizza</Button>
-                            </div>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
+                          <p className="text-base font-bold text-white">Carrinho diário</p>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('linha')}>Linha</Button>
+                            <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('barras')}>Barras</Button>
+                            <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('pizza')}>Pizza</Button>
                           </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="h-[244px]">
+                        </div>
+                        <div className="h-[244px]">
                             {carrinhoDailyChartStyle === 'linha' && (
                               <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={carrinhoDailyChartData}>
@@ -1488,24 +1968,20 @@ export function DashboardComercial() {
                                 </PieChart>
                               </ResponsiveContainer>
                             )}
-                          </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
 
                       {/* WhatsApp diário */}
-                      <Card className="border shadow-md">
-                        <CardHeader>
-                          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-                            <CardTitle className="text-base">WhatsApp/Social diário</CardTitle>
-                            <div className="flex items-center gap-1">
-                              <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('linha')}>Linha</Button>
-                              <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('barras')}>Barras</Button>
-                              <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('pizza')}>Pizza</Button>
-                            </div>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
+                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
+                          <p className="text-base font-bold text-white">WhatsApp/Social diário</p>
+                          <div className="flex items-center gap-1">
+                            <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('linha')}>Linha</Button>
+                            <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('barras')}>Barras</Button>
+                            <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('pizza')}>Pizza</Button>
                           </div>
-                        </CardHeader>
-                        <CardContent>
-                          <div className="h-[244px]">
+                        </div>
+                        <div className="h-[244px]">
                             {whatsappDailyChartStyle === 'linha' && (
                               <ResponsiveContainer width="100%" height="100%">
                                 <AreaChart data={whatsappDailyChartData}>
@@ -1563,9 +2039,8 @@ export function DashboardComercial() {
                                 </PieChart>
                               </ResponsiveContainer>
                             )}
-                          </div>
-                        </CardContent>
-                      </Card>
+                        </div>
+                      </div>
                     </div>
                   </>
                 );

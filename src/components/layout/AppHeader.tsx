@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { SyntheticEvent } from 'react';
 import SearchPanel from '@/components/layout/SearchPanel';
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { NotificacoesDropdown } from '@/components/notifications/NotificacoesDropdown';
 
 interface AppHeaderProps {
@@ -22,6 +22,8 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
   const { toast } = useToast();
   const canNavigateHome = hasPermissao ? hasPermissao(56) : ((permissoes || []).includes(56));
   const navigate = useNavigate();
+  const location = useLocation();
+  const isDashboardComercial = location.pathname === '/dashboard-comercial';
 
   const [searchOpen, setSearchOpen] = useState(false);
   const [navigationItems, setNavigationItems] = useState<Array<{ id: string; label: string }>>([]);
@@ -110,8 +112,10 @@ export function AppHeader({ onMenuClick, activeModule, onModuleChange }: AppHead
 
   return (
     <header
-      className="relative h-16 border-b px-4 flex items-center shadow-lg"
-      style={{ background: 'var(--gradient-primary)', borderBottomColor: 'rgba(0,0,0,0.06)' }}
+      className="relative h-16 border-b px-4 flex items-center"
+      style={isDashboardComercial
+        ? { background: 'hsl(var(--custom-900))', borderBottomColor: 'rgba(255, 255, 255, 0.13)', boxShadow: '0 2px 4px rgba(0, 0, 0, 0)' }
+        : { background: 'var(--gradient-primary)', borderBottomColor: 'rgba(0,0,0,0.06)', boxShadow: '1px 1px 12px rgba(0, 0, 0, 0.25)' }}
     >
       <div className="flex items-center gap-4">
         <Button

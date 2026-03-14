@@ -6,10 +6,12 @@ import { HiMiniUsers } from 'react-icons/hi2'
 import { FaListUl } from 'react-icons/fa'
 import { TbTruckReturn } from 'react-icons/tb'
 import { BarChart3, Tags } from 'lucide-react'
+import IconDashboard from '@/components/icons/IconDashboard';
+
 
 const items = [
   { id: 'pedidos', label: 'Lista de Pedidos', icon: FaListUl },
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
+  { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
   { id: 'leads', label: 'Lista de Leads', icon: HiMiniUsers },
   { id: 'tipos-lead', label: 'Tipos de Lead', icon: Tags },
   { id: 'cancelados', label: 'Pedidos Cancelados', icon: GoXCircleFill },
@@ -23,6 +25,8 @@ export function ComercialSidebar() {
   const params = new URLSearchParams(location.search)
   const view = params.get('view') || 'pedidos'
   const [isExpanded, setIsExpanded] = useState(false)
+
+  const isDashboard = location.pathname === '/dashboard-comercial';
 
   const handleClick = (id: string) => {
     // Special-case: open the dedicated Leads page
@@ -71,9 +75,11 @@ export function ComercialSidebar() {
   // Sidebar begins below header because it's rendered inside the page's main area
   return (
     <aside 
-      className={`hidden lg:block relative h-[calc(100vh-4rem)] transition-all duration-300 ease-in-out bg-[hsl(var(--secondary-background))] shadow-md ${
-        isExpanded ? 'w-60' : 'w-16'
-      }`}
+      className={`hidden lg:block relative h-[calc(100vh-4rem)] border-r transition-all duration-300 ease-in-out  ${
+        isDashboard 
+        ? 'bg-custom-900 border-white/10 shadow-none' 
+        : 'bg-[hsl(var(--secondary-background))] shadow-md'
+      } ${isExpanded ? 'w-60' : 'w-16'}`}
       onMouseEnter={() => setIsExpanded(true)}
       onMouseLeave={() => setIsExpanded(false)}
       onFocus={() => setIsExpanded(true)}
@@ -115,13 +121,15 @@ export function ComercialSidebar() {
                     className={`w-full flex items-center gap-3 text-sm rounded-md px-3 py-2.5 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-custom-400 ${
                       isActive
                         ? 'bg-custom-600 text-white font-medium'
+                        : isDashboard
+                        ? 'text-slate-300 hover:bg-custom-800 hover:text-white'
                         : 'text-slate-700 hover:bg-custom-50 hover:text-custom-700'
                     }`}
                     aria-current={isActive ? 'page' : undefined}
                     title={!isExpanded ? it.label : undefined}
                   >
                     <span className={`flex-shrink-0 p-1 rounded-md ${isActive ? 'bg-white/20' : 'bg-transparent'}`}>
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-custom-600'}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : isDashboard ? 'text-custom-400' : 'text-custom-600'}`} />
                     </span>
                     <span 
                       className={`flex-1 text-left whitespace-nowrap transition-all duration-300 ${
@@ -145,7 +153,7 @@ export function ComercialSidebar() {
       <div
         aria-hidden
         className="pointer-events-none absolute top-0 bottom-0 right-0 w-6 z-20"
-        style={{ boxShadow: '8px 0 24px -8px rgba(2,6,23,0.08)' }}
+        style={{ boxShadow: '8px 0 24px -8px rgba(2, 6, 23, 0)' }}
       />
     </aside>
   )

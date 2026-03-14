@@ -160,3 +160,12 @@ All colors MUST be HSL.
 .notification-toast-custom {
   animation: slide-in-notification 0.3s ease-out, pulse-border-notification 2s ease-in-out 0.3s infinite;
 }
+
+/* Ocultar scrollbar mantendo a rolagem funcional */
+.hide-scrollbar {
+  scrollbar-width: none;        /* Firefox */
+  -ms-overflow-style: none;     /* IE / Edge legado */
+}
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;                /* Chrome / Safari / Opera */
+}
