@@ -12,6 +12,7 @@ import { useAuth } from '@/hooks/useAuth';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import IconDashboard from '@/components/icons/IconDashboard';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { ResponsiveContainer, AreaChart, Area, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 type PixMetricsRow = {
@@ -105,6 +106,15 @@ type EntradaValoresUpsellMetricsRow = {
   menor_upsell: number;
 };
 
+type TopProdutosUpsellRow = {
+  produto_id: string;
+  produto_nome: string;
+  total_inclusoes: number;
+  quantidade_total: number;
+  valor_total: number;
+  ticket_medio: number;
+};
+
 type DailyChartStyle = 'linha' | 'barras' | 'pizza';
 
 export function DashboardComercial() {
@@ -122,6 +132,7 @@ export function DashboardComercial() {
   const [yampiUpsellMetrics, setYampiUpsellMetrics] = useState<YampiUpsellMetricsRow | null>(null);
   const [yampiUpsellIncrementoMetrics, setYampiUpsellIncrementoMetrics] = useState<YampiUpsellIncrementoRow | null>(null);
   const [entradaValoresUpsellMetrics, setEntradaValoresUpsellMetrics] = useState<EntradaValoresUpsellMetricsRow | null>(null);
+  const [topProdutosUpsell, setTopProdutosUpsell] = useState<TopProdutosUpsellRow[]>([]);
   const [custoComercial, setCustoComercial] = useState<number>(0);
   const [loadingPixDashboard, setLoadingPixDashboard] = useState(false);
   const [pixDashboardError, setPixDashboardError] = useState<string | null>(null);
@@ -165,6 +176,7 @@ export function DashboardComercial() {
           { data: custoData, error: custoError },
           { data: upsellIncrementoData, error: upsellIncrementoError },
           { data: entradaValoresUpsellData, error: entradaValoresUpsellError },
+          { data: topProdutosData, error: topProdutosError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -236,6 +248,13 @@ export function DashboardComercial() {
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
           }),
+          (supabase as any).rpc('comercial_get_top_produtos_upsell', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+            p_limit: 3,
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -250,6 +269,7 @@ export function DashboardComercial() {
         if (custoError) throw custoError;
         if (upsellIncrementoError) throw upsellIncrementoError;
         if (entradaValoresUpsellError) console.warn('[EntradaValores] RPC error:', entradaValoresUpsellError);
+        if (topProdutosError) console.warn('[TopProdutos] RPC error:', topProdutosError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -264,6 +284,7 @@ export function DashboardComercial() {
         setCustoComercial(Number(custoData?.[0]?.custo_total ?? 0));
         setYampiUpsellIncrementoMetrics((upsellIncrementoData?.[0] || null) as YampiUpsellIncrementoRow | null);
         setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
+        setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
       } catch (err: any) {
         if (!mounted) return;
         setPixDashboardError(err?.message || String(err));
@@ -279,6 +300,7 @@ export function DashboardComercial() {
         setCustoComercial(0);
         setYampiUpsellIncrementoMetrics(null);
         setEntradaValoresUpsellMetrics(null);
+        setTopProdutosUpsell([]);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -639,14 +661,14 @@ export function DashboardComercial() {
                             {/* Barra dividida */}
                             <div className="space-y-1.5">
                               <div className="flex items-center justify-between text-[11px] font-semibold">
-                                <span style={{ color: '#7c3aed' }}>
+                                <span className="text-white">
                                   Site {formatCurrency(faturamentoSite)} — {formatPercent(pctSite)}
                                 </span>
-                                <span style={{ color: '#059669' }}>
+                                <span className="text-white">
                                   Comercial {formatCurrency(faturamentoComercial)} — {formatPercent(pctComercial)}
                                 </span>
                               </div>
-                              <div className="h-5 w-full rounded-full bg-custom-700 overflow-hidden flex">
+                              <div className="h-5 w-full rounded-full bg-custom-700 overflow-hidden flex border border-white">
                                 <div
                                   className="h-full transition-all duration-500 rounded-l-full"
                                   style={{ backgroundColor: '#7c3aed', width: `${pctSite}%` }}
@@ -663,7 +685,12 @@ export function DashboardComercial() {
 
                           {/* ── Coluna esquerda: faturamentos ── */}
                           <div className="space-y-3">
-                            <p className="text-xs font-bold uppercase tracking-widest text-white mb-3">Marketing + Comercial</p>
+                            <div className="flex items-center gap-3 mb-3">
+                              <p className="text-xs font-bold uppercase tracking-widest text-white">Marketing + Comercial</p>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-700/30 border border-amber-600/40 text-amber-400">
+                                {formatPercent(participacao)} comercial
+                              </span>
+                            </div>
 
                             <div className="space-y-2.5">
                               <div className="flex items-center justify-between text-sm">
@@ -673,10 +700,6 @@ export function DashboardComercial() {
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-custom-200">Faturamento Comercial</span>
                                 <span className="font-bold" style={{ color: '#059669' }}>{formatCurrency(faturamentoComercial)}</span>
-                              </div>
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="text-custom-200">Participação Comercial</span>
-                                <span className="font-bold" style={{ color: '#b45309' }}>{formatPercent(participacao)}</span>
                               </div>
                             </div>
 
@@ -690,11 +713,36 @@ export function DashboardComercial() {
                           <div className="space-y-4">
                             <p className="text-xs font-bold uppercase tracking-widest text-custom-200">Receita Incremental Comercial</p>
                             <div className="flex items-end gap-4 flex-wrap">
-                              <span className="text-4xl font-extrabold text-white leading-none">{formatCurrency(receitaIncremental)}</span>
+                              <UITooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="text-4xl font-extrabold text-white leading-none cursor-help">{formatCurrency(receitaIncremental)}</span>
+                                </TooltipTrigger>
+                                <TooltipContent className="bg-gray-900 border-gray-700 text-xs max-w-xs">
+                                  <div className="space-y-1">
+                                    <p className="font-semibold text-violet-400">Receita Incremental Comercial</p>
+                                    <p className="text-gray-300">Upsell + Rec PIX + Rec Carrinho + Social</p>
+                                    <p className="text-gray-400 text-[10px] mt-1">
+                                      {formatCurrency(faturamentoUpsell)} + {formatCurrency(faturamentoPix)} + {formatCurrency(faturamentoCarrinho)} + {formatCurrency(faturamentoSocial)}
+                                    </p>
+                                  </div>
+                                </TooltipContent>
+                              </UITooltip>
                               {roi > 0 && (
-                                <span className="flex items-center gap-1 rounded-full bg-primary/20 border border-primary/40 px-3 py-1 text-sm font-bold text-white">
-                                  ROI {roi.toFixed(1)}x
-                                </span>
+                                <UITooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="cursor-help flex items-center gap-1 rounded-full bg-primary/20 border border-primary/40 px-3 py-1 text-sm font-bold text-white">
+                                      ROI {roi.toFixed(1)}x
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent className="bg-gray-900 border-gray-700 text-xs max-w-xs">
+                                    <div className="space-y-1">
+                                      <p className="font-semibold text-violet-400">ROI do Comercial</p>
+                                      <p className="text-gray-300">Receita Incremental ÷ Custo Proporcional ao Período</p>
+                                      <p className="text-gray-400 text-[10px] mt-1">{formatCurrency(receitaIncremental)} ÷ {formatCurrency(custoAjustado)} = {roi.toFixed(2)}x</p>
+                                      <p className="text-gray-500 text-[10px]">Custo rateado: {custoComercial > 0 ? `R$${custoComercial.toFixed(0)}/mês ÷ dias do mês × ${diasPeriodo} dias` : 'sem custo cadastrado'}</p>
+                                    </div>
+                                  </TooltipContent>
+                                </UITooltip>
                               )}
                             </div>
                             <div className="space-y-2 pt-1">
@@ -705,7 +753,18 @@ export function DashboardComercial() {
                                     <span className="text-custom-200 truncate">{item.label}</span>
                                   </div>
                                   <div className="flex items-center gap-3 flex-shrink-0">
-                                    <span className="font-bold" style={{ color: item.color }}>{formatPercent(item.pct)}</span>
+                                    <UITooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="font-bold cursor-help" style={{ color: item.color }}>{formatPercent(item.pct)}</span>
+                                      </TooltipTrigger>
+                                      <TooltipContent className="bg-gray-900 border-gray-700 text-xs max-w-xs">
+                                        <div className="space-y-1">
+                                          <p className="font-semibold" style={{ color: item.color }}>Participação — {item.label}</p>
+                                          <p className="text-gray-300">Faturamento {item.label} ÷ Receita Incremental × 100</p>
+                                          <p className="text-gray-400 text-[10px] mt-1">{formatCurrency(item.value)} ÷ {formatCurrency(receitaIncremental)} × 100 = {formatPercent(item.pct)}</p>
+                                        </div>
+                                      </TooltipContent>
+                                    </UITooltip>
                                     <span className="text-custom-200 text-xs w-24 text-right">{formatCurrency(item.value)}</span>
                                   </div>
                                 </div>
@@ -768,8 +827,8 @@ export function DashboardComercial() {
                       );
                     })()}
 
-                    {/* ── RESUMO RECUPERAÇÃO: PIX + CARRINHO ───────────────── */}
-                    {(() => {
+                    {/* ── RESUMO RECUPERAÇÃO: removido – mantido apenas o formato compacto abaixo ── */}
+                    {false && (() => {
                       const _pixTotal    = Number(pixMetrics?.total_periodo ?? 0);
                       const _pixRec      = Number(pixMetrics?.total_vendidos_periodo ?? 0);
                       return (
@@ -893,8 +952,8 @@ export function DashboardComercial() {
 
 
 
-                    {/* == LINHA 2: PIX detalhado + WhatsApp == */}
-                    {(() => {
+                    {/* == LINHA 2: PIX detalhado + WhatsApp — removido, substituído pelo formato compacto == */}
+                    {false && (() => {
                       const _leadsS   = Number(whatsappMetrics?.total_periodo ?? 0);
                       const _vendS    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
                       const _naoConvS = _leadsS - _vendS;
@@ -1061,6 +1120,83 @@ export function DashboardComercial() {
                         </div>
                       );
                     })()}
+
+                    {/* ── UPSELL YAMPI: 6 cards ────────────────────────────────── */}
+                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Upsell Yampi</p>
+                      <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+                        {/* Pedidos YAMPI */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <ShoppingCart className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Pedidos YAMPI</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{totalPedidosYampi}</p>
+                          </div>
+                        </div>
+                        {/* Pedidos c/ UpSell */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <CheckCircle2 className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Pedidos c/ UpSell</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0}</p>
+                          </div>
+                        </div>
+                        {/* Taxa UpSell */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <TrendingUp className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Taxa UpSell</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaUpsell)}</p>
+                          </div>
+                        </div>
+                        {/* Ticket Médio UpSell */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <CreditCard className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
+                            <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketUpsell)}</p>
+                            <p className="text-[10px] text-white/50 leading-tight">Sem: {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</p>
+                          </div>
+                        </div>
+                        {/* Faturamento UpSell */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                            <DollarSign className="h-4 w-4 text-primary" />
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-[12px] text-custom-200 leading-tight">Faturamento UpSell</p>
+                            <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoUpsell)}</p>
+                          </div>
+                        </div>
+                        {/* Top 3 Produtos */}
+                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
+                          <p className="text-[12px] text-custom-200 leading-tight mb-2">Top 3 Produtos</p>
+                          {topProdutosUpsell.length > 0 ? (
+                            <div className="space-y-1">
+                              {topProdutosUpsell.map((produto, idx) => (
+                                <div key={produto.produto_id} className="flex items-start gap-1.5">
+                                  <span className="text-[10px] font-bold text-primary flex-shrink-0">{idx + 1}°</span>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[10px] text-white truncate">{produto.produto_nome}</p>
+                                    <p className="text-[9px] text-white/60">{produto.total_inclusoes}x · {formatCurrency(produto.valor_total)}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-white/50">Sem dados</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
 
                     {/* ── REC PIX: linha 5 cards ───────────────────────────────── */}
                     {(() => {
@@ -1246,477 +1382,6 @@ export function DashboardComercial() {
                       );
                     })()}
 
-                    {/* ── ORIGEM + RANKING + ROI ───────────────────────────────── */}
-                    {(() => {
-                      const roi = custoComercial > 0 ? receitaIncremental / custoComercial : 0;
-                      const topVendedoras = [...pixConvertedByResponsavel]
-                        .sort((a, b) => Number(b.valor_total_convertido) - Number(a.valor_total_convertido))
-                        .slice(0, 5);
-                      const maxVal = topVendedoras.length > 0 ? Number(topVendedoras[0].valor_total_convertido) : 1;
-                      const initials = (name: string) => name?.split(' ').slice(0, 2).map((w: string) => w[0]).join('').toUpperCase() ?? '?';
-                      return (
-                        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                          {/* Origem da Receita Comercial */}
-                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
-                            <p className="text-[13px] font-bold uppercase tracking-widest text-white">Origem da Receita Comercial</p>
-                            <div className="flex items-center gap-3">
-                              <div className="relative h-[110px] w-[110px] flex-shrink-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <PieChart>
-                                    <Pie data={origemData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={36} outerRadius={52} paddingAngle={3}>
-                                      {origemData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.color} />
-                                      ))}
-                                    </Pie>
-                                    <Tooltip
-                                      wrapperStyle={{ zIndex: 50 }}
-                                      contentStyle={{ borderRadius: 8, fontSize: 12, background: '#1e1b4b', border: 'none', color: '#fff' }}
-                                      formatter={(value: any) => [formatCurrency(Number(value)), '']}
-                                      labelFormatter={() => ''}
-                                    />
-                                  </PieChart>
-                                </ResponsiveContainer>
-                              </div>
-                              <div className="flex-1 space-y-1.5">
-                                {origemData.map((entry) => {
-                                  const pct = receitaIncremental > 0 ? Math.round((entry.value / receitaIncremental) * 100) : 0;
-                                  return (
-                                    <div key={entry.name} className="flex items-center justify-between gap-2">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                                        <span className="text-[12px] text-custom-200 truncate">{entry.name}</span>
-                                      </div>
-                                      <span className="text-[12px] font-bold text-white flex-shrink-0">{pct}%</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Ranking Vendedoras */}
-                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
-                            <p className="text-[13px] font-bold uppercase tracking-widest text-white">Ranking Vendedoras</p>
-                            <div className="space-y-2">
-                              {topVendedoras.length === 0 ? (
-                                <p className="text-sm text-custom-200">Sem dados no período.</p>
-                              ) : (
-                                topVendedoras.map((row, idx) => {
-                                  const barPct = maxVal > 0 ? (Number(row.valor_total_convertido) / maxVal) * 100 : 0;
-                                  return (
-                                    <div key={idx} className="flex items-center gap-3">
-                                      <span className="text-[12px] font-bold text-custom-200 w-3 flex-shrink-0">{idx + 1}</span>
-                                      <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary text-white text-[11px] font-bold flex-shrink-0">
-                                        {initials(row.responsavel_nome ?? '?')}
-                                      </span>
-                                      <div className="flex-1 min-w-0">
-                                        <div className="flex items-center justify-between gap-1">
-                                          <span className="text-[12px] text-white font-medium truncate">{row.responsavel_nome}</span>
-                                          <span className="text-[12px] font-bold text-white flex-shrink-0">{formatCurrency(Number(row.valor_total_convertido))}</span>
-                                        </div>
-                                        <div className="h-1 w-full rounded-full bg-custom-700 overflow-hidden mt-0.5">
-                                          <div className="h-full rounded-full bg-primary" style={{ width: `${barPct}%` }} />
-                                        </div>
-                                      </div>
-                                    </div>
-                                  );
-                                })
-                              )}
-                            </div>
-                          </div>
-
-                          {/* ROI do Comercial */}
-                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 flex flex-col justify-between">
-                            <p className="text-[13px] font-bold uppercase tracking-widest text-white">ROI do Comercial</p>
-                            <div className="flex items-end justify-between gap-3 mt-3">
-                              <div>
-                                <div className="flex items-baseline gap-1">
-                                  <span className="text-5xl font-extrabold text-white">{roi > 0 ? roi.toFixed(1) : '—'}</span>
-                                  {roi > 0 && <span className="text-2xl font-bold text-white">x</span>}
-                                  {roi > 1 && <TrendingUp className="h-6 w-6 text-primary ml-1" />}
-                                </div>
-                                <div className="mt-3 space-y-1">
-                                  <p className="text-[13px] text-custom-200">Receita: <span className="font-bold text-white">{formatCurrency(receitaIncremental)}</span></p>
-                                  <p className="text-[13px] text-custom-200">Custo: <span className="font-bold text-white">{formatCurrency(custoComercial)}</span></p>
-                                </div>
-                              </div>
-                              <div className="flex items-end gap-1 pb-1">
-                                <div className="w-3 rounded-t bg-primary/40" style={{ height: '28px' }} />
-                                <div className="w-3 rounded-t bg-primary/70" style={{ height: '44px' }} />
-                                <div className="w-3 rounded-t bg-primary" style={{ height: '60px' }} />
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* ── LINHA 1: Faturamento ─────────────────────────────────── */}
-                    <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                      <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
-                        <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Site</p>
-                        <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoSite)}</p>
-                        <p className="text-[12px] text-custom-200 mt-0.5">Total Yampi no período</p>
-                      </div>
-                      <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
-                        <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Comercial</p>
-                        <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoComercial)}</p>
-                        <p className="text-[12px] text-custom-200 mt-0.5">PIX + Carrinho + Social</p>
-                      </div>
-                      <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
-                        <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
-                        <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoTotal)}</p>
-                        <p className="text-[12px] text-custom-200 mt-0.5">Site + Comercial</p>
-                      </div>
-                      <div className="rounded-xl bg-primary border border-primary px-4 py-3">
-                        <p className="text-[11px] text-white/80 uppercase tracking-wide">Participação Comercial</p>
-                        <p className="text-2xl font-bold text-white">{formatPercent(participacao)}</p>
-                        <p className="text-[12px] text-white/70 mt-0.5">Comercial ÷ Total</p>
-                      </div>
-                    </div>
-
-
-
-                    {/* ── GRÁFICOS CENTRAIS ─────────────────────────────────────── */}
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      {/* Origem da Receita Comercial */}
-                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 overflow-hidden flex flex-col">
-                        <div className="pb-1 pt-5 px-6">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <p className="text-base font-bold text-white">Origem da Receita Comercial</p>
-                              <p className="text-xs text-custom-200 mt-0.5">Distribuição por canal no período</p>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[14px] text-custom-200 uppercase tracking-wider">Total</div>
-                              <div className="text-lg font-bold text-white">{formatCurrency(receitaIncremental)}</div>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="px-6 pb-6 pt-2 flex-1 flex flex-col justify-center">
-                          {origemData.length === 0 ? (
-                            <p className="text-sm text-white py-8 text-center">Sem dados no período.</p>
-                          ) : (
-                            <div className="flex flex-col lg:flex-row items-center gap-6 mt-2">
-                              {/* Donut chart */}
-                              <div className="relative h-[220px] w-[220px] flex-shrink-0">
-                                <ResponsiveContainer width="100%" height="100%">
-                                  <PieChart>
-                                    <defs>
-                                      <filter id="pie-shadow-origem" x="-20%" y="-20%" width="140%" height="140%">
-                                        <feDropShadow dx="0" dy="4" stdDeviation="5" floodColor="rgba(0,0,0,0.28)" />
-                                      </filter>
-                                      {origemData.map((entry, index) => (
-                                        <linearGradient key={index} id={`origem-pie-grad-${index}`} x1="0" y1="0" x2="0" y2="1">
-                                          <stop offset="0%" stopColor={entry.color} stopOpacity={0.62} />
-                                          <stop offset="100%" stopColor={entry.color} stopOpacity={1} />
-                                        </linearGradient>
-                                      ))}
-                                    </defs>
-                                    <Pie
-                                      data={origemData}
-                                      dataKey="value"
-                                      nameKey="name"
-                                      cx="50%"
-                                      cy="50%"
-                                      innerRadius={68}
-                                      outerRadius={100}
-                                      paddingAngle={3}
-                                      stroke="white" strokeWidth={2}
-                                      filter="url(#pie-shadow-origem)"
-                                    >
-                                      {origemData.map((_, index) => (
-                                        <Cell key={`origem-${index}`} fill={`url(#origem-pie-grad-${index})`} />
-                                      ))}
-                                    </Pie>
-                                    <Tooltip
-                                      wrapperStyle={{ zIndex: 50 }}
-                                      contentStyle={{ borderRadius: 8, fontSize: 13 }}
-                                      formatter={(value: any) => [formatCurrency(Number(value)), '']}
-                                      labelFormatter={() => ''}
-                                    />
-                                  </PieChart>
-                                </ResponsiveContainer>
-                                {/* Label central */}
-                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                                  <span className="text-[14px] text-custom-200 uppercase tracking-wider">Fontes</span>
-                                </div>
-                              </div>
-
-                              {/* Legenda aprimorada */}
-                              <div className="flex-1 space-y-3 w-full">
-                                {origemData
-                                  .slice()
-                                  .sort((a, b) => b.value - a.value)
-                                  .map((entry) => {
-                                    const pct = receitaIncremental > 0 ? (entry.value / receitaIncremental) * 100 : 0;
-                                    return (
-                                      <div key={entry.name} className="space-y-1.5">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-2.5 min-w-0">
-                                            <span className="h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: entry.color }} />
-                                            <span className="text-sm font-semibold text-white truncate">{entry.name}</span>
-                                          </div>
-                                          <div className="flex items-baseline gap-2 flex-shrink-0">
-                                            <span className="text-sm font-bold text-white">{formatCurrency(entry.value)}</span>
-                                            <span className="text-[14px] text-custom-200 w-10 text-right">{pct.toFixed(1)}%</span>
-                                          </div>
-                                        </div>
-                                        <div className="h-1.5 w-full rounded-full bg-custom-700 overflow-hidden">
-                                          <div
-                                            className="h-full rounded-full transition-all duration-700"
-                                            style={{ width: `${pct}%`, backgroundColor: entry.color }}
-                                          />
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Receita Incremental Comercial */}
-                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600">
-                        <div className="p-5">
-                          <p className="text-base font-bold text-white">Receita Incremental Comercial</p>
-                          <p className="text-xs text-custom-200">Quanto o comercial cria de dinheiro que não existiria sem a intervenção.</p>
-                        </div>
-                        <div className="px-5 pb-5 space-y-3">
-                          {[
-                            { label: 'Upsell',         value: faturamentoUpsell,  color: 'bg-violet-500', desc: `${totalPedidosYampi} ped × ${formatPercent(taxaUpsell)} × ${formatCurrency(ticketUpsell)}` },
-                            { label: '+ PIX Rec.',     value: faturamentoPix,     color: 'bg-blue-500',   desc: `${pixMetrics?.total_vendidos_periodo ?? 0} vendidos` },
-                            { label: '+ Carrinho Rec.',value: faturamentoCarrinho,color: 'bg-orange-500', desc: `${totalVendCarrinho} vendidos` },
-                            { label: '+ Social',       value: faturamentoSocial,  color: 'bg-emerald-500',desc: `${leadsSocial} leads` },
-                          ].map((item) => (
-                            <div key={item.label} className="flex items-center justify-between gap-3 rounded-xl border border-custom-600 bg-custom-900/50 px-3 py-2.5">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${item.color}`} />
-                                <div className="min-w-0">
-                                  <p className="text-sm font-semibold text-white">{item.label}</p>
-                                  <p className="text-[12px] text-custom-200">{item.desc}</p>
-                                </div>
-                              </div>
-                              <span className="text-sm font-bold text-white text-right">{formatCurrency(item.value)}</span>
-                            </div>
-                          ))}
-                          <div className="rounded-xl border-2 border-primary bg-primary/20 px-4 py-3 flex items-center justify-between">
-                            <span className="font-bold text-base text-white">Receita Incremental</span>
-                            <span className="text-xl font-bold text-primary">{formatCurrency(receitaIncremental)}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-
-                    {/* ── LINHA 2: Upsell ──────────────────────────────────────── */}
-                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Upsell Yampi</p>
-
-                      {/* Linha 1: métricas gerais */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Upsell</p>
-                          <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsell)}</p>
-                          <p className="text-[12px] text-custom-200 mt-0.5">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0} de {totalPedidosYampi} pedidos</p>
-                        </div>
-                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio Upsell</p>
-                          <p className="text-2xl font-bold text-white">{formatCurrency(ticketUpsell)}</p>
-                          <p className="text-[12px] text-custom-200 mt-0.5">Sem upsell: {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</p>
-                        </div>
-                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Upsell</p>
-                          <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoUpsell)}</p>
-                          <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsell)} × {formatCurrency(ticketUpsell)}</p>
-                        </div>
-                      </div>
-
-                      {/* Separador */}
-                      <div className="flex items-center gap-2">
-                        <div className="h-px flex-1 bg-custom-600" />
-                        <span className="text-[10px] font-semibold uppercase tracking-widest text-custom-200/60 px-2">Detalhamento por tipo</span>
-                        <div className="h-px flex-1 bg-custom-600" />
-                      </div>
-
-                      {/* Linha 2: Upsell puro vs Incremento puro vs Ambos vs Sem alteração */}
-                      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Up-sell (upgrade)</p>
-                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0}</p>
-                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_upsell_pct ?? 0)} dos pedidos</p>
-                          <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0)}</p>
-                          <p className="text-[11px] text-custom-200">Ticket após: {formatCurrency(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0)}</p>
-                        </div>
-                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Incremento (novo item)</p>
-                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_incremento ?? 0}</p>
-                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_incremento_pct ?? 0)} dos pedidos</p>
-                          <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_com_incremento ?? 0)}</p>
-                          <p className="text-[11px] text-custom-200">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_com_incremento ?? 0)}</p>
-                        </div>
-                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ambos</p>
-                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_ambos ?? 0}</p>
-                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_ambos_pct ?? 0)} dos pedidos</p>
-                          <p className="text-[11px] text-custom-200 mt-1">Upsell + novo item</p>
-                        </div>
-                        <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                          <p className="text-[11px] text-custom-200 uppercase tracking-wide">Sem alteração</p>
-                          <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_sem_alteracao ?? 0}</p>
-                          <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_sem_alteracao_pct ?? 0)} dos pedidos</p>
-                          <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_sem_alteracao ?? 0)}</p>
-                          <p className="text-[11px] text-custom-200">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_sem_alteracao ?? 0)}</p>
-                        </div>
-                      </div>
-                    </div>
-
-
-                    {/* ── PIX ──────────────────────────────────────────────────── */}
-                    {(() => {
-                      const leadsPix          = Number(pixMetrics?.total_periodo ?? 0);
-                      const vendidosPix       = Number(pixMetrics?.total_vendidos_periodo ?? 0);
-                      const naoConvPix        = leadsPix - vendidosPix;
-                      const recPorLeadPix     = leadsPix > 0 ? faturamentoPix / leadsPix : 0;
-                      return (
-                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Rec PIX</p>
-                          <div className="space-y-3">
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
-                              <p className="text-2xl font-bold text-white">{leadsPix}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Entradas no período</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
-                              <p className="text-2xl font-bold text-white">{formatPercent(taxaPix)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{vendidosPix} convertidos</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(ticketPix)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Por lead convertido</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoPix)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
-                            </div>
-                            <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadPix)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ leads captados</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
-                              <p className="text-2xl font-bold text-white">{naoConvPix}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{leadsPix > 0 ? formatPercent(100 - taxaPix) : '—'} dos leads perdidos</p>
-                            </div>
-                          </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* ── CARRINHO ─────────────────────────────────────────────── */}
-                    {(() => {
-                      const naoConvCarrinho    = totalEntCarrinho - totalVendCarrinho;
-                      const recPorLeadCarrinho = totalEntCarrinho > 0 ? faturamentoCarrinho / totalEntCarrinho : 0;
-                      return (
-                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Rec Carrinho</p>
-                          <div className="space-y-3">
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
-                              <p className="text-2xl font-bold text-white">{totalEntCarrinho}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Carrinhos no período</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
-                              <p className="text-2xl font-bold text-white">{formatPercent(taxaCarrinho)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{totalVendCarrinho} convertidos</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(ticketCarrinho)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Por carrinho convertido</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoCarrinho)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
-                            </div>
-                            <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadCarrinho)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ carrinhos captados</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
-                              <p className="text-2xl font-bold text-white">{naoConvCarrinho}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{totalEntCarrinho > 0 ? formatPercent(100 - taxaCarrinho) : '—'} dos carrinhos perdidos</p>
-                            </div>
-                          </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
-                    {/* ── SOCIAL (WHATSAPP) ─────────────────────────────────────── */}
-                    {(() => {
-                      const vendidosSocial    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
-                      const naoConvSocial     = leadsSocial - vendidosSocial;
-                      const recPorLeadSocial  = leadsSocial > 0 ? faturamentoSocial / leadsSocial : 0;
-                      return (
-                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Social (WhatsApp)</p>
-                          <div className="space-y-3">
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
-                              <p className="text-2xl font-bold text-white">{leadsSocial}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Entradas no período</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
-                              <p className="text-2xl font-bold text-white">{formatPercent(taxaSocial)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{vendidosSocial} convertidos</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(ticketSocial)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Por lead convertido</p>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoSocial)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
-                            </div>
-                            <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
-                              <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadSocial)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ leads captados</p>
-                            </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
-                              <p className="text-2xl font-bold text-white">{naoConvSocial}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{leadsSocial > 0 ? formatPercent(100 - taxaSocial) : '—'} dos leads perdidos</p>
-                            </div>
-                          </div>
-                          </div>
-                        </div>
-                      );
-                    })()}
-
                     {/* ── TYPEBOTS (dinâmico) ───────────────────────────────────── */}
                     {typebotsMetrics.length > 0 && typebotsMetrics.map((tbMetric) => {
                       const leadsTypeBot = Number(tbMetric.total_periodo ?? 0);
@@ -1728,331 +1393,78 @@ export function DashboardComercial() {
                       const recPorLeadTypeBot = leadsTypeBot > 0 ? faturamentoTypeBot / leadsTypeBot : 0;
 
                       return (
-                        <div key={tbMetric.tipo_de_lead_id} className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5 space-y-4">
+                        <div key={tbMetric.tipo_de_lead_id} className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                           <div className="flex items-center justify-between">
                             <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">
                               {tbMetric.tipo_de_lead_nome} (TypeBot {tbMetric.id_type})
                             </p>
                             <Badge variant="secondary" className="text-[10px] bg-custom-700 text-white border-custom-600">Type ID: {tbMetric.id_type}</Badge>
                           </div>
-                          <div className="space-y-3">
-                            <div className="grid grid-cols-3 gap-3">
-                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Leads Captados</p>
-                                <p className="text-2xl font-bold text-white">{leadsTypeBot}</p>
-                                <p className="text-[12px] text-custom-200 mt-0.5">Entradas no período</p>
-                              </div>
-                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Conversão</p>
-                                <p className="text-2xl font-bold text-white">{formatPercent(taxaTypeBot)}</p>
-                                <p className="text-[12px] text-custom-200 mt-0.5">{vendidosTypeBot} convertidos</p>
-                              </div>
-                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
-                                <p className="text-2xl font-bold text-white">{formatCurrency(ticketTypeBot)}</p>
-                                <p className="text-[12px] text-custom-200 mt-0.5">Por lead convertido</p>
+                          <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
+                            {/* Leads Captados */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <Users className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Leads Captados</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{leadsTypeBot}</p>
                               </div>
                             </div>
-                            <div className="grid grid-cols-3 gap-3">
-                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Total</p>
-                                <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoTypeBot)}</p>
-                                <p className="text-[12px] text-custom-200 mt-0.5">Recuperado no período</p>
+                            {/* Taxa Conversão */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <TrendingUp className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Taxa Conversão</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaTypeBot)}</p>
                               </div>
-                              <div className="rounded-xl bg-primary/20 border border-primary/40 px-4 py-3">
-                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Receita por Lead</p>
-                                <p className="text-2xl font-bold text-white">{formatCurrency(recPorLeadTypeBot)}</p>
-                                <p className="text-[12px] text-custom-200 mt-0.5">Faturamento ÷ leads captados</p>
+                            </div>
+                            {/* Ticket Médio */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <CreditCard className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketTypeBot)}</p>
                               </div>
-                              <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
-                                <p className="text-[11px] text-custom-200 uppercase tracking-wide">Não Convertidos</p>
-                                <p className="text-2xl font-bold text-white">{naoConvTypeBot}</p>
-                                <p className="text-[12px] text-custom-200 mt-0.5">{leadsTypeBot > 0 ? formatPercent(100 - taxaTypeBot) : '—'} dos leads perdidos</p>
+                            </div>
+                            {/* Faturamento Total */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <DollarSign className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Faturamento Total</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoTypeBot)}</p>
+                              </div>
+                            </div>
+                            {/* Receita por Lead — destaque roxo */}
+                            <div className="rounded-xl bg-primary border border-primary px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-white/15 flex-shrink-0 mt-0.5">
+                                <TrendingUp className="h-4 w-4 text-white" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-white/80 leading-tight">Receita por Lead</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(recPorLeadTypeBot)}</p>
+                              </div>
+                            </div>
+                            {/* Não Convertidos */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <MessageCircle className="h-4 w-4 text-primary" />
+                              </span>
+                              <div className="min-w-0">
+                                <p className="text-[12px] text-custom-200 leading-tight">Não Convertidos</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{naoConvTypeBot}</p>
                               </div>
                             </div>
                           </div>
                         </div>
                       );
                     })}
-
-                    {/* ── RANKINGS por responsável ─────────────────────────────── */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <div className="h-px flex-1 bg-custom-600" />
-                      <span className="text-xs font-semibold uppercase tracking-widest text-custom-200 px-2">Rankings</span>
-                      <div className="h-px flex-1 bg-custom-600" />
-                    </div>
-                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
-                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
-                        <p className="text-base font-bold text-white mb-0.5">Convertidos PIX por responsável</p>
-                        <p className="text-xs text-custom-200 mb-3">Ranking por volume de conversão no período.</p>
-                        <div className="space-y-2">
-                          {pixConvertedByResponsavel.length === 0 ? (
-                            <p className="text-sm text-custom-200">Nenhuma conversão encontrada.</p>
-                          ) : (
-                            pixConvertedByResponsavel.map((row, idx) => (
-                              <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-xl border border-custom-600 bg-custom-900/50 px-2.5 py-2 hover:bg-custom-700/40 transition-colors">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-medium text-white truncate">{row.responsavel_nome}</span>
-                                  <span className="text-sm font-bold text-white">{row.total_convertidos}</span>
-                                </div>
-                                <div className="mt-1 text-[12px] text-custom-200 flex items-center justify-between gap-2">
-                                  <span>{formatCurrency(row.valor_total_convertido)}</span>
-                                  <span>Ticket: {formatCurrency(row.ticket_medio_convertido)}</span>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
-                        <p className="text-base font-bold text-white mb-0.5">Convertidos Carrinho Ab por responsável</p>
-                        <p className="text-xs text-custom-200 mb-3">Ranking por volume de conversão no período.</p>
-                        <div className="space-y-2">
-                          {carrinhoConvertedByResponsavel.length === 0 ? (
-                            <p className="text-sm text-custom-200">Nenhuma conversão de Carrinho Ab encontrada no período.</p>
-                          ) : (
-                            carrinhoConvertedByResponsavel.map((row, idx) => (
-                              <div key={`${row.responsavel_id || 'sem'}-${idx}`} className="rounded-xl border border-custom-600 bg-custom-900/50 px-2.5 py-2 hover:bg-custom-700/40 transition-colors">
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-medium text-white truncate">{row.responsavel_nome}</span>
-                                  <span className="text-sm font-bold text-white">{row.total_convertidos}</span>
-                                </div>
-                                <div className="mt-1 text-[12px] text-custom-200 flex items-center justify-between gap-2">
-                                  <span>{formatCurrency(row.valor_total_convertido)}</span>
-                                  <span>Ticket: {formatCurrency(row.ticket_medio_convertido)}</span>
-                                </div>
-                              </div>
-                            ))
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* ── GRÁFICOS DIÁRIOS ─────────────────────────────────────── */}
-                    <div className="flex items-center gap-2 pt-1">
-                      <div className="h-px flex-1 bg-custom-600" />
-                      <span className="text-xs font-semibold uppercase tracking-widest text-custom-200 px-2">Evolução diária</span>
-                      <div className="h-px flex-1 bg-custom-600" />
-                    </div>
-                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
-                      {/* PIX diário */}
-                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
-                          <p className="text-base font-bold text-white">PIX diário</p>
-                          <div className="flex items-center gap-1">
-                            <Button type="button" size="sm" variant={pixDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('linha')}>Linha</Button>
-                            <Button type="button" size="sm" variant={pixDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('barras')}>Barras</Button>
-                            <Button type="button" size="sm" variant={pixDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setPixDailyChartStyle('pizza')}>Pizza</Button>
-                          </div>
-                        </div>
-                        <div className="mb-2 rounded-xl border border-custom-600 bg-custom-900/50 px-3 py-2 text-xs text-custom-200 flex flex-wrap gap-x-4 gap-y-1">
-                          <span><strong className="text-white">Média/dia:</strong> {mediaEntradasDia}</span>
-                          <span><strong className="text-white">Pico:</strong> {Math.max(0, ...pixDailySeries.map((r) => Number(r.total_entradas || 0)))}</span>
-                        </div>
-                          <div className="h-[200px]">
-                            {pixDailyChartStyle === 'linha' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={pixDailyChartData}>
-                                  <defs>
-                                    <linearGradient id="pixAreaEntradas" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#2563eb" stopOpacity={0.65} />
-                                      <stop offset="95%" stopColor="#2563eb" stopOpacity={0.08} />
-                                    </linearGradient>
-                                    <linearGradient id="pixAreaVendidos" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#16a34a" stopOpacity={0.65} />
-                                      <stop offset="95%" stopColor="#16a34a" stopOpacity={0.08} />
-                                    </linearGradient>
-                                  </defs>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="dia_label" tick={{ fontSize: 10 }} />
-                                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                  <Tooltip content={renderPixDailyTooltip} />
-                                  <Area type="monotone" dataKey="total_entradas" name="Entradas" stroke="#2563eb" strokeWidth={2} fill="url(#pixAreaEntradas)" dot={false} />
-                                  <Area type="monotone" dataKey="total_vendidos" name="Vendidos" stroke="#16a34a" strokeWidth={2} fill="url(#pixAreaVendidos)" dot={false} />
-                                </AreaChart>
-                              </ResponsiveContainer>
-                            )}
-                            {pixDailyChartStyle === 'barras' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={pixDailyChartData}>
-                                  <defs>
-                                    <linearGradient id="pixBarEntradas" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor="#2563eb" stopOpacity={0.7} />
-                                      <stop offset="100%" stopColor="#2563eb" stopOpacity={1} />
-                                    </linearGradient>
-                                    <linearGradient id="pixBarVendidos" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor="#16a34a" stopOpacity={0.7} />
-                                      <stop offset="100%" stopColor="#16a34a" stopOpacity={1} />
-                                    </linearGradient>
-                                  </defs>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="dia_label" tick={{ fontSize: 10 }} />
-                                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                  <Tooltip content={renderPixDailyTooltip} />
-                                  <Bar dataKey="total_entradas" name="Entradas" fill="url(#pixBarEntradas)" radius={[4, 4, 0, 0]} />
-                                  <Bar dataKey="total_vendidos" name="Vendidos" fill="url(#pixBarVendidos)" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            )}
-                            {pixDailyChartStyle === 'pizza' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                  <Pie data={pixPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                                    {pixPieChartData.map((entry, index) => (
-                                      <Cell key={`pix-pie-${index}`} fill={entry.color} />
-                                    ))}
-                                  </Pie>
-                                  <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
-                                  <Legend />
-                                </PieChart>
-                              </ResponsiveContainer>
-                            )}
-                          </div>
-                      </div>
-
-                      {/* Carrinho diário */}
-                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
-                          <p className="text-base font-bold text-white">Carrinho diário</p>
-                          <div className="flex items-center gap-1">
-                            <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('linha')}>Linha</Button>
-                            <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('barras')}>Barras</Button>
-                            <Button type="button" size="sm" variant={carrinhoDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setCarrinhoDailyChartStyle('pizza')}>Pizza</Button>
-                          </div>
-                        </div>
-                        <div className="h-[244px]">
-                            {carrinhoDailyChartStyle === 'linha' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={carrinhoDailyChartData}>
-                                  <defs>
-                                    <linearGradient id="carrinhoAreaEntradas" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#ea580c" stopOpacity={0.65} />
-                                      <stop offset="95%" stopColor="#ea580c" stopOpacity={0.08} />
-                                    </linearGradient>
-                                    <linearGradient id="carrinhoAreaVendidos" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#eab308" stopOpacity={0.65} />
-                                      <stop offset="95%" stopColor="#eab308" stopOpacity={0.08} />
-                                    </linearGradient>
-                                  </defs>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="dia_label" tick={{ fontSize: 10 }} />
-                                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                  <Tooltip content={renderPixDailyTooltip} />
-                                  <Area type="monotone" dataKey="total_entradas" name="Entradas" stroke="#ea580c" strokeWidth={2} fill="url(#carrinhoAreaEntradas)" dot={false} />
-                                  <Area type="monotone" dataKey="total_vendidos" name="Vendidos" stroke="#eab308" strokeWidth={2} fill="url(#carrinhoAreaVendidos)" dot={false} />
-                                </AreaChart>
-                              </ResponsiveContainer>
-                            )}
-                            {carrinhoDailyChartStyle === 'barras' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={carrinhoDailyChartData}>
-                                  <defs>
-                                    <linearGradient id="carrinhoBarEntradas" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor="#ea580c" stopOpacity={0.7} />
-                                      <stop offset="100%" stopColor="#ea580c" stopOpacity={1} />
-                                    </linearGradient>
-                                    <linearGradient id="carrinhoBarVendidos" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor="#eab308" stopOpacity={0.7} />
-                                      <stop offset="100%" stopColor="#eab308" stopOpacity={1} />
-                                    </linearGradient>
-                                  </defs>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="dia_label" tick={{ fontSize: 10 }} />
-                                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                  <Tooltip content={renderPixDailyTooltip} />
-                                  <Bar dataKey="total_entradas" name="Entradas" fill="url(#carrinhoBarEntradas)" radius={[4, 4, 0, 0]} />
-                                  <Bar dataKey="total_vendidos" name="Vendidos" fill="url(#carrinhoBarVendidos)" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            )}
-                            {carrinhoDailyChartStyle === 'pizza' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                  <Pie data={carrinhoPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                                    {carrinhoPieChartData.map((entry, index) => (
-                                      <Cell key={`carrinho-pie-${index}`} fill={entry.color} />
-                                    ))}
-                                  </Pie>
-                                  <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
-                                  <Legend />
-                                </PieChart>
-                              </ResponsiveContainer>
-                            )}
-                        </div>
-                      </div>
-
-                      {/* WhatsApp diário */}
-                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4">
-                        <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between mb-3">
-                          <p className="text-base font-bold text-white">WhatsApp/Social diário</p>
-                          <div className="flex items-center gap-1">
-                            <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'linha' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('linha')}>Linha</Button>
-                            <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'barras' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('barras')}>Barras</Button>
-                            <Button type="button" size="sm" variant={whatsappDailyChartStyle === 'pizza' ? 'default' : 'outline'} className="h-7 px-2" onClick={() => setWhatsappDailyChartStyle('pizza')}>Pizza</Button>
-                          </div>
-                        </div>
-                        <div className="h-[244px]">
-                            {whatsappDailyChartStyle === 'linha' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <AreaChart data={whatsappDailyChartData}>
-                                  <defs>
-                                    <linearGradient id="whatsappAreaEntradas" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#16a34a" stopOpacity={0.65} />
-                                      <stop offset="95%" stopColor="#16a34a" stopOpacity={0.08} />
-                                    </linearGradient>
-                                    <linearGradient id="whatsappAreaVendidos" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.65} />
-                                      <stop offset="95%" stopColor="#14b8a6" stopOpacity={0.08} />
-                                    </linearGradient>
-                                  </defs>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="dia_label" tick={{ fontSize: 10 }} />
-                                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                  <Tooltip content={renderPixDailyTooltip} />
-                                  <Area type="monotone" dataKey="total_entradas" name="Entradas" stroke="#16a34a" strokeWidth={2} fill="url(#whatsappAreaEntradas)" dot={false} />
-                                  <Area type="monotone" dataKey="total_vendidos" name="Vendidos" stroke="#14b8a6" strokeWidth={2} fill="url(#whatsappAreaVendidos)" dot={false} />
-                                </AreaChart>
-                              </ResponsiveContainer>
-                            )}
-                            {whatsappDailyChartStyle === 'barras' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <BarChart data={whatsappDailyChartData}>
-                                  <defs>
-                                    <linearGradient id="whatsappBarEntradas" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor="#16a34a" stopOpacity={0.7} />
-                                      <stop offset="100%" stopColor="#16a34a" stopOpacity={1} />
-                                    </linearGradient>
-                                    <linearGradient id="whatsappBarVendidos" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.7} />
-                                      <stop offset="100%" stopColor="#14b8a6" stopOpacity={1} />
-                                    </linearGradient>
-                                  </defs>
-                                  <CartesianGrid strokeDasharray="3 3" />
-                                  <XAxis dataKey="dia_label" tick={{ fontSize: 10 }} />
-                                  <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
-                                  <Tooltip content={renderPixDailyTooltip} />
-                                  <Bar dataKey="total_entradas" name="Entradas" fill="url(#whatsappBarEntradas)" radius={[4, 4, 0, 0]} />
-                                  <Bar dataKey="total_vendidos" name="Vendidos" fill="url(#whatsappBarVendidos)" radius={[4, 4, 0, 0]} />
-                                </BarChart>
-                              </ResponsiveContainer>
-                            )}
-                            {whatsappDailyChartStyle === 'pizza' && (
-                              <ResponsiveContainer width="100%" height="100%">
-                                <PieChart>
-                                  <Pie data={whatsappPieChartData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                                    {whatsappPieChartData.map((entry, index) => (
-                                      <Cell key={`whatsapp-pie-${index}`} fill={entry.color} />
-                                    ))}
-                                  </Pie>
-                                  <Tooltip formatter={(value: any) => formatCurrency(Number(value))} />
-                                  <Legend />
-                                </PieChart>
-                              </ResponsiveContainer>
-                            )}
-                        </div>
-                      </div>
-                    </div>
                   </>
                 );
               })()}
