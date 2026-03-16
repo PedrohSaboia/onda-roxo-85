@@ -1221,12 +1221,14 @@ export function DashboardComercial() {
                                     idx === 1 ? 'bg-slate-400/20 text-slate-300 border border-slate-400/40' :
                                                 'bg-orange-700/20 text-orange-400 border border-orange-700/40'
                                   }`}>
-                                    {idx + 1}
+                                    {idx + 1}º
                                   </span>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[13px] font-semibold text-white leading-tight line-clamp-2 truncate">{produto.produto_nome}</p>
-                                    <p className="text-[14px] text-primary font-bold mt-1.5">{formatCurrency(produto.valor_total)}</p>
-                                    <p className="text-[11px] text-custom-200 mt-0.5">{produto.total_inclusoes}x · {formatCurrency(produto.ticket_medio)}/un</p>
+                                    <p className="text-[14px] font-semibold text-white leading-tight line-clamp-2 truncate">{produto.produto_nome}</p>
+                                    <div className="flex items-baseline gap-1 mt-1.5">
+                                      <p className="text-[12px] text-white/70 font-medium">{formatCurrency(produto.valor_total)} -</p>
+                                      <p className="text-[11px] text-custom-200">{produto.total_inclusoes}un - {formatCurrency(produto.ticket_medio)}/un</p>
+                                    </div>
                                   </div>
                                 </div>
                               ))}
