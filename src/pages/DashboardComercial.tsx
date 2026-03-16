@@ -247,8 +247,10 @@ export function DashboardComercial() {
             p_timezone: 'America/Sao_Paulo',
           }),
           (supabase as any).rpc('comercial_get_metricas_entrada_valores_upsell', {
+            p_empresa_id: empresaId ?? null,
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
           }),
           (supabase as any).rpc('comercial_get_top_produtos_upsell', {
             p_empresa_id: empresaId ?? null,
@@ -628,7 +630,7 @@ export function DashboardComercial() {
                 const faturamentoUpsell    = taxaUpsell > 0 ? _faturamentoUpsellRaw : 0;
                 const ticketUpsell         = Number(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0);
 
-                const faturamentoComercial = faturamentoPix + faturamentoCarrinho + faturamentoSocial;
+                const faturamentoComercial = faturamentoUpsell + faturamentoPix + faturamentoCarrinho + faturamentoSocial;
                 const faturamentoTotal     = faturamentoSite + faturamentoComercial;
                 const participacao         = faturamentoTotal > 0 ? (faturamentoComercial / faturamentoTotal) * 100 : 0;
                 const receitaIncremental   = faturamentoUpsell + faturamentoPix + faturamentoCarrinho + faturamentoSocial;
