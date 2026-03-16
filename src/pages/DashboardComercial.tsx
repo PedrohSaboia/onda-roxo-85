@@ -122,6 +122,7 @@ export function DashboardComercial() {
   const { empresaId } = useAuth();
 
   const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
+  const [carrinhoMetrics, setCarrinhoMetrics] = useState<PixMetricsRow | null>(null);
   const [whatsappMetrics, setWhatsappMetrics] = useState<PixMetricsRow | null>(null);
   const [typebotsMetrics, setTypebotsMetrics] = useState<TypeBotMetricsRow[]>([]);
   const [pixDailySeries, setPixDailySeries] = useState<PixDailyRow[]>([]);
@@ -177,6 +178,7 @@ export function DashboardComercial() {
           { data: upsellIncrementoData, error: upsellIncrementoError },
           { data: entradaValoresUpsellData, error: entradaValoresUpsellError },
           { data: topProdutosData, error: topProdutosError },
+          { data: metricasCarrinhoData, error: metricasCarrinhoError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -255,6 +257,12 @@ export function DashboardComercial() {
             p_timezone: 'America/Sao_Paulo',
             p_limit: 3,
           }),
+          (supabase as any).rpc('comercial_get_metricas_leads_carrinho_ab', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -270,6 +278,7 @@ export function DashboardComercial() {
         if (upsellIncrementoError) throw upsellIncrementoError;
         if (entradaValoresUpsellError) console.warn('[EntradaValores] RPC error:', entradaValoresUpsellError);
         if (topProdutosError) console.warn('[TopProdutos] RPC error:', topProdutosError);
+        if (metricasCarrinhoError) throw metricasCarrinhoError;
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -285,6 +294,7 @@ export function DashboardComercial() {
         setYampiUpsellIncrementoMetrics((upsellIncrementoData?.[0] || null) as YampiUpsellIncrementoRow | null);
         setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
         setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
+        setCarrinhoMetrics((metricasCarrinhoData?.[0] || null) as PixMetricsRow | null);
       } catch (err: any) {
         if (!mounted) return;
         setPixDashboardError(err?.message || String(err));
@@ -301,6 +311,7 @@ export function DashboardComercial() {
         setYampiUpsellIncrementoMetrics(null);
         setEntradaValoresUpsellMetrics(null);
         setTopProdutosUpsell([]);
+        setCarrinhoMetrics(null);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -599,11 +610,11 @@ export function DashboardComercial() {
                 const taxaPix              = Number(pixMetrics?.taxa_conversao_periodo ?? 0);
                 const ticketPix            = Number(pixMetrics?.ticket_medio_periodo ?? 0);
 
-                const totalEntCarrinho     = carrinhoDailySeries.reduce((a, r) => a + Number(r.total_entradas || 0), 0);
-                const totalVendCarrinho    = carrinhoDailySeries.reduce((a, r) => a + Number(r.total_vendidos || 0), 0);
-                const faturamentoCarrinho  = carrinhoDailySeries.reduce((a, r) => a + Number(r.valor_total   || 0), 0);
-                const taxaCarrinho         = totalEntCarrinho > 0 ? (totalVendCarrinho / totalEntCarrinho) * 100 : 0;
-                const ticketCarrinho       = totalVendCarrinho > 0 ? faturamentoCarrinho / totalVendCarrinho : 0;
+                const totalEntCarrinho     = Number(carrinhoMetrics?.total_periodo ?? 0);
+                const totalVendCarrinho    = Number(carrinhoMetrics?.total_vendidos_periodo ?? 0);
+                const faturamentoCarrinho  = Number(carrinhoMetrics?.valor_total_periodo ?? 0);
+                const taxaCarrinho         = Number(carrinhoMetrics?.taxa_conversao_periodo ?? 0);
+                const ticketCarrinho       = Number(carrinhoMetrics?.ticket_medio_periodo ?? 0);
 
                 const faturamentoSocial    = Number(whatsappMetrics?.valor_total_periodo ?? 0);
                 const taxaSocial           = Number(whatsappMetrics?.taxa_conversao_periodo ?? 0);
@@ -612,8 +623,9 @@ export function DashboardComercial() {
 
                 const taxaUpsell           = Number(yampiUpsellMetrics?.taxa_inclusao_itens_pct ?? 0);
                 const totalPedidosYampi    = Number(yampiUpsellMetrics?.total_pedidos_yampi ?? 0);
-                // Financeiro de up-sell: vem exclusivamente de entrada_valores
-                const faturamentoUpsell    = Number(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0);
+                // Financeiro de up-sell: apenas quando há upsell real (taxa > 0)
+                const _faturamentoUpsellRaw = Number(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0);
+                const faturamentoUpsell    = taxaUpsell > 0 ? _faturamentoUpsellRaw : 0;
                 const ticketUpsell         = Number(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0);
 
                 const faturamentoComercial = faturamentoPix + faturamentoCarrinho + faturamentoSocial;
