@@ -561,11 +561,11 @@ export function DashboardComercial() {
 
           {loadingPixDashboard ? (
             <Card>
-              <CardContent className="py-10 text-sm text-muted-foreground">Carregando métricas...</CardContent>
+              <CardContent className="py-10 bg-custom-800 border-0 text-sm text-muted-foreground">Carregando métricas...</CardContent>
             </Card>
           ) : pixDashboardError ? (
             <Card>
-              <CardContent className="py-10 text-sm text-red-500">Erro ao carregar dashboard: {pixDashboardError}</CardContent>
+              <CardContent className="py-10 bg-custom-800 text-sm text-red-500">Erro ao carregar dashboard: {pixDashboardError}</CardContent>
             </Card>
           ) : (
             <>
@@ -622,59 +622,77 @@ export function DashboardComercial() {
                         custoAjustado += custoComercial / getDaysInMonth(dataAtual);
                       }
                       const roi = custoAjustado > 0 ? receitaIncremental / custoAjustado : 0;
-                      const barMax = Math.max(faturamentoSite, faturamentoComercial, receitaIncremental, 1);
                       const heroItems = [
                         { label: 'Upsell',   value: faturamentoUpsell,   pct: receitaIncremental > 0 ? (faturamentoUpsell  / receitaIncremental) * 100 : 0, color: '#a78bfa' },
                         { label: 'Rec PIX',  value: faturamentoPix,       pct: receitaIncremental > 0 ? (faturamentoPix     / receitaIncremental) * 100 : 0, color: '#34d399' },
                         { label: 'Rec Carrinho', value: faturamentoCarrinho, pct: receitaIncremental > 0 ? (faturamentoCarrinho / receitaIncremental) * 100 : 0, color: '#22d3ee' },
                         { label: 'Redes Sociais', value: faturamentoSocial, pct: receitaIncremental > 0 ? (faturamentoSocial  / receitaIncremental) * 100 : 0, color: '#4ade80' },
                       ].filter(i => i.value > 0);
+                      const pctSite      = faturamentoTotal > 0 ? (faturamentoSite      / faturamentoTotal) * 100 : 0;
+                      const pctComercial = faturamentoTotal > 0 ? (faturamentoComercial / faturamentoTotal) * 100 : 0;
                       return (
-                        <div className="rounded-xl bg-custom-800 border-2 border-custom-500 p-5 grid grid-cols-1 xl:grid-cols-3 gap-6 shadow-lg">
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-500 p-5 flex flex-col xl:flex-row gap-6 shadow-lg">
+
+                          {/* ── col esquerdo+central: cresce ── */}
+                          <div className="flex-1 min-w-0 flex flex-col gap-5">
+
+                            {/* Barra dividida */}
+                            <div className="space-y-1.5">
+                              <div className="flex items-center justify-between text-[11px] font-semibold">
+                                <span style={{ color: '#7c3aed' }}>
+                                  Site {formatCurrency(faturamentoSite)} — {formatPercent(pctSite)}
+                                </span>
+                                <span style={{ color: '#059669' }}>
+                                  Comercial {formatCurrency(faturamentoComercial)} — {formatPercent(pctComercial)}
+                                </span>
+                              </div>
+                              <div className="h-5 w-full rounded-full bg-custom-700 overflow-hidden flex">
+                                <div
+                                  className="h-full transition-all duration-500 rounded-l-full"
+                                  style={{ backgroundColor: '#7c3aed', width: `${pctSite}%` }}
+                                />
+                                <div
+                                  className="h-full transition-all duration-500 rounded-r-full"
+                                  style={{ backgroundColor: '#059669', width: `${pctComercial}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* Sub-grid: esquerda + central */}
+                            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
                           {/* ── Coluna esquerda: faturamentos ── */}
                           <div className="space-y-3">
                             <p className="text-xs font-bold uppercase tracking-widest text-white mb-3">Marketing + Comercial</p>
 
-                            {[
-                              { label: 'Faturamento Site',      value: faturamentoSite,      color: '#7c3aed' },
-                              { label: 'Faturamento Comercial', value: faturamentoComercial, color: '#059669' },
-                              { label: 'Participação Comercial',value: null,                 color: '#b45309', pct: participacao },
-                            ].map((row) => (
-                              <div key={row.label} className="space-y-1">
-                                <div className="flex items-center justify-between text-sm">
-                                  <span className="text-slate-600">{row.label}</span>
-                                  <span className="font-bold" style={{ color: row.color }}>
-                                    {row.value !== null ? formatCurrency(row.value) : formatPercent(row.pct)}
-                                  </span>
-                                </div>
-                                <div className="h-1.5 w-full rounded-full bg-slate-200 overflow-hidden">
-                                  <div
-                                    className="h-full rounded-full"
-                                    style={{
-                                      backgroundColor: row.color,
-                                      width: row.value !== null
-                                        ? `${Math.min(100, (row.value / barMax) * 100)}%`
-                                        : `${Math.min(100, row.pct ?? 0)}%`,
-                                    }}
-                                  />
-                                </div>
+                            <div className="space-y-2.5">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-custom-200">Faturamento Site</span>
+                                <span className="font-bold" style={{ color: '#7c3aed' }}>{formatCurrency(faturamentoSite)}</span>
                               </div>
-                            ))}
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-custom-200">Faturamento Comercial</span>
+                                <span className="font-bold" style={{ color: '#059669' }}>{formatCurrency(faturamentoComercial)}</span>
+                              </div>
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="text-custom-200">Participação Comercial</span>
+                                <span className="font-bold" style={{ color: '#b45309' }}>{formatPercent(participacao)}</span>
+                              </div>
+                            </div>
 
-                            <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between">
+                            <div className="mt-4 pt-4 border-t border-custom-600 flex items-center justify-between">
                               <span className="text-xs text-custom-200">Faturamento Total</span>
-                              <span className="text-lg font-bold text-slate-900">{formatCurrency(faturamentoTotal)}</span>
+                              <span className="text-lg font-bold text-white">{formatCurrency(faturamentoTotal)}</span>
                             </div>
                           </div>
 
                           {/* ── Coluna central: receita incremental ── */}
                           <div className="space-y-4">
-                            <p className="text-xs font-bold uppercase tracking-widest text-purple-600">Receita Incremental Comercial</p>
+                            <p className="text-xs font-bold uppercase tracking-widest text-custom-200">Receita Incremental Comercial</p>
                             <div className="flex items-end gap-4 flex-wrap">
-                              <span className="text-4xl font-extrabold text-slate-900 leading-none">{formatCurrency(receitaIncremental)}</span>
+                              <span className="text-4xl font-extrabold text-white leading-none">{formatCurrency(receitaIncremental)}</span>
                               {roi > 0 && (
-                                <span className="flex items-center gap-1 rounded-full bg-purple-100 border border-purple-300 px-3 py-1 text-sm font-bold text-purple-700">
+                                <span className="flex items-center gap-1 rounded-full bg-primary/20 border border-primary/40 px-3 py-1 text-sm font-bold text-white">
                                   ROI {roi.toFixed(1)}x
                                 </span>
                               )}
@@ -684,7 +702,7 @@ export function DashboardComercial() {
                                 <div key={item.label} className="flex items-center justify-between gap-3 text-sm">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <span className="h-2.5 w-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                                    <span className="text-slate-600 truncate">{item.label}</span>
+                                    <span className="text-custom-200 truncate">{item.label}</span>
                                   </div>
                                   <div className="flex items-center gap-3 flex-shrink-0">
                                     <span className="font-bold" style={{ color: item.color }}>{formatPercent(item.pct)}</span>
@@ -695,10 +713,12 @@ export function DashboardComercial() {
                             </div>
                           </div>
 
+                            </div>{/* fecha sub-grid */}
+                          </div>{/* fecha col-span-2 */}
+
                           {/* ── Coluna direita: donut ── */}
-                          <div className="flex flex-col items-center justify-center">
-                            <p className="text-xs font-bold uppercase tracking-widest text-purple-600 mb-2 self-start">Distribuição</p>
-                            <div className="relative h-[180px] w-[180px]">
+                          <div className="flex-shrink-0 flex flex-col items-center w-[250px] justify-center">
+                            <div className="relative h-[240px] w-[240px]">
                               <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
                                   <defs>
@@ -720,7 +740,7 @@ export function DashboardComercial() {
                                     dataKey="value"
                                     nameKey="name"
                                     cx="50%" cy="50%"
-                                    innerRadius={55} outerRadius={84}
+                                    innerRadius={80} outerRadius={118}
                                     paddingAngle={3}
                                     stroke="white" strokeWidth={2}
                                     startAngle={90} endAngle={-270}
@@ -740,17 +760,8 @@ export function DashboardComercial() {
                               </ResponsiveContainer>
                               <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                                 <span className="text-[10px] text-custom-200 uppercase tracking-wider">Total</span>
-                                <span className="text-base font-extrabold text-slate-900 leading-tight text-center px-2">{formatCurrency(receitaIncremental)}</span>
+                                <span className="text-base font-extrabold text-white leading-tight text-center px-2">{formatCurrency(receitaIncremental)}</span>
                               </div>
-                            </div>
-                            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 self-start w-full">
-                              {heroItems.map((item) => (
-                                <div key={item.label} className="flex items-center gap-1.5">
-                                  <span className="h-2 w-2 rounded-full flex-shrink-0" style={{ backgroundColor: item.color }} />
-                                  <span className="text-[14px] text-custom-200 truncate">{item.label}</span>
-                                  <span className="text-[14px] font-bold ml-auto" style={{ color: item.color }}>{item.pct.toFixed(0)}%</span>
-                                </div>
-                              ))}
                             </div>
                           </div>
                         </div>
@@ -812,7 +823,7 @@ export function DashboardComercial() {
                                     </span>
                                     <span className="text-[14px] text-white leading-tight">Ticket Médio</span>
                                   </div>
-                                  <span className="text-sm font-bold text-purple-300 flex-shrink-0">{formatCurrency(ticketPix)}</span>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatCurrency(ticketPix)}</span>
                                 </div>
                               </div>
                             </div>
@@ -858,14 +869,14 @@ export function DashboardComercial() {
                                     </span>
                                     <span className="text-[14px] text-white leading-tight">Taxa Rec Carrinho</span>
                                   </div>
-                                  <span className="text-sm font-bold text-purple-300 flex-shrink-0">{formatPercent(taxaCarrinho)}</span>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatPercent(taxaCarrinho)}</span>
                                 </div>
                                 <div className="flex items-center justify-between gap-2">
                                   <div className="flex items-center gap-2 min-w-0">
                                     <span className="flex items-center justify-center h-7 w-7 rounded-full bg-primary flex-shrink-0">
                                       <Mail className="h-3.5 w-3.5 text-white" />
                                     </span>
-                                    <span className="text-[14px] text-purple-200 font-semibold leading-tight">{formatCurrency(faturamentoCarrinho)}</span>
+                                    <span className="text-[14px] text-white font-semibold leading-tight">{formatCurrency(faturamentoCarrinho)}</span>
                                   </div>
                                   <div className="flex-shrink-0 text-right">
                                     <span className="text-sm font-bold text-white">{totalVendCarrinho}</span>
@@ -947,7 +958,7 @@ export function DashboardComercial() {
                               <div className="space-y-2 pl-2 pt-2">
                                 <div className="flex items-center justify-between gap-2">
                                   <span className="text-[13px] text-custom-200">Faturamento Total</span>
-                                  <span className="text-sm font-bold text-purple-300">{formatCurrency(faturamentoPix)}</span>
+                                  <span className="text-sm font-bold text-white">{formatCurrency(faturamentoPix)}</span>
                                 </div>
                                 <div className="space-y-1">
                                   <div className="h-1.5 w-full rounded-full bg-custom-700 overflow-hidden">
@@ -1041,7 +1052,7 @@ export function DashboardComercial() {
                                     </span>
                                     <span className="text-[14px] text-white leading-tight">Faturamento Total</span>
                                   </div>
-                                  <span className="text-sm font-bold text-purple-300 flex-shrink-0">{formatCurrency(faturamentoSocial)}</span>
+                                  <span className="text-sm font-bold text-white flex-shrink-0">{formatCurrency(faturamentoSocial)}</span>
                                 </div>
                               </div>
                             </div>
@@ -1056,8 +1067,8 @@ export function DashboardComercial() {
                       const _pixTotal = Number(pixMetrics?.total_periodo ?? 0);
                       const _pixRec2  = Number(pixMetrics?.total_vendidos_periodo ?? 0);
                       return (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 px-1">REC PIX</p>
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC PIX</p>
                           <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                             {/* Pix Cancelados */}
                             <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
@@ -1115,8 +1126,8 @@ export function DashboardComercial() {
                     })()}
 
                     {/* ── REC CARRINHO: linha 5 cards ──────────────────────────── */}
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 px-1">REC CARRINHO</p>
+                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC CARRINHO</p>
                       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                         {/* Carrinhos Abandonados */}
                         <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
@@ -1177,8 +1188,8 @@ export function DashboardComercial() {
                       const _vendS2    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
                       const recPorLead = _leadsS2 > 0 ? faturamentoSocial / _leadsS2 : 0;
                       return (
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 px-1">WHATSAPP + REDES SOCIAIS</p>
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                          <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">WHATSAPP + REDES SOCIAIS</p>
                           <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                             {/* Leads Captados */}
                             <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
