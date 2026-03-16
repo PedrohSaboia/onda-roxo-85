@@ -1132,17 +1132,17 @@ export function DashboardComercial() {
 
                           {/* Linha 1: métricas gerais */}
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Upsell</p>
                               <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsell)}</p>
                               <p className="text-[12px] text-custom-200 mt-0.5">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0} de {totalPedidosYampi} pedidos</p>
                             </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio Upsell</p>
                               <p className="text-2xl font-bold text-white">{formatCurrency(ticketUpsell)}</p>
                               <p className="text-[12px] text-custom-200 mt-0.5">Sem upsell: {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</p>
                             </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Upsell</p>
                               <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoUpsell)}</p>
                               <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsell)} × {formatCurrency(ticketUpsell)}</p>
@@ -1158,27 +1158,27 @@ export function DashboardComercial() {
 
                           {/* Linha 2: Upsell puro vs Incremento puro vs Ambos vs Sem alteração */}
                           <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Up-sell (upgrade)</p>
                               <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0}</p>
                               <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_upsell_pct ?? 0)} dos pedidos</p>
                               <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0)}</p>
                               <p className="text-[11px] text-custom-200">Ticket após: {formatCurrency(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0)}</p>
                             </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Incremento (novo item)</p>
                               <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_incremento ?? 0}</p>
                               <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_incremento_pct ?? 0)} dos pedidos</p>
                               <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_com_incremento ?? 0)}</p>
                               <p className="text-[11px] text-custom-200">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_com_incremento ?? 0)}</p>
                             </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ambos</p>
                               <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_ambos ?? 0}</p>
                               <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_ambos_pct ?? 0)} dos pedidos</p>
                               <p className="text-[11px] text-custom-200 mt-1">Upsell + novo item</p>
                             </div>
-                            <div className="rounded-xl bg-custom-900/60 border border-custom-600 px-4 py-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Sem alteração</p>
                               <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_sem_alteracao ?? 0}</p>
                               <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_sem_alteracao_pct ?? 0)} dos pedidos</p>
@@ -1189,7 +1189,7 @@ export function DashboardComercial() {
                         </div>
 
                         {/* ── Direita: Top 3 Produtos (ranking destacado) ── */}
-                        <div className="flex-shrink-0 w-80 rounded-xl bg-custom-900/60 border-2 border-primary px-5 py-5 flex flex-col gap-4">
+                        <div className="flex-shrink-0 w-80 rounded-xl bg-custom-700/40 border-2 border-primary px-5 py-5 flex flex-col gap-4">
                           <div className="flex items-center gap-2">
                             <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/30">
                               <TrendingUp className="h-4.5 w-4.5 text-primary" />
@@ -1209,7 +1209,7 @@ export function DashboardComercial() {
                                     {idx + 1}
                                   </span>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[13px] font-semibold text-white leading-tight line-clamp-2">{produto.produto_nome}</p>
+                                    <p className="text-[13px] font-semibold text-white leading-tight line-clamp-2 truncate">{produto.produto_nome}</p>
                                     <p className="text-[14px] text-primary font-bold mt-1.5">{formatCurrency(produto.valor_total)}</p>
                                     <p className="text-[11px] text-custom-200 mt-0.5">{produto.total_inclusoes}x · {formatCurrency(produto.ticket_medio)}/un</p>
                                   </div>
@@ -1503,3 +1503,4 @@ export function DashboardComercial() {
     </div>
   );
 }
+

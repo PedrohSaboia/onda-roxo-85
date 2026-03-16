@@ -28,7 +28,7 @@ export function AppLayout() {
     const path = location.pathname.replace(/\/$/, '');
     if (!path || path === '') return 'home';
     // Match /pedido/:id but not /pedido-contabilidade
-    if (path === '/comercial' || path.startsWith('/pedidos') || path.startsWith('/pedido/') || path === '/novo-pedido') return 'comercial';
+    if (path === '/comercial' || path.startsWith('/pedidos') || path.startsWith('/pedido/') || path === '/novo-pedido' || path === '/dashboard-comercial' || path === '/leads' || path === '/tipos-de-lead' || path === '/pedidos-cancelados' || path === '/pedidos-enviados' || path === '/pedidos-retornados') return 'comercial';
     if (path === '/producao') return 'producao';
     if (path === '/logistica' || path === '/envio-por-etiqueta') return 'logistica';
     if (path === '/estoque' || path.startsWith('/estoque')) return 'estoque';

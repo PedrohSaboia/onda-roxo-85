@@ -68,7 +68,7 @@ export function ComercialSidebar() {
     next.set('view', id)
     // If we're currently on a dedicated route like /leads or /pedidos-enviados, navigate to the Comercial root
     // otherwise keep current pathname (expecting /comercial)
-    const targetPath = (location.pathname === '/leads' || location.pathname === '/tipos-de-lead' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados' || location.pathname === '/pedidos-retornados') ? '/comercial' : location.pathname || '/comercial';
+    const targetPath = (location.pathname === '/leads' || location.pathname === '/tipos-de-lead' || location.pathname === '/pedidos-enviados' || location.pathname === '/pedidos-cancelados' || location.pathname === '/pedidos-retornados' || location.pathname === '/dashboard-comercial') ? '/comercial' : location.pathname || '/comercial';
     navigate({ pathname: targetPath, search: next.toString() })
   }
 
