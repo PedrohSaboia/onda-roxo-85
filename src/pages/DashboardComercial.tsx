@@ -11,6 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import IconDashboard from '@/components/icons/IconDashboard';
+import IconYampi from '@/components/icons/IconYampi';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { ResponsiveContainer, AreaChart, Area, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -1128,7 +1129,7 @@ export function DashboardComercial() {
                         {/* Pedidos YAMPI */}
                         <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
                           <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
-                            <ShoppingCart className="h-4 w-4 text-primary" />
+                            <IconYampi className="h-4 w-4 text-custom-200" />
                           </span>
                           <div className="min-w-0">
                             <p className="text-[12px] text-custom-200 leading-tight">Pedidos YAMPI</p>
