@@ -123,6 +123,7 @@ export function DashboardComercial() {
   const { empresaId } = useAuth();
 
   const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
+  const [carrinhoMetrics, setCarrinhoMetrics] = useState<PixMetricsRow | null>(null);
   const [whatsappMetrics, setWhatsappMetrics] = useState<PixMetricsRow | null>(null);
   const [typebotsMetrics, setTypebotsMetrics] = useState<TypeBotMetricsRow[]>([]);
   const [pixDailySeries, setPixDailySeries] = useState<PixDailyRow[]>([]);
@@ -178,6 +179,7 @@ export function DashboardComercial() {
           { data: upsellIncrementoData, error: upsellIncrementoError },
           { data: entradaValoresUpsellData, error: entradaValoresUpsellError },
           { data: topProdutosData, error: topProdutosError },
+          { data: metricasCarrinhoData, error: metricasCarrinhoError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -246,8 +248,10 @@ export function DashboardComercial() {
             p_timezone: 'America/Sao_Paulo',
           }),
           (supabase as any).rpc('comercial_get_metricas_entrada_valores_upsell', {
+            p_empresa_id: empresaId ?? null,
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
           }),
           (supabase as any).rpc('comercial_get_top_produtos_upsell', {
             p_empresa_id: empresaId ?? null,
@@ -255,6 +259,12 @@ export function DashboardComercial() {
             p_data_fim: endDate.toISOString(),
             p_timezone: 'America/Sao_Paulo',
             p_limit: 3,
+          }),
+          (supabase as any).rpc('comercial_get_metricas_leads_carrinho_ab', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
           }),
         ]);
 
@@ -271,6 +281,7 @@ export function DashboardComercial() {
         if (upsellIncrementoError) throw upsellIncrementoError;
         if (entradaValoresUpsellError) console.warn('[EntradaValores] RPC error:', entradaValoresUpsellError);
         if (topProdutosError) console.warn('[TopProdutos] RPC error:', topProdutosError);
+        if (metricasCarrinhoError) throw metricasCarrinhoError;
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -286,6 +297,7 @@ export function DashboardComercial() {
         setYampiUpsellIncrementoMetrics((upsellIncrementoData?.[0] || null) as YampiUpsellIncrementoRow | null);
         setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
         setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
+        setCarrinhoMetrics((metricasCarrinhoData?.[0] || null) as PixMetricsRow | null);
       } catch (err: any) {
         if (!mounted) return;
         setPixDashboardError(err?.message || String(err));
@@ -302,6 +314,7 @@ export function DashboardComercial() {
         setYampiUpsellIncrementoMetrics(null);
         setEntradaValoresUpsellMetrics(null);
         setTopProdutosUpsell([]);
+        setCarrinhoMetrics(null);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -600,11 +613,11 @@ export function DashboardComercial() {
                 const taxaPix              = Number(pixMetrics?.taxa_conversao_periodo ?? 0);
                 const ticketPix            = Number(pixMetrics?.ticket_medio_periodo ?? 0);
 
-                const totalEntCarrinho     = carrinhoDailySeries.reduce((a, r) => a + Number(r.total_entradas || 0), 0);
-                const totalVendCarrinho    = carrinhoDailySeries.reduce((a, r) => a + Number(r.total_vendidos || 0), 0);
-                const faturamentoCarrinho  = carrinhoDailySeries.reduce((a, r) => a + Number(r.valor_total   || 0), 0);
-                const taxaCarrinho         = totalEntCarrinho > 0 ? (totalVendCarrinho / totalEntCarrinho) * 100 : 0;
-                const ticketCarrinho       = totalVendCarrinho > 0 ? faturamentoCarrinho / totalVendCarrinho : 0;
+                const totalEntCarrinho     = Number(carrinhoMetrics?.total_periodo ?? 0);
+                const totalVendCarrinho    = Number(carrinhoMetrics?.total_vendidos_periodo ?? 0);
+                const faturamentoCarrinho  = Number(carrinhoMetrics?.valor_total_periodo ?? 0);
+                const taxaCarrinho         = Number(carrinhoMetrics?.taxa_conversao_periodo ?? 0);
+                const ticketCarrinho       = Number(carrinhoMetrics?.ticket_medio_periodo ?? 0);
 
                 const faturamentoSocial    = Number(whatsappMetrics?.valor_total_periodo ?? 0);
                 const taxaSocial           = Number(whatsappMetrics?.taxa_conversao_periodo ?? 0);
@@ -613,11 +626,12 @@ export function DashboardComercial() {
 
                 const taxaUpsell           = Number(yampiUpsellMetrics?.taxa_inclusao_itens_pct ?? 0);
                 const totalPedidosYampi    = Number(yampiUpsellMetrics?.total_pedidos_yampi ?? 0);
-                // Financeiro de up-sell: vem exclusivamente de entrada_valores
-                const faturamentoUpsell    = Number(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0);
+                // Financeiro de up-sell: apenas quando há upsell real (taxa > 0)
+                const _faturamentoUpsellRaw = Number(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0);
+                const faturamentoUpsell    = taxaUpsell > 0 ? _faturamentoUpsellRaw : 0;
                 const ticketUpsell         = Number(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0);
 
-                const faturamentoComercial = faturamentoPix + faturamentoCarrinho + faturamentoSocial;
+                const faturamentoComercial = faturamentoUpsell + faturamentoPix + faturamentoCarrinho + faturamentoSocial;
                 const faturamentoTotal     = faturamentoSite + faturamentoComercial;
                 const participacao         = faturamentoTotal > 0 ? (faturamentoComercial / faturamentoTotal) * 100 : 0;
                 const receitaIncremental   = faturamentoUpsell + faturamentoPix + faturamentoCarrinho + faturamentoSocial;
@@ -1122,80 +1136,108 @@ export function DashboardComercial() {
                       );
                     })()}
 
-                    {/* ── UPSELL YAMPI: 6 cards ────────────────────────────────── */}
-                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
-                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Upsell Yampi</p>
-                      <div className="grid grid-cols-2 xl:grid-cols-6 gap-3">
-                        {/* Pedidos YAMPI */}
-                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
-                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
-                            <IconYampi className="h-4 w-4 text-custom-200" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[12px] text-custom-200 leading-tight">Pedidos YAMPI</p>
-                            <p className="text-2xl font-bold text-white leading-tight">{totalPedidosYampi}</p>
+                    {/* ── UPSELL YAMPI ─────────────────────────────────────────── */}
+                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5">
+                      <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 mb-4">Upsell Yampi</p>
+
+                      <div className="flex gap-4 items-stretch">
+
+                        {/* ── Esquerda: métricas + detalhamento ── */}
+                        <div className="flex-1 min-w-0 space-y-4">
+
+                          {/* Linha 1: métricas gerais */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Upsell</p>
+                              <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsell)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0} de {totalPedidosYampi} pedidos</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio Upsell</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(ticketUpsell)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">Sem upsell: {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Upsell</p>
+                              <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoUpsell)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsell)} × {formatCurrency(ticketUpsell)}</p>
+                            </div>
+                          </div>
+
+                          {/* Separador */}
+                          <div className="flex items-center gap-2">
+                            <div className="h-px flex-1 bg-custom-600" />
+                            <span className="text-[10px] font-semibold uppercase tracking-widest text-custom-200/60 px-2">Detalhamento por tipo</span>
+                            <div className="h-px flex-1 bg-custom-600" />
+                          </div>
+
+                          {/* Linha 2: Upsell puro vs Incremento puro vs Ambos vs Sem alteração */}
+                          <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Up-sell (upgrade)</p>
+                              <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_upsell_pct ?? 0)} dos pedidos</p>
+                              <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0)}</p>
+                              <p className="text-[11px] text-custom-200">Ticket após: {formatCurrency(entradaValoresUpsellMetrics?.ticket_medio_depois ?? 0)}</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Incremento (novo item)</p>
+                              <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_incremento ?? 0}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_incremento_pct ?? 0)} dos pedidos</p>
+                              <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_com_incremento ?? 0)}</p>
+                              <p className="text-[11px] text-custom-200">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_com_incremento ?? 0)}</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ambos</p>
+                              <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_com_ambos ?? 0}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_ambos_pct ?? 0)} dos pedidos</p>
+                              <p className="text-[11px] text-custom-200 mt-1">Upsell + novo item</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[11px] text-custom-200 uppercase tracking-wide">Sem alteração</p>
+                              <p className="text-2xl font-bold text-white">{yampiUpsellIncrementoMetrics?.pedidos_sem_alteracao ?? 0}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{formatPercent(yampiUpsellIncrementoMetrics?.taxa_sem_alteracao_pct ?? 0)} dos pedidos</p>
+                              <p className="text-[13px] text-primary font-semibold mt-1">{formatCurrency(yampiUpsellIncrementoMetrics?.faturamento_sem_alteracao ?? 0)}</p>
+                              <p className="text-[11px] text-custom-200">Ticket: {formatCurrency(yampiUpsellIncrementoMetrics?.ticket_medio_sem_alteracao ?? 0)}</p>
+                            </div>
                           </div>
                         </div>
-                        {/* Pedidos c/ UpSell */}
-                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
-                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
-                            <CheckCircle2 className="h-4 w-4 text-primary" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[12px] text-custom-200 leading-tight">Pedidos c/ UpSell</p>
-                            <p className="text-2xl font-bold text-white leading-tight">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0}</p>
+
+                        {/* ── Direita: Top 3 Produtos (ranking destacado) ── */}
+                        <div className="flex-shrink-0 w-80 rounded-xl bg-custom-700/40 border-2 border-primary px-5 py-5 flex flex-col gap-4">
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/30">
+                              <TrendingUp className="h-4.5 w-4.5 text-primary" />
+                            </span>
+                            <p className="text-[13px] font-bold uppercase tracking-widest text-white">Top 3 Produtos</p>
                           </div>
-                        </div>
-                        {/* Taxa UpSell */}
-                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
-                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
-                            <TrendingUp className="h-4 w-4 text-primary" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[12px] text-custom-200 leading-tight">Taxa UpSell</p>
-                            <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaUpsell)}</p>
-                          </div>
-                        </div>
-                        {/* Ticket Médio UpSell */}
-                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
-                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
-                            <CreditCard className="h-4 w-4 text-primary" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
-                            <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketUpsell)}</p>
-                            <p className="text-[10px] text-white/50 leading-tight">Sem: {formatCurrency(yampiUpsellMetrics?.ticket_medio_sem_inclusao)}</p>
-                          </div>
-                        </div>
-                        {/* Faturamento UpSell */}
-                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
-                          <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
-                            <DollarSign className="h-4 w-4 text-primary" />
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-[12px] text-custom-200 leading-tight">Faturamento UpSell</p>
-                            <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoUpsell)}</p>
-                          </div>
-                        </div>
-                        {/* Top 3 Produtos */}
-                        <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3">
-                          <p className="text-[12px] text-custom-200 leading-tight mb-2">Top 3 Produtos</p>
+                          <div className="h-px bg-custom-600" />
                           {topProdutosUpsell.length > 0 ? (
-                            <div className="space-y-1">
+                            <div className="flex flex-col gap-4 flex-1">
                               {topProdutosUpsell.map((produto, idx) => (
-                                <div key={produto.produto_id} className="flex items-start gap-1.5">
-                                  <span className="text-[10px] font-bold text-primary flex-shrink-0">{idx + 1}°</span>
+                                <div key={produto.produto_id} className="flex gap-3 items-start">
+                                  <span className={`flex-shrink-0 flex items-center justify-center h-9 w-9 rounded-full text-[14px] font-extrabold ${
+                                    idx === 0 ? 'bg-amber-400/20 text-amber-400 border border-amber-400/40' :
+                                    idx === 1 ? 'bg-slate-400/20 text-slate-300 border border-slate-400/40' :
+                                                'bg-orange-700/20 text-orange-400 border border-orange-700/40'
+                                  }`}>
+                                    {idx + 1}
+                                  </span>
                                   <div className="flex-1 min-w-0">
-                                    <p className="text-[10px] text-white truncate">{produto.produto_nome}</p>
-                                    <p className="text-[9px] text-white/60">{produto.total_inclusoes}x · {formatCurrency(produto.valor_total)}</p>
+                                    <p className="text-[13px] font-semibold text-white leading-tight line-clamp-2 truncate">{produto.produto_nome}</p>
+                                    <p className="text-[14px] text-primary font-bold mt-1.5">{formatCurrency(produto.valor_total)}</p>
+                                    <p className="text-[11px] text-custom-200 mt-0.5">{produto.total_inclusoes}x · {formatCurrency(produto.ticket_medio)}/un</p>
                                   </div>
                                 </div>
                               ))}
                             </div>
                           ) : (
-                            <p className="text-xs text-white/50">Sem dados</p>
+                            <div className="flex-1 flex items-center justify-center">
+                              <p className="text-sm text-custom-200/60 text-center">Sem dados<br/>no período</p>
+                            </div>
                           )}
                         </div>
+
                       </div>
                     </div>
 
@@ -1476,3 +1518,4 @@ export function DashboardComercial() {
     </div>
   );
 }
+

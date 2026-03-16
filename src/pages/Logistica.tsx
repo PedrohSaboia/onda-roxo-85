@@ -183,6 +183,7 @@ export function Logistica() {
   });
   const [logisticaMainTab, setLogisticaMainTab] = useState<'itens-produzir' | 'pacotes' | 'enviar'>('itens-produzir');
   const [pacotesSubTab, setPacotesSubTab] = useState<'comuns' | 'incomuns'>('comuns');
+  const [pacotesDisponivelTab, setPacotesDisponivelTab] = useState<'disponivel' | 'indisponivel'>('disponivel');
   const [produzidosPorGrupo, setProduzidosPorGrupo] = useState<Record<string, Record<string, number>>>({});
   const [itemProduzidoFlash, setItemProduzidoFlash] = useState<string | null>(null);
   const [salvandoBaixaCategoria, setSalvandoBaixaCategoria] = useState(false);
@@ -248,6 +249,13 @@ export function Logistica() {
       // 5. Tiebreaker estável: UUID
       return String(a?.id || '').localeCompare(String(b?.id || ''));
     });
+  };
+
+  // Ordena para envio: pacote disponível primeiro, depois ordem padrão
+  const sortPedidosEnvio = (pedidos: any[]): any[] => {
+    const disponiveis = sortPedidos(pedidos.filter((p: any) => p.pacote_disponivel === true));
+    const restantes   = sortPedidos(pedidos.filter((p: any) => p.pacote_disponivel !== true));
+    return [...disponiveis, ...restantes];
   };
 
   const filterProdutosKey = filterProdutos.map((p) => `${p.tipo}:${p.id}`).sort().join('|');
@@ -688,7 +696,7 @@ export function Logistica() {
       // buscar pedidos com status LOGISTICA e etiqueta_envio_id exatos (filtros aplicados no servidor)
       let pedidosQuery = (supabase as any)
         .from('pedidos')
-        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id,pacote_disponivel,itens_pedido(produto_id,variacao_id,quantidade)')
+        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id,pacote_disponivel,itens_pedido(produto_id,variacao_id,quantidade,produto:produtos(nome),variacao:variacoes_produto(nome))')
         .eq('status_id', LOGISTICA_STATUS_ID)
         .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
       if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
@@ -701,10 +709,10 @@ export function Logistica() {
 
       // identificar plataformas principais
       const yampiPlatform = (plataformas || []).find((p: any) => /yampi/i.test(p.nome));
-      const mlPlatform = (plataformas || []).find((p: any) => p.id === MERCADO_LIVRE_PLATAFORMA_ID || /mercado livre/i.test(p.nome));
+      const mlPlatform    = (plataformas || []).find((p: any) => p.id === MERCADO_LIVRE_PLATAFORMA_ID || /mercado livre/i.test(p.nome));
       const shopeePlatform = (plataformas || []).find((p: any) => p.id === SHOPEE_PLATAFORMA_ID || /shopee/i.test(p.nome));
 
-      // nomes de plataformas urgentes (Shopee fica em aba própria)
+      // nomes de plataformas urgentes (além de Shopee / ML-organizador / urgente flag)
       const urgentPlatformNames = ['tiktok', 'magalu'];
 
       const isShopeePedido = (p: any) => {
@@ -712,60 +720,69 @@ export function Logistica() {
         return p.plataforma_id === shopeePlatform?.id || p.plataforma_id === SHOPEE_PLATAFORMA_ID || pname.includes('shopee');
       };
 
-      const yampiPedidos = pedidosComEtiqueta.filter((p: any) =>
-        p.plataforma_id === yampiPlatform?.id && !p.urgente,
-      );
-      const mlPedidos = pedidosComEtiqueta.filter((p: any) =>
-        p.plataforma_id === mlPlatform?.id && !p.etiqueta_ml && !p.urgente,
-      );
-      const shopeePedidos = pedidosComEtiqueta.filter((p: any) => isShopeePedido(p));
+      // Pedido ML com pelo menos 1 item "organizador"
+      const isMLOrganizadorPedido = (p: any): boolean => {
+        if (p.plataforma_id !== mlPlatform?.id && !(String(platformMap.get(p.plataforma_id)?.nome || '').toLowerCase().includes('mercado'))) return false;
+        return (p.itens_pedido || []).some((it: any) => {
+          const nome = `${it?.produto?.nome || ''} ${it?.variacao?.nome || ''}`.toLowerCase();
+          return nome.includes('organizador');
+        });
+      };
+
+      const urgentesPedidos = pedidosComEtiqueta.filter((p: any) => {
+        const pname = String(platformMap.get(p.plataforma_id)?.nome || '').toLowerCase();
+        if (isShopeePedido(p)) return true;                                         // Shopee → urgentes
+        if (isMLOrganizadorPedido(p)) return true;                                  // ML organizador → urgentes
+        const isUrgentPlatform = urgentPlatformNames.some((n) => pname.includes(n));
+        const isMLComEtiquetaML = p.plataforma_id === mlPlatform?.id && !!p.etiqueta_ml;
+        return isUrgentPlatform || isMLComEtiquetaML || !!p.urgente;
+      });
+
       const leadsPedidos = pedidosComEtiqueta.filter((p: any) =>
         LEADS_PLATFORM_IDS.has(p.plataforma_id),
       );
-      const urgentesPedidos = pedidosComEtiqueta.filter((p: any) => {
-        const pname = String(platformMap.get(p.plataforma_id)?.nome || '').toLowerCase();
-        if (isShopeePedido(p)) return false;
-        const isUrgentPlatform = urgentPlatformNames.some((n) => pname.includes(n));
-        const isMLComEtiquetaML = p.plataforma_id === mlPlatform?.id && !!p.etiqueta_ml;
-        const isUrgente = !!p.urgente;
-        return isUrgentPlatform || isMLComEtiquetaML || isUrgente;
-      });
 
+      // ML: sem organizador, sem etiqueta_ml própria, sem urgente flag
+      const mlPedidos = pedidosComEtiqueta.filter((p: any) =>
+        p.plataforma_id === mlPlatform?.id &&
+        !p.etiqueta_ml &&
+        !p.urgente &&
+        !isMLOrganizadorPedido(p),
+      );
+
+      const yampiPedidos = pedidosComEtiqueta.filter((p: any) =>
+        p.plataforma_id === yampiPlatform?.id && !p.urgente,
+      );
+
+      // Ordem: Urgentes → Comercial → Mercado Livre → Yampi
       const cards = [
         {
-          id: yampiPlatform?.id || 'yampi-card',
-          nome: yampiPlatform?.nome || 'Yampi',
-          img_url: yampiPlatform?.img_url,
-          count: yampiPedidos.length,
-          pedidos: sortPedidos(yampiPedidos),
-        },
-        {
-          id: mlPlatform?.id || MERCADO_LIVRE_PLATAFORMA_ID,
-          nome: mlPlatform?.nome || 'Mercado Livre',
-          img_url: mlPlatform?.img_url,
-          count: mlPedidos.length,
-          pedidos: sortPedidos(mlPedidos),
-        },
-        {
-          id: shopeePlatform?.id || SHOPEE_PLATAFORMA_ID,
-          nome: shopeePlatform?.nome || 'Shopee',
-          img_url: shopeePlatform?.img_url,
-          count: shopeePedidos.length,
-          pedidos: sortPedidos(shopeePedidos),
+          id: 'urgentes',
+          nome: 'Urgentes',
+          img_url: null,
+          count: urgentesPedidos.length,
+          pedidos: sortPedidosEnvio(urgentesPedidos),
         },
         {
           id: 'leads',
           nome: 'Comercial',
           img_url: null,
           count: leadsPedidos.length,
-          pedidos: sortPedidos(leadsPedidos),
+          pedidos: sortPedidosEnvio(leadsPedidos),
         },
         {
-          id: 'urgentes',
-          nome: 'Urgentes',
-          img_url: null,
-          count: urgentesPedidos.length,
-          pedidos: sortPedidos(urgentesPedidos),
+          id: mlPlatform?.id || MERCADO_LIVRE_PLATAFORMA_ID,
+          nome: mlPlatform?.nome || 'Mercado Livre',
+          img_url: mlPlatform?.img_url,
+          count: mlPedidos.length,
+          pedidos: sortPedidosEnvio(mlPedidos),
+        },
+        {
+          id: yampiPlatform?.id || 'yampi-card',
+          nome: yampiPlatform?.nome || 'Yampi',
+          img_url: yampiPlatform?.img_url,
+          count: yampiPedidos.length,
+          pedidos: sortPedidosEnvio(yampiPedidos),
         },
       ];
 
@@ -1309,6 +1326,40 @@ export function Logistica() {
       const disponiveis = itensEmbaladasDisponiveis.get(caseItem.key) || 0;
       return disponiveis >= caseItem.quantidade;
     });
+  };
+
+  // ── Contagem de slots disponíveis por caseGroup ────────────────────────
+  const getCaseGroupAvailableSlotCount = (caseGroup: any): number => {
+    const pedidosPendentes = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel);
+    if (pedidosPendentes.length === 0) return 0;
+    const caseItems = getPedidoCaseItems(pedidosPendentes[0]);
+    if (caseItems.length === 0) return pedidosPendentes.length;
+    // Conta itens embalados disponíveis
+    const itensDisponiveis = new Map<string, number>();
+    (caseGroup.pedidos || []).forEach((pedido: any) => {
+      (pedido?.itens_pedido || []).forEach((item: any) => {
+        if (item?.embalado === true) {
+          const refKey = String(item?.variacao_id || item?.produto_id || item?.id || 'sem-ref');
+          const qtd = Math.max(1, Number(item?.quantidade ?? 1));
+          itensDisponiveis.set(refKey, (itensDisponiveis.get(refKey) || 0) + qtd);
+        }
+      });
+    });
+    // Subtrai consumidos pelos já liberados
+    (caseGroup.pedidos || []).filter((p: any) => p.pacote_disponivel === true).forEach((pedido: any) => {
+      (pedido?.itens_pedido || []).forEach((item: any) => {
+        const refKey = String(item?.variacao_id || item?.produto_id || item?.id || 'sem-ref');
+        const qtd = Math.max(1, Number(item?.quantidade ?? 1));
+        itensDisponiveis.set(refKey, Math.max(0, (itensDisponiveis.get(refKey) || 0) - qtd));
+      });
+    });
+    // Quantos slots completos cabem
+    let slots = pedidosPendentes.length;
+    caseItems.forEach((caseItem) => {
+      const avail = itensDisponiveis.get(caseItem.key) || 0;
+      slots = Math.min(slots, Math.floor(avail / caseItem.quantidade));
+    });
+    return Math.max(0, Math.min(slots, pedidosPendentes.length));
   };
 
   // ── Prioridade de plataforma para ordenação dos pacotes ──────────────────
@@ -2645,7 +2696,7 @@ export function Logistica() {
                     </div>
                   );
                 })()}
-                <div className="mb-4 flex items-center gap-2">
+                <div className="mb-2 flex items-center gap-2">
                   <Button
                     type="button"
                     size="sm"
@@ -2663,6 +2714,27 @@ export function Logistica() {
                     Incomuns
                   </Button>
                 </div>
+                {/* Tab disponíveis / indisponíveis */}
+                <div className="mb-4 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pacotesDisponivelTab === 'disponivel' ? 'default' : 'outline'}
+                    className={pacotesDisponivelTab === 'disponivel' ? 'bg-green-600 hover:bg-green-700 text-white border-green-600' : 'text-green-700 border-green-600 hover:bg-green-50'}
+                    onClick={() => setPacotesDisponivelTab('disponivel')}
+                  >
+                    ✓ Disponíveis
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pacotesDisponivelTab === 'indisponivel' ? 'default' : 'outline'}
+                    className={pacotesDisponivelTab === 'indisponivel' ? 'bg-red-600 hover:bg-red-700 text-white border-red-600' : 'text-red-700 border-red-600 hover:bg-red-50'}
+                    onClick={() => setPacotesDisponivelTab('indisponivel')}
+                  >
+                    ✕ Indisponíveis
+                  </Button>
+                </div>
 
                 {pacotesSubTab === 'comuns' && (
                   <div className="mb-6">
@@ -2675,13 +2747,22 @@ export function Logistica() {
                             <div key={`comum-${group.type}`} className="space-y-2">
                               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
                               <div className="flex flex-wrap gap-2">
-                                {group.groups.map((caseGroup: any) => {
+                                {group.groups
+                                  .filter((cg: any) => {
+                                    const avail = getCaseGroupAvailableSlotCount(cg);
+                                    const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                                    return pacotesDisponivelTab === 'disponivel' ? avail > 0 : (pend - avail) > 0;
+                                  })
+                                  .map((caseGroup: any) => {
                                   const nomePreview = caseGroup.label;
                                   const imgPreview = caseGroup.imgUrl;
-                                  const pronto = isCaseGroupPronto(caseGroup);
                                   const deadline = getCaseGroupDeadlineStatus(caseGroup);
                                   const temUrgente = (caseGroup.pedidos as any[]).some((p: any) => p.urgente);
                                   const pacoteDisponivel = (caseGroup.pedidos as any[]).every((p: any) => p.pacote_disponivel);
+                                  const availSlots = getCaseGroupAvailableSlotCount(caseGroup);
+                                  const pendSlots = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                                  const badgeCount = pacotesDisponivelTab === 'disponivel' ? availSlots : pendSlots - availSlots;
+                                  const isDisponivelTab = pacotesDisponivelTab === 'disponivel';
 
                                   return (
                                     <div
@@ -2689,17 +2770,17 @@ export function Logistica() {
                                       className={`relative flex flex-col items-center gap-1.5 rounded-lg border p-2 w-24 shadow-sm transition-shadow ${
                                         pacoteDisponivel
                                           ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
-                                          : pronto
+                                          : isDisponivelTab
                                           ? 'bg-card hover:shadow-md cursor-pointer'
                                           : 'bg-card opacity-45 cursor-not-allowed'
                                       }`}
                                       onClick={() => {
-                                        if (!pronto) return;
+                                        if (!isDisponivelTab) return;
                                         setEntradaPacoteModal({ open: true, caseGroup, loading: false });
                                       }}
                                     >
                                       <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                        ×{caseGroup.pedidos.filter((p: any) => !p.pacote_disponivel).length}
+                                        ×{badgeCount}
                                       </span>
 
                                       {imgPreview ? (
@@ -2740,7 +2821,7 @@ export function Logistica() {
                                         )}
                                       </div>
 
-                                      {!pronto && (
+                                      {!isDisponivelTab && (
                                         <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
                                           Itens insuficientes embalados
                                         </p>
@@ -2768,13 +2849,22 @@ export function Logistica() {
                             <div key={`incomum-${group.type}`} className="space-y-2">
                               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
                               <div className="flex flex-wrap gap-2">
-                                {group.groups.map((caseGroup: any) => {
+                                {group.groups
+                                  .filter((cg: any) => {
+                                    const avail = getCaseGroupAvailableSlotCount(cg);
+                                    const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                                    return pacotesDisponivelTab === 'disponivel' ? avail > 0 : (pend - avail) > 0;
+                                  })
+                                  .map((caseGroup: any) => {
                                   const nomePreview = caseGroup.label;
                                   const imgPreview = caseGroup.imgUrl;
-                                  const pronto = isCaseGroupPronto(caseGroup);
                                   const deadline = getCaseGroupDeadlineStatus(caseGroup);
                                   const temUrgente = (caseGroup.pedidos as any[]).some((p: any) => p.urgente);
                                   const pacoteDisponivel = (caseGroup.pedidos as any[]).every((p: any) => p.pacote_disponivel);
+                                  const availSlots = getCaseGroupAvailableSlotCount(caseGroup);
+                                  const pendSlots = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                                  const badgeCount = pacotesDisponivelTab === 'disponivel' ? availSlots : pendSlots - availSlots;
+                                  const isDisponivelTab = pacotesDisponivelTab === 'disponivel';
 
                                   return (
                                     <div
@@ -2782,17 +2872,17 @@ export function Logistica() {
                                       className={`relative flex flex-col items-center gap-1.5 rounded-lg border p-2 w-24 shadow-sm transition-shadow ${
                                         pacoteDisponivel
                                           ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
-                                          : pronto
+                                          : isDisponivelTab
                                           ? 'bg-card hover:shadow-md cursor-pointer'
                                           : 'bg-card opacity-45 cursor-not-allowed'
                                       }`}
                                       onClick={() => {
-                                        if (!pronto) return;
+                                        if (!isDisponivelTab) return;
                                         setEntradaPacoteModal({ open: true, caseGroup, loading: false });
                                       }}
                                     >
                                       <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                        ×{caseGroup.pedidos.filter((p: any) => !p.pacote_disponivel).length}
+                                        ×{badgeCount}
                                       </span>
 
                                       {imgPreview ? (
@@ -2833,7 +2923,7 @@ export function Logistica() {
                                         )}
                                       </div>
 
-                                      {!pronto && (
+                                      {!isDisponivelTab && (
                                         <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
                                           Itens insuficientes embalados
                                         </p>
