@@ -2737,7 +2737,7 @@ export function Logistica() {
                         return (
                           <Card
                             key={grupo.id}
-                            className={`p-5 select-none self-start transition-all shadow-sm ${grupoConcluido ? 'ring-1 ring-green-400 border-green-400 bg-green-100 opacity-50' : 'border border-custom-600/60 hover:shadow-md'}`}
+                            className={`p-5 select-none self-start transition-all shadow-sm ${grupoConcluido ? 'ring-1 ring-green-400 border-green-400 bg-green-100 opacity-50' : secao === 'urgente' ? 'border-2 border-red-300 bg-red-50/50 hover:shadow-md' : 'border-2 border-blue-300 bg-blue-50/50 hover:shadow-md'}`}
                           >
                             <CardContent className="flex items-center gap-3 p-0">
                               <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${grupoConcluido ? 'bg-green-100' : 'bg-muted'}`}>
@@ -2868,7 +2868,7 @@ export function Logistica() {
                     <div className="space-y-8">
                       {/* ───── URGENTES ───── */}
                       {urgGrupos.length > 0 && (
-                        <div>
+                        <div className="rounded-xl border-2 border-red-300 bg-red-50/60 p-4">
                           <div className="flex items-center gap-2 mb-4 pb-2 border-b-2 border-red-400">
                             <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold shrink-0">!</span>
                             <h4 className="text-sm font-bold uppercase tracking-wide text-red-700">Urgentes</h4>
@@ -2879,7 +2879,7 @@ export function Logistica() {
                       )}
                       {/* ───── NORMAIS ───── */}
                       {normGrupos.length > 0 && (
-                        <div>
+                        <div className="rounded-xl border-2 border-blue-300 bg-blue-50/60 p-4">
                           <div className="flex items-center gap-2 mb-4 pb-2 border-b-2 border-blue-300">
                             <FaBoxesStacked className="h-4 w-4 text-blue-500" />
                             <h4 className="text-sm font-bold uppercase tracking-wide text-blue-700">Normais</h4>
@@ -3140,7 +3140,7 @@ export function Logistica() {
                                           : isParcialTab
                                           ? 'border-amber-400 bg-amber-50 hover:shadow-md cursor-default'
                                           : 'bg-card opacity-45 cursor-not-allowed'
-                                      } ${isParcialTab ? 'flex flex-row items-stretch w-full' : 'flex flex-col items-center gap-1.5 p-2 w-24'}`}
+                                      } ${isParcialTab ? 'flex flex-row items-stretch max-w-sm' : 'flex flex-col items-center gap-1.5 p-2 w-24'}`}
                                       onClick={() => {
                                         if (!isDisponivelTab) return;
                                         setEntradaPacoteModal({ open: true, caseGroup, loading: false });
@@ -3200,29 +3200,29 @@ export function Logistica() {
 
                                       {/* ── Lado direito: itens faltando (só na aba Parcial) ── */}
                                       {isParcialTab && parcialInfo && parcialInfo.missingItems.length > 0 && (
-                                        <div className="flex-1 border-l border-amber-300 bg-amber-50/50 p-2 flex flex-col justify-center gap-1.5 min-w-0 rounded-r-lg">
-                                          <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1">
+                                        <div className="w-44 border-l border-amber-300 bg-amber-50/50 p-2 flex flex-col justify-center gap-1 rounded-r-lg">
+                                          <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1 mb-0.5">
                                             <span>⏳</span> Faltando
                                           </p>
                                           {parcialInfo.missingItems.map((mi, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 bg-white rounded-md p-1.5 border border-amber-200 shadow-sm">
+                                            <div key={idx} className="flex items-center gap-1.5 bg-white rounded p-1 border border-amber-200">
                                               {mi.imgUrl ? (
-                                                <img src={mi.imgUrl} alt={mi.nome} className="h-9 w-9 rounded object-cover border border-amber-300 shrink-0 opacity-40 grayscale" />
+                                                <img src={mi.imgUrl} alt={mi.nome} className="h-7 w-7 rounded object-cover border border-amber-300 shrink-0 opacity-40 grayscale" />
                                               ) : (
-                                                <div className="h-9 w-9 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center shrink-0">
-                                                  <span className="text-xs text-amber-400">?</span>
+                                                <div className="h-7 w-7 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center shrink-0">
+                                                  <span className="text-[9px] text-amber-400">?</span>
                                                 </div>
                                               )}
                                               <div className="flex-1 min-w-0">
-                                                <p className="text-[9px] font-semibold text-amber-900 leading-tight line-clamp-2">{mi.nome}</p>
-                                                <div className="flex items-center gap-1.5 mt-1">
-                                                  <div className="flex-1 h-2 rounded-full bg-amber-200 overflow-hidden">
+                                                <p className="text-[9px] font-semibold text-amber-900 leading-tight truncate">{mi.nome}</p>
+                                                <div className="flex items-center gap-1 mt-0.5">
+                                                  <div className="flex-1 h-1.5 rounded-full bg-amber-200 overflow-hidden">
                                                     <div
                                                       className="h-full rounded-full bg-amber-500 transition-all"
                                                       style={{ width: `${Math.round((mi.disponivel / mi.necessario) * 100)}%` }}
                                                     />
                                                   </div>
-                                                  <span className="text-[9px] font-bold text-amber-700 whitespace-nowrap">{mi.disponivel}/{mi.necessario}</span>
+                                                  <span className="text-[8px] font-bold text-amber-700 whitespace-nowrap">{mi.disponivel}/{mi.necessario}</span>
                                                 </div>
                                               </div>
                                             </div>
@@ -3306,7 +3306,7 @@ export function Logistica() {
                                           : isParcialTab
                                           ? 'border-amber-400 bg-amber-50 hover:shadow-md cursor-default'
                                           : 'bg-card opacity-45 cursor-not-allowed'
-                                      } ${isParcialTab ? 'flex flex-row items-stretch w-full' : 'flex flex-col items-center gap-1.5 p-2 w-24'}`}
+                                      } ${isParcialTab ? 'flex flex-row items-stretch max-w-sm' : 'flex flex-col items-center gap-1.5 p-2 w-24'}`}
                                       onClick={() => {
                                         if (!isDisponivelTab) return;
                                         setEntradaPacoteModal({ open: true, caseGroup, loading: false });
@@ -3366,29 +3366,29 @@ export function Logistica() {
 
                                       {/* ── Lado direito: itens faltando (só na aba Parcial) ── */}
                                       {isParcialTab && parcialInfo && parcialInfo.missingItems.length > 0 && (
-                                        <div className="flex-1 border-l border-amber-300 bg-amber-50/50 p-2 flex flex-col justify-center gap-1.5 min-w-0 rounded-r-lg">
-                                          <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1">
+                                        <div className="w-44 border-l border-amber-300 bg-amber-50/50 p-2 flex flex-col justify-center gap-1 rounded-r-lg">
+                                          <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1 mb-0.5">
                                             <span>⏳</span> Faltando
                                           </p>
                                           {parcialInfo.missingItems.map((mi, idx) => (
-                                            <div key={idx} className="flex items-center gap-2 bg-white rounded-md p-1.5 border border-amber-200 shadow-sm">
+                                            <div key={idx} className="flex items-center gap-1.5 bg-white rounded p-1 border border-amber-200">
                                               {mi.imgUrl ? (
-                                                <img src={mi.imgUrl} alt={mi.nome} className="h-9 w-9 rounded object-cover border border-amber-300 shrink-0 opacity-40 grayscale" />
+                                                <img src={mi.imgUrl} alt={mi.nome} className="h-7 w-7 rounded object-cover border border-amber-300 shrink-0 opacity-40 grayscale" />
                                               ) : (
-                                                <div className="h-9 w-9 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center shrink-0">
-                                                  <span className="text-xs text-amber-400">?</span>
+                                                <div className="h-7 w-7 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center shrink-0">
+                                                  <span className="text-[9px] text-amber-400">?</span>
                                                 </div>
                                               )}
                                               <div className="flex-1 min-w-0">
-                                                <p className="text-[9px] font-semibold text-amber-900 leading-tight line-clamp-2">{mi.nome}</p>
-                                                <div className="flex items-center gap-1.5 mt-1">
-                                                  <div className="flex-1 h-2 rounded-full bg-amber-200 overflow-hidden">
+                                                <p className="text-[9px] font-semibold text-amber-900 leading-tight truncate">{mi.nome}</p>
+                                                <div className="flex items-center gap-1 mt-0.5">
+                                                  <div className="flex-1 h-1.5 rounded-full bg-amber-200 overflow-hidden">
                                                     <div
                                                       className="h-full rounded-full bg-amber-500 transition-all"
                                                       style={{ width: `${Math.round((mi.disponivel / mi.necessario) * 100)}%` }}
                                                     />
                                                   </div>
-                                                  <span className="text-[9px] font-bold text-amber-700 whitespace-nowrap">{mi.disponivel}/{mi.necessario}</span>
+                                                  <span className="text-[8px] font-bold text-amber-700 whitespace-nowrap">{mi.disponivel}/{mi.necessario}</span>
                                                 </div>
                                               </div>
                                             </div>
@@ -3736,22 +3736,22 @@ export function Logistica() {
                               {pedidosPagina.length === 0 ? (
                                 <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
                               ) : (
-                                <div className="space-y-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                                   {pedidosPagina.map((p: any) => {
                                     const items = platformOrderItems[p.id] || [];
                                     const pacoteOk = p.pacote_disponivel === true;
                                     const pacoteInfo = pacoteOk ? p.pacotes : null;
                                     return (
-                                      <div key={p.id} className={`rounded border px-3 py-2.5 bg-white transition-opacity ${!pacoteOk ? 'opacity-40 pointer-events-none' : ''}`}>
-                                        <div className="flex items-center justify-between gap-2">
-                                          <div className="flex items-center gap-3 min-w-0">
-                                            <span className="text-sm truncate max-w-[10rem]">{p.id_externo || p.id}</span>
-                                            <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground">{items.length} itens</span>
-                                            {!pacoteOk && <span className="rounded-full bg-orange-100 text-orange-700 px-2 py-0.5 text-xs font-semibold">Aguardando pacote</span>}
+                                      <div key={p.id} className={`rounded border px-2.5 py-2 bg-white transition-opacity ${!pacoteOk ? 'opacity-40 pointer-events-none' : ''}`}>
+                                        <div className="flex items-center justify-between gap-1">
+                                          <div className="flex items-center gap-2 min-w-0">
+                                            <span className="text-xs font-medium truncate max-w-[8rem]">{p.id_externo || p.id}</span>
+                                            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">{items.length} itens</span>
+                                            {!pacoteOk && <span className="rounded-full bg-orange-100 text-orange-700 px-1.5 py-0.5 text-[10px] font-semibold">Aguardando pacote</span>}
                                           </div>
                                           <button
                                             type="button"
-                                            className="text-sm text-primary underline-offset-4 hover:underline shrink-0"
+                                            className="text-xs text-primary underline-offset-4 hover:underline shrink-0"
                                             onClick={async (e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
@@ -3783,19 +3783,19 @@ export function Logistica() {
                                           </button>
                                         </div>
                                         {(items.length > 0 || pacoteInfo) && (
-                                          <div className="flex items-start gap-3 border-t mt-3 pt-3">
+                                          <div className="flex items-start gap-2 border-t mt-2 pt-2">
                                             {/* Imagens dos itens */}
-                                            <div className="flex flex-wrap gap-2 flex-1">
+                                            <div className="flex flex-wrap gap-1.5 flex-1">
                                             {items.map((item: any, itemIdx: number) => (
-                                              <div key={itemIdx} className="flex flex-col items-center gap-1 max-w-[60px]">
+                                              <div key={itemIdx} className="flex flex-col items-center gap-0.5 max-w-[48px]">
                                                 {item.img_url ? (
-                                                  <img src={item.img_url} alt={item.nome || ''} className="h-12 w-12 rounded object-cover border" />
+                                                  <img src={item.img_url} alt={item.nome || ''} className="h-9 w-9 rounded object-cover border" />
                                                 ) : (
-                                                  <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">sem foto</div>
+                                                  <div className="h-9 w-9 rounded border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
                                                 )}
-                                                <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
+                                                <span className="text-[9px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
                                                 {(item.quantidade ?? 1) > 1 && (
-                                                  <span className="text-[10px] font-semibold text-muted-foreground">×{item.quantidade}</span>
+                                                  <span className="text-[9px] font-semibold text-muted-foreground">×{item.quantidade}</span>
                                                 )}
                                               </div>
                                             ))}
@@ -3803,10 +3803,10 @@ export function Logistica() {
 
                                             {/* Pacote vinculado à direita */}
                                             {pacoteInfo && (
-                                              <div className="shrink-0 flex flex-col items-end gap-1 min-w-[110px] max-w-[150px] self-center">
-                                                <div className="flex items-center gap-1 rounded-md bg-green-50 border border-green-200 px-2 py-1 w-full">
+                                              <div className="shrink-0 flex flex-col items-end gap-0.5 min-w-[90px] max-w-[120px] self-center">
+                                                <div className="flex items-center gap-1 rounded-md bg-green-50 border border-green-200 px-1.5 py-0.5 w-full">
                                                   <PackageCheck className="h-3 w-3 text-green-600 shrink-0" />
-                                                  <span className="text-[10px] text-green-800 font-medium leading-tight line-clamp-3">{pacoteInfo.rotulo}</span>
+                                                  <span className="text-[9px] text-green-800 font-medium leading-tight line-clamp-2">{pacoteInfo.rotulo}</span>
                                                 </div>
                                                 <span className="text-[9px] text-muted-foreground">
                                                   Vinculado em {new Date(pacoteInfo.criado_em).toLocaleDateString('pt-BR')}
