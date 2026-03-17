@@ -183,7 +183,7 @@ export function Logistica() {
   });
   const [logisticaMainTab, setLogisticaMainTab] = useState<'itens-produzir' | 'pacotes' | 'enviar'>('itens-produzir');
   const [pacotesSubTab, setPacotesSubTab] = useState<'comuns' | 'incomuns'>('comuns');
-  const [pacotesDisponivelTab, setPacotesDisponivelTab] = useState<'disponivel' | 'indisponivel'>('disponivel');
+  const [pacotesDisponivelTab, setPacotesDisponivelTab] = useState<'disponivel' | 'parcial' | 'indisponivel'>('disponivel');
   const [produzidosPorGrupo, setProduzidosPorGrupo] = useState<Record<string, Record<string, number>>>({});
   const [itemProduzidoFlash, setItemProduzidoFlash] = useState<string | null>(null);
   const [salvandoBaixaCategoria, setSalvandoBaixaCategoria] = useState(false);
@@ -1360,6 +1360,38 @@ export function Logistica() {
       slots = Math.min(slots, Math.floor(avail / caseItem.quantidade));
     });
     return Math.max(0, Math.min(slots, pedidosPendentes.length));
+  };
+
+  // ── Info parcial de um caseGroup (tem alguns itens embalados mas não o suficiente para 1 pacote completo) ──
+  const getCaseGroupPartialInfo = (caseGroup: any): { isPartial: boolean; missingItems: { nome: string; disponivel: number; necessario: number }[] } => {
+    const pedidosPendentes = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel);
+    if (pedidosPendentes.length === 0) return { isPartial: false, missingItems: [] };
+    const caseItems = getPedidoCaseItems(pedidosPendentes[0]);
+    if (caseItems.length === 0) return { isPartial: false, missingItems: [] };
+    // monta mapa de disponíveis embalados
+    const itensDisp = new Map<string, number>();
+    (caseGroup.pedidos || []).forEach((pedido: any) => {
+      (pedido?.itens_pedido || []).forEach((item: any) => {
+        if (item?.embalado === true) {
+          const refKey = String(item?.variacao_id || item?.produto_id || item?.id || 'sem-ref');
+          itensDisp.set(refKey, (itensDisp.get(refKey) || 0) + Math.max(1, Number(item?.quantidade ?? 1)));
+        }
+      });
+    });
+    // subtrai os já consumidos pelos liberados
+    (caseGroup.pedidos || []).filter((p: any) => p.pacote_disponivel === true).forEach((pedido: any) => {
+      (pedido?.itens_pedido || []).forEach((item: any) => {
+        const refKey = String(item?.variacao_id || item?.produto_id || item?.id || 'sem-ref');
+        itensDisp.set(refKey, Math.max(0, (itensDisp.get(refKey) || 0) - Math.max(1, Number(item?.quantidade ?? 1))));
+      });
+    });
+    const hasAnyEmbalado = caseItems.some((ci) => (itensDisp.get(ci.key) || 0) > 0);
+    const hasCompleteSlot = caseItems.every((ci) => (itensDisp.get(ci.key) || 0) >= ci.quantidade);
+    if (!hasAnyEmbalado || hasCompleteSlot) return { isPartial: false, missingItems: [] };
+    const missingItems = caseItems
+      .filter((ci) => (itensDisp.get(ci.key) || 0) < ci.quantidade)
+      .map((ci) => ({ nome: ci.nome, disponivel: itensDisp.get(ci.key) || 0, necessario: ci.quantidade }));
+    return { isPartial: true, missingItems };
   };
 
   // ── Prioridade de plataforma para ordenação dos pacotes ──────────────────
@@ -2714,7 +2746,7 @@ export function Logistica() {
                     Incomuns
                   </Button>
                 </div>
-                {/* Tab disponíveis / indisponíveis */}
+                {/* Tab disponíveis / parcial / indisponíveis */}
                 <div className="mb-4 flex items-center gap-2">
                   <Button
                     type="button"
@@ -2724,6 +2756,15 @@ export function Logistica() {
                     onClick={() => setPacotesDisponivelTab('disponivel')}
                   >
                     ✓ Disponíveis
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={pacotesDisponivelTab === 'parcial' ? 'default' : 'outline'}
+                    className={pacotesDisponivelTab === 'parcial' ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500' : 'text-amber-600 border-amber-500 hover:bg-amber-50'}
+                    onClick={() => setPacotesDisponivelTab('parcial')}
+                  >
+                    ◑ Parcial
                   </Button>
                   <Button
                     type="button"
@@ -2751,7 +2792,9 @@ export function Logistica() {
                                   .filter((cg: any) => {
                                     const avail = getCaseGroupAvailableSlotCount(cg);
                                     const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
-                                    return pacotesDisponivelTab === 'disponivel' ? avail > 0 : (pend - avail) > 0;
+                                    if (pacotesDisponivelTab === 'disponivel') return avail > 0;
+                                    if (pacotesDisponivelTab === 'parcial') return avail === 0 && pend > 0 && getCaseGroupPartialInfo(cg).isPartial;
+                                    return avail === 0 && pend > 0 && !getCaseGroupPartialInfo(cg).isPartial;
                                   })
                                   .map((caseGroup: any) => {
                                   const nomePreview = caseGroup.label;
@@ -2761,8 +2804,10 @@ export function Logistica() {
                                   const pacoteDisponivel = (caseGroup.pedidos as any[]).every((p: any) => p.pacote_disponivel);
                                   const availSlots = getCaseGroupAvailableSlotCount(caseGroup);
                                   const pendSlots = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                                  const parcialInfo = pacotesDisponivelTab === 'parcial' ? getCaseGroupPartialInfo(caseGroup) : null;
                                   const badgeCount = pacotesDisponivelTab === 'disponivel' ? availSlots : pendSlots - availSlots;
                                   const isDisponivelTab = pacotesDisponivelTab === 'disponivel';
+                                  const isParcialTab = pacotesDisponivelTab === 'parcial';
 
                                   return (
                                     <div
@@ -2772,6 +2817,8 @@ export function Logistica() {
                                           ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
                                           : isDisponivelTab
                                           ? 'bg-card hover:shadow-md cursor-pointer'
+                                          : isParcialTab
+                                          ? 'border-amber-400 bg-amber-50 hover:shadow-md cursor-default'
                                           : 'bg-card opacity-45 cursor-not-allowed'
                                       }`}
                                       onClick={() => {
@@ -2821,7 +2868,19 @@ export function Logistica() {
                                         )}
                                       </div>
 
-                                      {!isDisponivelTab && (
+                                      {/* Itens faltando (aba Parcial) */}
+                                      {isParcialTab && parcialInfo && parcialInfo.missingItems.length > 0 && (
+                                        <div className="w-full mt-0.5 space-y-0.5">
+                                          <p className="text-[8px] font-bold text-amber-700 text-center leading-tight">Aguardando:</p>
+                                          {parcialInfo.missingItems.map((mi, idx) => (
+                                            <p key={idx} className="text-[7.5px] text-amber-800 leading-tight text-center line-clamp-2">
+                                              {mi.nome} ({mi.disponivel}/{mi.necessario})
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {!isDisponivelTab && !isParcialTab && (
                                         <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
                                           Itens insuficientes embalados
                                         </p>
@@ -2853,7 +2912,9 @@ export function Logistica() {
                                   .filter((cg: any) => {
                                     const avail = getCaseGroupAvailableSlotCount(cg);
                                     const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
-                                    return pacotesDisponivelTab === 'disponivel' ? avail > 0 : (pend - avail) > 0;
+                                    if (pacotesDisponivelTab === 'disponivel') return avail > 0;
+                                    if (pacotesDisponivelTab === 'parcial') return avail === 0 && pend > 0 && getCaseGroupPartialInfo(cg).isPartial;
+                                    return avail === 0 && pend > 0 && !getCaseGroupPartialInfo(cg).isPartial;
                                   })
                                   .map((caseGroup: any) => {
                                   const nomePreview = caseGroup.label;
@@ -2863,8 +2924,10 @@ export function Logistica() {
                                   const pacoteDisponivel = (caseGroup.pedidos as any[]).every((p: any) => p.pacote_disponivel);
                                   const availSlots = getCaseGroupAvailableSlotCount(caseGroup);
                                   const pendSlots = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                                  const parcialInfo = pacotesDisponivelTab === 'parcial' ? getCaseGroupPartialInfo(caseGroup) : null;
                                   const badgeCount = pacotesDisponivelTab === 'disponivel' ? availSlots : pendSlots - availSlots;
                                   const isDisponivelTab = pacotesDisponivelTab === 'disponivel';
+                                  const isParcialTab = pacotesDisponivelTab === 'parcial';
 
                                   return (
                                     <div
@@ -2874,6 +2937,8 @@ export function Logistica() {
                                           ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
                                           : isDisponivelTab
                                           ? 'bg-card hover:shadow-md cursor-pointer'
+                                          : isParcialTab
+                                          ? 'border-amber-400 bg-amber-50 hover:shadow-md cursor-default'
                                           : 'bg-card opacity-45 cursor-not-allowed'
                                       }`}
                                       onClick={() => {
@@ -2923,7 +2988,19 @@ export function Logistica() {
                                         )}
                                       </div>
 
-                                      {!isDisponivelTab && (
+                                      {/* Itens faltando (aba Parcial) */}
+                                      {isParcialTab && parcialInfo && parcialInfo.missingItems.length > 0 && (
+                                        <div className="w-full mt-0.5 space-y-0.5">
+                                          <p className="text-[8px] font-bold text-amber-700 text-center leading-tight">Aguardando:</p>
+                                          {parcialInfo.missingItems.map((mi, idx) => (
+                                            <p key={idx} className="text-[7.5px] text-amber-800 leading-tight text-center line-clamp-2">
+                                              {mi.nome} ({mi.disponivel}/{mi.necessario})
+                                            </p>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {!isDisponivelTab && !isParcialTab && (
                                         <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
                                           Itens insuficientes embalados
                                         </p>
