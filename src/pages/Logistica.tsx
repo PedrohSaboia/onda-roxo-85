@@ -160,6 +160,7 @@ export function Logistica() {
   const [platformOrderItems, setPlatformOrderItems] = useState<Record<string, any[]>>({});
   const PLATFORM_PAGE_SIZE = 4;
   const [platformPage, setPlatformPage] = useState<Record<string, number>>({});
+  const [enviadosPage, setEnviadosPage] = useState<Record<string, number>>({});
   const [comumPedidos, setComumPedidos] = useState<any[]>([]);
   const [incomumPedidos, setIncomumPedidos] = useState<any[]>([]);
 
@@ -3635,50 +3636,88 @@ export function Logistica() {
                                 <PackageCheck className="h-3.5 w-3.5" />
                                 Pedidos enviados com pacote
                               </h4>
-                              {loadingEnviados === cardDropdownKey ? (
-                                <div className="text-sm text-muted-foreground py-2">Carregando...</div>
-                              ) : (pedidosEnviadosCache[cardDropdownKey] || []).length === 0 ? (
-                                <div className="flex flex-col items-center gap-2 py-4 text-muted-foreground">
-                                  <Package className="h-8 w-8 opacity-30" />
-                                  <span className="text-xs">Nenhum pedido enviado com pacote.</span>
-                                </div>
-                              ) : (
-                                <div className="space-y-2">
-                                  {(pedidosEnviadosCache[cardDropdownKey] || []).map((p: any) => {
+                              {(() => {
+                                const allEnviados = pedidosEnviadosCache[cardDropdownKey] || [];
+                                const envCurrentPage = enviadosPage[cardDropdownKey] ?? 1;
+                                const envTotalPages = Math.max(1, Math.ceil(allEnviados.length / PLATFORM_PAGE_SIZE));
+                                const envSliceStart = (envCurrentPage - 1) * PLATFORM_PAGE_SIZE;
+                                const enviadosPagina = allEnviados.slice(envSliceStart, envSliceStart + PLATFORM_PAGE_SIZE);
+                                const handleEnvGoToPage = (e: React.MouseEvent, page: number) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  if (page < 1 || page > envTotalPages) return;
+                                  setEnviadosPage((s) => ({ ...s, [cardDropdownKey]: page }));
+                                };
+                                if (loadingEnviados === cardDropdownKey) return <div className="text-sm text-muted-foreground py-2">Carregando...</div>;
+                                if (allEnviados.length === 0) return (
+                                  <div className="flex flex-col items-center gap-2 py-4 text-muted-foreground">
+                                    <Package className="h-8 w-8 opacity-30" />
+                                    <span className="text-xs">Nenhum pedido enviado com pacote.</span>
+                                  </div>
+                                );
+                                return (
+                                  <>
+                                    {envTotalPages > 1 && (
+                                      <div className="flex items-center justify-between mb-3 pb-3 border-b">
+                                        <span className="text-sm text-muted-foreground">
+                                          {allEnviados.length} enviados • {envCurrentPage}/{envTotalPages}
+                                        </span>
+                                        <div className="flex items-center gap-2">
+                                          <button
+                                            type="button"
+                                            disabled={envCurrentPage <= 1}
+                                            onClick={(e) => handleEnvGoToPage(e, envCurrentPage - 1)}
+                                            className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                          >
+                                            ‹
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={envCurrentPage >= envTotalPages}
+                                            onClick={(e) => handleEnvGoToPage(e, envCurrentPage + 1)}
+                                            className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                          >
+                                            ›
+                                          </button>
+                                        </div>
+                                      </div>
+                                    )}
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                  {enviadosPagina.map((p: any) => {
                                     const itens: any[] = p.itens_pedido || [];
                                     return (
-                                      <div key={p.id} className="rounded-lg border border-green-200 bg-green-50 px-3 py-2.5">
+                                      <div key={p.id} className="rounded-lg border border-green-200 bg-green-50 px-2.5 py-2">
                                         {/* Linha de cabeçalho */}
-                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                        <div className="flex items-center justify-between gap-1 mb-1.5">
                                           <div className="flex items-center gap-1.5">
-                                            <CheckCircle className="h-3.5 w-3.5 text-green-600 shrink-0" />
-                                            <span className="text-sm font-semibold text-green-800">{p.id_externo || p.id}</span>
+                                            <CheckCircle className="h-3 w-3 text-green-600 shrink-0" />
+                                            <span className="text-xs font-semibold text-green-800">{p.id_externo || p.id}</span>
                                           </div>
-                                          <span className="text-[11px] text-green-700">{new Date(p.criado_em).toLocaleDateString('pt-BR')}</span>
+                                          <span className="text-[10px] text-green-700">{new Date(p.criado_em).toLocaleDateString('pt-BR')}</span>
                                         </div>
 
                                         {/* Conteúdo: produtos à esquerda, pacote à direita */}
-                                        <div className="flex items-start gap-3">
+                                        <div className="flex items-start gap-2">
                                           {/* Produtos */}
                                           <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
                                             {itens.length === 0 ? (
-                                              <span className="text-xs text-green-700/60">Sem itens</span>
+                                              <span className="text-[10px] text-green-700/60">Sem itens</span>
                                             ) : (
                                               itens.map((it: any, itIdx: number) => {
                                                 const nome = it.variacao?.nome || it.produto?.nome || '—';
                                                 const imgUrl = it.variacao?.img_url || it.produto?.img_url;
                                                 const qty = it.quantidade ?? 1;
                                                 return (
-                                                  <div key={itIdx} className="flex flex-col items-center gap-0.5 max-w-[52px]">
+                                                  <div key={itIdx} className="flex flex-col items-center gap-0.5 max-w-[44px]">
                                                     {imgUrl ? (
-                                                      <img src={imgUrl} alt={nome} className="h-10 w-10 rounded object-cover border border-green-200" />
+                                                      <img src={imgUrl} alt={nome} className="h-8 w-8 rounded object-cover border border-green-200" />
                                                     ) : (
-                                                      <div className="h-10 w-10 rounded border border-green-200 bg-green-100 flex items-center justify-center">
-                                                        <Package className="h-4 w-4 text-green-400" />
+                                                      <div className="h-8 w-8 rounded border border-green-200 bg-green-100 flex items-center justify-center">
+                                                        <Package className="h-3.5 w-3.5 text-green-400" />
                                                       </div>
                                                     )}
-                                                    <span className="text-[9px] text-center leading-tight line-clamp-2 text-green-800 w-full">{nome}</span>
-                                                    {qty > 1 && <span className="text-[9px] font-semibold text-green-700">×{qty}</span>}
+                                                    <span className="text-[8px] text-center leading-tight line-clamp-2 text-green-800 w-full">{nome}</span>
+                                                    {qty > 1 && <span className="text-[8px] font-semibold text-green-700">×{qty}</span>}
                                                   </div>
                                                 );
                                               })
@@ -3687,20 +3726,22 @@ export function Logistica() {
 
                                           {/* Pacote */}
                                           {p.pacotes && (
-                                            <div className="shrink-0 flex flex-col items-end gap-0.5 min-w-[100px] max-w-[140px]">
-                                              <div className="flex items-center gap-1 rounded bg-green-100 border border-green-300 px-2 py-1 w-full">
+                                            <div className="shrink-0 flex flex-col items-end gap-0.5 min-w-[90px] max-w-[120px]">
+                                              <div className="flex items-center gap-1 rounded bg-green-100 border border-green-300 px-1.5 py-0.5 w-full">
                                                 <PackageCheck className="h-3 w-3 text-green-600 shrink-0" />
-                                                <span className="text-[10px] text-green-800 font-medium leading-tight line-clamp-3">{p.pacotes.rotulo}</span>
+                                                <span className="text-[9px] text-green-800 font-medium leading-tight line-clamp-2">{p.pacotes.rotulo}</span>
                                               </div>
-                                              <span className="text-[9px] rounded-full bg-green-200 text-green-800 px-1.5 py-0.5">{p.pacotes.tipo}</span>
+                                              <span className="text-[8px] rounded-full bg-green-200 text-green-800 px-1.5 py-0.5">{p.pacotes.tipo}</span>
                                             </div>
                                           )}
                                         </div>
                                       </div>
                                     );
                                   })}
-                                </div>
-                              )}
+                                    </div>
+                                  </>
+                                );
+                              })()}
                             </div>
                           </CardContent>
                         )}
