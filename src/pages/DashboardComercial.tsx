@@ -694,7 +694,7 @@ export function DashboardComercial() {
                               <div className="h-5 w-full rounded-full bg-custom-700 overflow-hidden flex border border-white">
                                 <div
                                   className="h-full transition-all duration-500 rounded-l-full"
-                                  style={{ backgroundColor: '#7c3aed', width: `${pctSite}%` }}
+                                  style={{ backgroundColor: '#5877ff', width: `${pctSite}%` }}
                                 />
                                 <div
                                   className="h-full transition-all duration-500 rounded-r-full"
@@ -718,7 +718,7 @@ export function DashboardComercial() {
                             <div className="space-y-2.5">
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-custom-200">Faturamento Site</span>
-                                <span className="font-bold" style={{ color: '#7c3aed' }}>{formatCurrency(faturamentoSite)}</span>
+                                <span className="font-bold" style={{ color: '#5877ff' }}>{formatCurrency(faturamentoSite)}</span>
                               </div>
                               <div className="flex items-center justify-between text-sm">
                                 <span className="text-custom-200">Faturamento Comercial</span>
@@ -1428,13 +1428,13 @@ export function DashboardComercial() {
                                 <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoSocial)}</p>
                               </div>
                             </div>
-                            {/* Receita por Lead — destaque roxo */}
-                            <div className="rounded-xl bg-primary border border-primary px-4 py-3 flex items-start gap-3">
-                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-white/15 flex-shrink-0 mt-0.5">
-                                <TrendingUp className="h-4 w-4 text-white" />
+                            {/* Receita por Lead */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <TrendingUp className="h-4 w-4 text-primary" />
                               </span>
                               <div className="min-w-0">
-                                <p className="text-[12px] text-white/80 leading-tight">Receita por Lead</p>
+                                <p className="text-[12px] text-custom-200 leading-tight">Receita por Lead</p>
                                 <p className="text-xl font-bold text-white leading-tight">{formatCurrency(recPorLead)}</p>
                               </div>
                             </div>
@@ -1502,13 +1502,13 @@ export function DashboardComercial() {
                                 <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoTypeBot)}</p>
                               </div>
                             </div>
-                            {/* Receita por Lead — destaque roxo */}
-                            <div className="rounded-xl bg-primary border border-primary px-4 py-3 flex items-start gap-3">
-                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-white/15 flex-shrink-0 mt-0.5">
-                                <TrendingUp className="h-4 w-4 text-white" />
+                            {/* Receita por Lead */}
+                            <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                              <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                                <TrendingUp className="h-4 w-4 text-primary" />
                               </span>
                               <div className="min-w-0">
-                                <p className="text-[12px] text-white/80 leading-tight">Receita por Lead</p>
+                                <p className="text-[12px] text-custom-200 leading-tight">Receita por Lead</p>
                                 <p className="text-xl font-bold text-white leading-tight">{formatCurrency(recPorLeadTypeBot)}</p>
                               </div>
                             </div>
