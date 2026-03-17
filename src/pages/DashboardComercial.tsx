@@ -618,6 +618,14 @@ export function DashboardComercial() {
                 const faturamentoCarrinho  = Number(carrinhoMetrics?.valor_total_periodo ?? 0);
                 const taxaCarrinho         = Number(carrinhoMetrics?.taxa_conversao_periodo ?? 0);
                 const ticketCarrinho       = Number(carrinhoMetrics?.ticket_medio_periodo ?? 0);
+                // Se total_vendidos retornou 0 mas há faturamento, derivar qtd de pedidos pelo faturamento/ticket
+                const totalVendCarrinhoEff = totalVendCarrinho > 0
+                  ? totalVendCarrinho
+                  : (faturamentoCarrinho > 0 && ticketCarrinho > 0 ? Math.round(faturamentoCarrinho / ticketCarrinho) : 0);
+                // Taxa efetiva de recuperação carrinho
+                const taxaCarrinhoEff = taxaCarrinho > 0
+                  ? taxaCarrinho
+                  : (totalEntCarrinho > 0 && totalVendCarrinhoEff > 0 ? (totalVendCarrinhoEff / totalEntCarrinho) * 100 : 0);
 
                 const faturamentoSocial    = Number(whatsappMetrics?.valor_total_periodo ?? 0);
                 const taxaSocial           = Number(whatsappMetrics?.taxa_conversao_periodo ?? 0);
@@ -1245,8 +1253,16 @@ export function DashboardComercial() {
 
                     {/* ── REC PIX: linha 5 cards ───────────────────────────────── */}
                     {(() => {
-                      const _pixTotal = Number(pixMetrics?.total_periodo ?? 0);
-                      const _pixRec2  = Number(pixMetrics?.total_vendidos_periodo ?? 0);
+                      const _pixTotal   = Number(pixMetrics?.total_periodo ?? 0);
+                      const _pixRec2Raw = Number(pixMetrics?.total_vendidos_periodo ?? 0);
+                      // Se total_vendidos retornou 0 mas há faturamento, derivar qtd de pedidos pelo faturamento/ticket
+                      const _pixRec2    = _pixRec2Raw > 0
+                        ? _pixRec2Raw
+                        : (faturamentoPix > 0 && ticketPix > 0 ? Math.round(faturamentoPix / ticketPix) : 0);
+                      // Taxa efetiva de recuperação PIX
+                      const _taxaPixEff = taxaPix > 0
+                        ? taxaPix
+                        : (_pixTotal > 0 && _pixRec2 > 0 ? (_pixRec2 / _pixTotal) * 100 : 0);
                       return (
                         <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                           <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC PIX</p>
@@ -1278,7 +1294,7 @@ export function DashboardComercial() {
                               </span>
                               <div className="min-w-0">
                                 <p className="text-[12px] text-custom-200 leading-tight">Taxa Rec Pix</p>
-                                <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaPix)}</p>
+                                <p className="text-2xl font-bold text-white leading-tight">{formatPercent(_taxaPixEff)}</p>
                               </div>
                             </div>
                             {/* Ticket Médio */}
@@ -1327,7 +1343,7 @@ export function DashboardComercial() {
                           </span>
                           <div className="min-w-0">
                             <p className="text-[12px] text-custom-200 leading-tight">Carrinhos Recuperados</p>
-                            <p className="text-2xl font-bold text-white leading-tight">{totalVendCarrinho}</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{totalVendCarrinhoEff}</p>
                           </div>
                         </div>
                         {/* Taxa Rec Carrinho */}
@@ -1337,7 +1353,7 @@ export function DashboardComercial() {
                           </span>
                           <div className="min-w-0">
                             <p className="text-[12px] text-custom-200 leading-tight">Taxa Rec Carrinho</p>
-                            <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaCarrinho)}</p>
+                            <p className="text-2xl font-bold text-white leading-tight">{formatPercent(taxaCarrinhoEff)}</p>
                           </div>
                         </div>
                         {/* Ticket Médio */}

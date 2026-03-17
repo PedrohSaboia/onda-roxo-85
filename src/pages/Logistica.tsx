@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert, Copy, Check } from 'lucide-react';
+import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert, Copy, Check, Package, PackageCheck, Eclipse } from 'lucide-react';
 import { FaBoxesStacked } from 'react-icons/fa6';
 import { HiFilter } from 'react-icons/hi';
 import { Button } from '@/components/ui/button';
@@ -53,6 +53,13 @@ export function Logistica() {
   // Estados para pedido já enviado
   const [pedidoJaEnviadoModalOpen, setPedidoJaEnviadoModalOpen] = useState(false);
   const [pedidoJaEnviado, setPedidoJaEnviado] = useState<any | null>(null);
+
+  // Estados para painel de enviados por card (Etapa 3)
+  const [openEnviadosId, setOpenEnviadosId] = useState<string | null>(null);
+  const [atrasadosOpen, setAtrasadosOpen] = useState(false);
+  const [enviadosContagem, setEnviadosContagem] = useState<Record<string, number>>({});
+  const [pedidosEnviadosCache, setPedidosEnviadosCache] = useState<Record<string, any[]>>({});
+  const [loadingEnviados, setLoadingEnviados] = useState<string | null>(null);
 
   // Modal de confirmação de envio (após abrir link da etiqueta)
   type ConfirmEnvioData = {
@@ -476,7 +483,7 @@ export function Logistica() {
     }
   };
 
-  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,data_logistica_urgente,pacote_disponivel,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,embalado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,data_logistica_urgente,pacote_disponivel,pacote_id,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,embalado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
 
   const fetchPedidosPorIds = async (ids: string[]): Promise<any[]> => {
     if (!ids.length) return [];
@@ -696,7 +703,7 @@ export function Logistica() {
       // buscar pedidos com status LOGISTICA e etiqueta_envio_id exatos (filtros aplicados no servidor)
       let pedidosQuery = (supabase as any)
         .from('pedidos')
-        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id,pacote_disponivel,itens_pedido(produto_id,variacao_id,quantidade,produto:produtos(nome),variacao:variacoes_produto(nome))')
+        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id,pacote_disponivel,pacote_id,itens_pedido(produto_id,variacao_id,quantidade,produto:produtos(nome),variacao:variacoes_produto(nome)),pacotes(id,rotulo,tipo,criado_em)')
         .eq('status_id', LOGISTICA_STATUS_ID)
         .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
       if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
@@ -808,6 +815,31 @@ export function Logistica() {
       }
 
       setPlataformasCards(cards);
+
+      // Busca contagem de enviados com pacote por card
+      try {
+        let contagemQuery = (supabase as any)
+          .from('pedidos')
+          .select('urgente, plataforma_id')
+          .eq('status_id', ENVIADO_STATUS_ID)
+          .eq('pacote_disponivel', true);
+        if (empresaId) contagemQuery = contagemQuery.eq('empresa_id', empresaId);
+        const { data: envData } = await contagemQuery;
+        if (envData) {
+          const contagem: Record<string, number> = {};
+          const leadsSet = new Set(LEADS_PLATAFORMA_IDS);
+          for (const p of envData) {
+            // urgentes
+            const isUrgente = !!p.urgente;
+            const isLead = leadsSet.has(p.plataforma_id);
+            if (isUrgente) contagem['urgentes'] = (contagem['urgentes'] || 0) + 1;
+            if (isLead) contagem['leads'] = (contagem['leads'] || 0) + 1;
+            if (!isUrgente && !isLead && p.plataforma_id)
+              contagem[p.plataforma_id] = (contagem[p.plataforma_id] || 0) + 1;
+          }
+          setEnviadosContagem(contagem);
+        }
+      } catch (_) {}
     } catch (err) {
       console.error('Erro ao buscar cards por plataforma:', err);
       setPlataformasCards([]);
@@ -831,27 +863,44 @@ export function Logistica() {
       }
       
       const pedidoId = pedidoPendente.id;
-      
+
+      // 1. Cria o registro do pacote
+      const { data: novoPacote, error: pacoteError } = await (supabase as any)
+        .from('pacotes')
+        .insert({
+          empresa_id: empresaId || null,
+          rotulo: caseGroup.label,
+          assinatura: caseGroup.signature,
+          tipo: pacotesSubTab === 'comuns' ? 'comum' : 'incomum',
+        })
+        .select('id')
+        .single();
+
+      if (pacoteError) throw pacoteError;
+
+      const pacoteId = novoPacote.id;
+
+      // 2. Vincula o pacote ao pedido e marca como disponível
       const { error } = await (supabase as any)
         .from('pedidos')
-        .update({ pacote_disponivel: true })
+        .update({ pacote_disponivel: true, pacote_id: pacoteId })
         .eq('id', pedidoId);
         
       if (error) throw error;
       
       // Atualiza localmente
       setComumPedidos((prev) =>
-        prev.map((p: any) => p.id === pedidoId ? { ...p, pacote_disponivel: true } : p),
+        prev.map((p: any) => p.id === pedidoId ? { ...p, pacote_disponivel: true, pacote_id: pacoteId } : p),
       );
       setIncomumPedidos((prev) =>
-        prev.map((p: any) => p.id === pedidoId ? { ...p, pacote_disponivel: true } : p),
+        prev.map((p: any) => p.id === pedidoId ? { ...p, pacote_disponivel: true, pacote_id: pacoteId } : p),
       );
       // Atualiza também os cards da aba Enviar
       setPlataformasCards((prev) =>
         prev.map((pc: any) => ({
           ...pc,
           pedidos: (pc.pedidos || []).map((p: any) =>
-            p.id === pedidoId ? { ...p, pacote_disponivel: true } : p,
+            p.id === pedidoId ? { ...p, pacote_disponivel: true, pacote_id: pacoteId } : p,
           ),
         })),
       );
@@ -867,6 +916,44 @@ export function Logistica() {
       console.error('Erro ao dar entrada no pacote:', err);
       toast({ title: 'Erro', description: 'Não foi possível registrar a entrada do pacote.', variant: 'destructive' });
       setEntradaPacoteModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Busca pedidos com status enviado e pacote_disponivel=true para um card da Etapa 3
+  const LEADS_PLATAFORMA_IDS = [
+    '0e27f292-924c-4ffc-a141-bbe00ec00428',
+    'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f',
+    'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+  ];
+
+  const fetchPedidosEnviados = async (cardKey: string, pc: any) => {
+    setLoadingEnviados(cardKey);
+    try {
+      let query = (supabase as any)
+        .from('pedidos')
+        .select('id, id_externo, pacote_id, criado_em, plataformas(id, nome, img_url), pacotes(id, rotulo, assinatura, tipo), itens_pedido(id, quantidade, produto:produtos(nome, img_url), variacao:variacoes_produto(nome, img_url))')
+        .eq('status_id', ENVIADO_STATUS_ID)
+        .eq('pacote_disponivel', true)
+        .order('criado_em', { ascending: false })
+        .limit(50);
+
+      if (pc.id === 'urgentes') {
+        query = query.eq('urgente', true);
+      } else if (pc.id === 'leads') {
+        query = query.in('plataforma_id', LEADS_PLATAFORMA_IDS);
+      } else {
+        query = query.eq('plataforma_id', pc.id);
+      }
+
+      if (empresaId) query = query.eq('empresa_id', empresaId);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      setPedidosEnviadosCache((prev) => ({ ...prev, [cardKey]: data || [] }));
+    } catch (err) {
+      console.error('Erro ao buscar pedidos enviados:', err);
+    } finally {
+      setLoadingEnviados(null);
     }
   };
 
@@ -1254,7 +1341,7 @@ export function Logistica() {
     return Array.from(groups.values()).sort((a, b) => b.pedidos.length - a.pedidos.length);
   })();
 
-  const produtosProduzirByType = groupedLogItemsByType.map((group) => {
+  const produtosProduzirByType = useMemo(() => groupedLogItemsByType.map((group) => {
     const groupId = `tipo-${group.type.toLowerCase().replace(/\s+/g, '-')}`;
     const produtos = (group.items || []).map((item: any, index: number) => {
       const nomeProduto = item.produto?.nome || 'Produto';
@@ -1279,7 +1366,7 @@ export function Logistica() {
       nome: group.type,
       produtos,
     };
-  });
+  }), [logItems]);
 
   const isPedidoFullyEmbalado = (pedido: any): boolean => {
     const itens = pedido?.itens_pedido || [];
@@ -1363,7 +1450,7 @@ export function Logistica() {
   };
 
   // ── Info parcial de um caseGroup (tem alguns itens embalados mas não o suficiente para 1 pacote completo) ──
-  const getCaseGroupPartialInfo = (caseGroup: any): { isPartial: boolean; missingItems: { nome: string; disponivel: number; necessario: number }[] } => {
+  const getCaseGroupPartialInfo = (caseGroup: any): { isPartial: boolean; missingItems: { nome: string; imgUrl: string | null; disponivel: number; necessario: number }[] } => {
     const pedidosPendentes = (caseGroup.pedidos || []).filter((p: any) => !p.pacote_disponivel);
     if (pedidosPendentes.length === 0) return { isPartial: false, missingItems: [] };
     const caseItems = getPedidoCaseItems(pedidosPendentes[0]);
@@ -1390,7 +1477,7 @@ export function Logistica() {
     if (!hasAnyEmbalado || hasCompleteSlot) return { isPartial: false, missingItems: [] };
     const missingItems = caseItems
       .filter((ci) => (itensDisp.get(ci.key) || 0) < ci.quantidade)
-      .map((ci) => ({ nome: ci.nome, disponivel: itensDisp.get(ci.key) || 0, necessario: ci.quantidade }));
+      .map((ci) => ({ nome: ci.nome, imgUrl: ci.imgUrl, disponivel: itensDisp.get(ci.key) || 0, necessario: ci.quantidade }));
     return { isPartial: true, missingItems };
   };
 
@@ -1403,8 +1490,15 @@ export function Logistica() {
     if (pid === SHOPEE_PLATAFORMA_ID || pname.includes('shopee')) return 2;
     if (pname.includes('tiktok')) return 3;
     if (pname.includes('magalu') || pname.includes('magazine')) return 4;
+    // PIX recuperado, Carrinho AB, Social / WhatsApp também são urgentes
+    if (
+      pid === '0e27f292-924c-4ffc-a141-bbe00ec00428' ||
+      pid === 'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f' ||
+      pid === 'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4' ||
+      pname.includes('whatsapp')
+    ) return 5;
     if (pname.includes('yampi')) return 10;
-    return 5;
+    return 6;
   };
 
   const getCaseGroupPriority = (caseGroup: any): number =>
@@ -2032,7 +2126,7 @@ export function Logistica() {
     });
   };
 
-  const executarBaixaProduto = async (groupId: string, produto: any, quantidade: string) => {
+  const executarBaixaProduto = async (groupId: string, produto: any, quantidade: string, secao?: 'urgente' | 'normal') => {
     if (salvandoBaixaCategoria) return;
 
     const group = produtosProduzirByType.find((g) => g.id === groupId);
@@ -2069,7 +2163,30 @@ export function Logistica() {
       const { data: pedidosData, error: pedidosError } = await pedidosQuery;
       if (pedidosError) throw pedidosError;
 
-      const pedidoIds = (pedidosData || []).map((p: any) => p.id).filter(Boolean);
+      let pedidoIds = (pedidosData || []).map((p: any) => p.id).filter(Boolean);
+
+      // Filtra pedidos pela seção (urgente/normal) priorizando a alocação correta
+      if (secao) {
+        const LEADS_URG_BAIXA = new Set([
+          '0e27f292-924c-4ffc-a141-bbe00ec00428', // PIX
+          'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f', // Carrinho AB
+          'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4', // Social
+        ]);
+        const URG_NOMES_BAIXA = ['tiktok', 'magalu', 'shopee', 'whatsapp'];
+        const isUrgPedido = (p: any) => {
+          const pid = String(p?.plataforma_id || '');
+          const pname = String(p?.plataformas?.nome || '').toLowerCase();
+          return !!p.urgente || pid === MERCADO_LIVRE_PLATAFORMA_ID || pid === SHOPEE_PLATAFORMA_ID || LEADS_URG_BAIXA.has(pid) || URG_NOMES_BAIXA.some((n) => pname.includes(n));
+        };
+        const todosPedidosCarregados = [...comumPedidos, ...incomumPedidos];
+        const allowedIds = new Set(
+          todosPedidosCarregados
+            .filter(secao === 'urgente' ? isUrgPedido : (p: any) => !isUrgPedido(p))
+            .map((p: any) => p.id)
+            .filter(Boolean)
+        );
+        pedidoIds = pedidoIds.filter((id: string) => allowedIds.has(id));
+      }
       if (!pedidoIds.length) {
         toast({ title: 'Nenhum pedido encontrado', description: 'Não há pedidos elegíveis para baixar embalagem.', variant: 'destructive' });
         return;
@@ -2484,6 +2601,8 @@ export function Logistica() {
                     </div>
                   );
                 })()}
+
+
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-sm font-bold tracking-wide">ITENS A PRODUZIR</h3>
                   <div className="flex items-center gap-2">
@@ -2526,153 +2645,226 @@ export function Logistica() {
 
                 {produtosProduzirByType.length === 0 ? (
                   <div className="text-sm text-muted-foreground">Nenhum produto pendente para produção.</div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 w-full mx-auto items-start">
-                    {produtosProduzirByType.map((grupo) => {
-                      const totalQuantidadeGrupo = grupo.produtos.reduce((acc: number, produto: any) => acc + Number(produto.quantidadeTotal ?? 0), 0);
-                      const produzidosCount = grupo.produtos.reduce((acc: number, produto: any) => {
-                        return acc + getQuantidadeProduzida(grupo.id, produto.itemKey);
-                      }, 0);
-                      const faltamCount = Math.max(0, totalQuantidadeGrupo - produzidosCount);
-                      const grupoConcluido = totalQuantidadeGrupo > 0 && faltamCount === 0;
-                      const progressoPercent = totalQuantidadeGrupo > 0 ? Math.round((produzidosCount / totalQuantidadeGrupo) * 100) : 0;
-                      const currentPage = platformPage[grupo.id] ?? 1;
-                      const totalPages = Math.max(1, Math.ceil((grupo.produtos?.length ?? 0) / PLATFORM_PAGE_SIZE));
-                      const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
-                      const produtosPagina = (grupo.produtos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
+                ) : (() => {
+                  // ── Divide pedidos por urgência ──────────────────────────
+                  const LEADS_URG = new Set([
+                    '0e27f292-924c-4ffc-a141-bbe00ec00428', // PIX
+                    'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f', // Carrinho AB
+                    'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4', // Social
+                  ]);
+                  const URG_NAMES = ['tiktok', 'magalu', 'shopee', 'whatsapp'];
+                  const urgQtyByKey = new Map<string, number>();
+                  const normQtyByKey = new Map<string, number>();
+                  for (const pedido of [...comumPedidos, ...incomumPedidos]) {
+                    const pid = String(pedido?.plataforma_id || '');
+                    const pname = String(pedido?.plataformas?.nome || '').toLowerCase();
+                    const isUrg =
+                      !!pedido.urgente ||
+                      pid === MERCADO_LIVRE_PLATAFORMA_ID ||
+                      pid === SHOPEE_PLATAFORMA_ID ||
+                      LEADS_URG.has(pid) ||
+                      URG_NAMES.some((n) => pname.includes(n));
+                    const tgt = isUrg ? urgQtyByKey : normQtyByKey;
+                    for (const item of (pedido.itens_pedido || [])) {
+                      const k = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
+                      tgt.set(k, (tgt.get(k) || 0) + Number(item.quantidade ?? 1));
+                    }
+                  }
 
-                      const handleGoToPage = (e: React.MouseEvent, page: number) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        if (page < 1 || page > totalPages) return;
-                        setPlatformPage((s) => ({ ...s, [grupo.id]: page }));
-                      };
+                  // Filtra e sobrescreve quantidadeTotal com a fração da seção
+                  const buildGrupos = (qtyMap: Map<string, number>) =>
+                    produtosProduzirByType
+                      .map((grupo) => ({
+                        ...grupo,
+                        produtos: grupo.produtos
+                          .filter((p: any) => (qtyMap.get(`${p.produtoId ?? 'p'}-${p.variacaoId ?? 'v'}`) || 0) > 0)
+                          .map((p: any) => ({
+                            ...p,
+                            quantidadeTotal: qtyMap.get(`${p.produtoId ?? 'p'}-${p.variacaoId ?? 'v'}`) || 0,
+                          })),
+                      }))
+                      .filter((g) => g.produtos.length > 0);
 
-                      return (
-                        <Card
-                          key={grupo.id}
-                          className={`p-5 select-none self-start transition-all shadow-sm ${grupoConcluido ? 'ring-1 ring-green-400 border-green-400 bg-green-50/40' : 'border border-custom-600/60 hover:shadow-md'}`}
-                        >
-                          <CardContent className="flex items-center gap-3 p-0">
-                            <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${grupoConcluido ? 'bg-green-100' : 'bg-muted'}`}>
-                              <FaBoxesStacked className={`w-3.5 h-3.5 ${grupoConcluido ? 'text-green-700' : 'text-muted-foreground'}`} />
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-semibold text-sm leading-tight">{grupo.nome}</div>
-                              <div className="text-xs text-muted-foreground mt-0.5">{grupo.produtos.length} produto(s)</div>
-                              <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold">
-                                <span className="rounded-md bg-green-100 text-green-700 px-1.5 py-0.5">Embalados: {produzidosCount}</span>
-                                <span className="rounded-md bg-red-100 text-red-700 px-1.5 py-0.5">Faltam: {faltamCount}</span>
+                  // Renderizador compartilhado de cards interativos
+                  const renderGrupos = (grupos: typeof produtosProduzirByType, secao: 'urgente' | 'normal') => (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-5 w-full mx-auto items-start">
+                      {grupos.map((grupo) => {
+                        const totalQuantidadeGrupo = grupo.produtos.reduce((acc: number, produto: any) => acc + Number(produto.quantidadeTotal ?? 0), 0);
+                        const produzidosCount = grupo.produtos.reduce((acc: number, produto: any) => {
+                          return acc + Math.min(getQuantidadeProduzida(grupo.id, produto.itemKey), Number(produto.quantidadeTotal ?? 0));
+                        }, 0);
+                        const faltamCount = Math.max(0, totalQuantidadeGrupo - produzidosCount);
+                        const grupoConcluido = totalQuantidadeGrupo > 0 && faltamCount === 0;
+                        const progressoPercent = totalQuantidadeGrupo > 0 ? Math.round((produzidosCount / totalQuantidadeGrupo) * 100) : 0;
+                        const currentPage = platformPage[grupo.id] ?? 1;
+                        const totalPages = Math.max(1, Math.ceil((grupo.produtos?.length ?? 0) / PLATFORM_PAGE_SIZE));
+                        const sliceStart = (currentPage - 1) * PLATFORM_PAGE_SIZE;
+                        const produtosPagina = (grupo.produtos || []).slice(sliceStart, sliceStart + PLATFORM_PAGE_SIZE);
+
+                        const handleGoToPage = (e: React.MouseEvent, page: number) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (page < 1 || page > totalPages) return;
+                          setPlatformPage((s) => ({ ...s, [grupo.id]: page }));
+                        };
+
+                        return (
+                          <Card
+                            key={grupo.id}
+                            className={`p-5 select-none self-start transition-all shadow-sm ${grupoConcluido ? 'ring-1 ring-green-400 border-green-400 bg-green-100 opacity-50' : 'border border-custom-600/60 hover:shadow-md'}`}
+                          >
+                            <CardContent className="flex items-center gap-3 p-0">
+                              <div className={`w-8 h-8 rounded-full overflow-hidden flex items-center justify-center flex-shrink-0 ${grupoConcluido ? 'bg-green-100' : 'bg-muted'}`}>
+                                <FaBoxesStacked className={`w-3.5 h-3.5 ${grupoConcluido ? 'text-green-700' : 'text-muted-foreground'}`} />
                               </div>
-                            </div>
-                          </CardContent>
-
-                          <div className="mt-3">
-                            <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                              <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${progressoPercent}%` }} />
-                            </div>
-                            <div className="mt-1 text-[11px] text-muted-foreground">Progresso: {progressoPercent}%</div>
-                          </div>
-
-                          <div className="pt-2 border-t mt-2.5">
-                            {grupoConcluido && (
-                              <div className="mb-2 rounded-md border border-green-300 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1.5 animate-pulse">
-                                ✅ Todos os itens deste grupo foram embalados
-                              </div>
-                            )}
-
-                            {totalPages > 1 && (
-                              <div className="flex items-center justify-between mb-3 pb-3 border-b">
-                                <span className="text-xs text-muted-foreground">
-                                  {grupo.produtos.length} produtos • {currentPage}/{totalPages}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={currentPage <= 1}
-                                    onClick={(e) => handleGoToPage(e, currentPage - 1)}
-                                    className="px-3 py-1 text-base border rounded disabled:opacity-40 hover:bg-muted"
-                                  >
-                                    ‹
-                                  </button>
-                                  <button
-                                    type="button"
-                                    disabled={currentPage >= totalPages}
-                                    onClick={(e) => handleGoToPage(e, currentPage + 1)}
-                                    className="px-3 py-1 text-base border rounded disabled:opacity-40 hover:bg-muted"
-                                  >
-                                    ›
-                                  </button>
+                              <div className="flex-1">
+                                <div className="font-semibold text-sm leading-tight">{grupo.nome}</div>
+                                <div className="text-xs text-muted-foreground mt-0.5">{grupo.produtos.length} produto(s)</div>
+                                <div className="mt-1.5 flex items-center gap-1.5 text-xs font-semibold">
+                                  <span className="rounded-md bg-green-100 text-green-700 px-1.5 py-0.5">Embalados: {produzidosCount}</span>
+                                  <span className="rounded-md bg-red-100 text-red-700 px-1.5 py-0.5">Faltam: {faltamCount}</span>
                                 </div>
                               </div>
-                            )}
-                            {produtosPagina.length === 0 ? (
-                              <div className="text-sm text-muted-foreground">Nenhum produto disponível.</div>
-                            ) : (
-                              <div className="space-y-3">
-                                {produtosPagina.map((produto: any) => {
-                                  const produzidoQty = getQuantidadeProduzida(grupo.id, produto.itemKey);
-                                  const produzido = produzidoQty >= Number(produto.quantidadeTotal ?? 0);
-                                  const faltamItem = Math.max(0, Number(produto.quantidadeTotal ?? 0) - produzidoQty);
-                                  const flashAtivo = itemProduzidoFlash === `${grupo.id}:${produto.itemKey}`;
+                            </CardContent>
 
-                                  const inlineQtyKey = `${grupo.id}:${produto.itemKey}`;
+                            <div className="mt-3">
+                              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                                <div className="h-full bg-green-500 transition-all duration-500" style={{ width: `${progressoPercent}%` }} />
+                              </div>
+                              <div className="mt-1 text-[11px] text-muted-foreground">Progresso: {progressoPercent}%</div>
+                            </div>
 
-                                  return (
-                                    <div key={produto.itemKey} className={`rounded-md border px-3 py-3 transition-all ${flashAtivo ? 'bg-green-100 border-green-500 animate-pulse' : produzido ? 'bg-green-50 border-green-300' : 'border-red-200 bg-red-50/30'}`}>
-                                      <div className="flex items-start gap-3">
-                                        {produto.imgUrl ? (
-                                          <img src={produto.imgUrl} alt={produto.nomeProduto} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
-                                        ) : (
-                                          <div className="h-10 w-10 rounded border bg-muted flex items-center justify-center text-[9px] text-muted-foreground flex-shrink-0">sem foto</div>
-                                        )}
-                                        <div className="flex-1 min-w-0">
-                                          <span className="text-xs font-semibold block leading-tight">{produto.nomeProduto}</span>
-                                          {produto.nomeVariacao && (
-                                            <span className="text-[11px] text-muted-foreground block">{produto.nomeVariacao}</span>
+                            <div className="pt-2 border-t mt-2.5">
+                              {grupoConcluido && (
+                                <div className="mb-2 rounded-md border border-green-300 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1.5 animate-pulse">
+                                  ✅ Todos os itens deste grupo foram embalados
+                                </div>
+                              )}
+
+                              {totalPages > 1 && (
+                                <div className="flex items-center justify-between mb-3 pb-3 border-b">
+                                  <span className="text-xs text-muted-foreground">
+                                    {grupo.produtos.length} produtos • {currentPage}/{totalPages}
+                                  </span>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      disabled={currentPage <= 1}
+                                      onClick={(e) => handleGoToPage(e, currentPage - 1)}
+                                      className="px-3 py-1 text-base border rounded disabled:opacity-40 hover:bg-muted"
+                                    >
+                                      ‹
+                                    </button>
+                                    <button
+                                      type="button"
+                                      disabled={currentPage >= totalPages}
+                                      onClick={(e) => handleGoToPage(e, currentPage + 1)}
+                                      className="px-3 py-1 text-base border rounded disabled:opacity-40 hover:bg-muted"
+                                    >
+                                      ›
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              {produtosPagina.length === 0 ? (
+                                <div className="text-sm text-muted-foreground">Nenhum produto disponível.</div>
+                              ) : (
+                                <div className="space-y-3">
+                                  {produtosPagina.map((produto: any) => {
+                                    const globalEmb = getQuantidadeProduzida(grupo.id, produto.itemKey);
+                                    const sectionQty = Number(produto.quantidadeTotal ?? 0);
+                                    const produzidoQty = Math.min(globalEmb, sectionQty);
+                                    const produzido = produzidoQty >= sectionQty;
+                                    const faltamItem = Math.max(0, sectionQty - produzidoQty);
+                                    const flashAtivo = itemProduzidoFlash === `${grupo.id}:${produto.itemKey}`;
+                                    const inlineQtyKey = `${grupo.id}:${produto.itemKey}`;
+
+                                    return (
+                                      <div key={produto.itemKey} className={`rounded-md border px-3 py-3 transition-all ${flashAtivo ? 'bg-green-100 border-green-500 animate-pulse' : produzido ? 'bg-green-50/40 border-green-200 opacity-35' : 'border-red-200 bg-red-50/30'}`}>
+                                        <div className="flex items-start gap-3">
+                                          {produto.imgUrl ? (
+                                            <img src={produto.imgUrl} alt={produto.nomeProduto} className="h-10 w-10 rounded object-cover border flex-shrink-0" />
+                                          ) : (
+                                            <div className="h-10 w-10 rounded border bg-muted flex items-center justify-center text-[9px] text-muted-foreground flex-shrink-0">sem foto</div>
                                           )}
-                                          <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
-                                            <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${produzido ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                              Emb.: {produzidoQty}/{produto.quantidadeTotal}
-                                            </span>
-                                            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${produzido ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                              {produzido ? 'EMBALADO' : `FALTAM ${faltamItem}`}
-                                            </span>
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-xs font-semibold block leading-tight">{produto.nomeProduto}</span>
+                                            {produto.nomeVariacao && (
+                                              <span className="text-[11px] text-muted-foreground block">{produto.nomeVariacao}</span>
+                                            )}
+                                            <div className="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                                              <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${produzido ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                Emb.: {produzidoQty}/{sectionQty}
+                                              </span>
+                                              <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${produzido ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                {produzido ? 'EMBALADO' : `FALTAM ${faltamItem}`}
+                                              </span>
+                                            </div>
                                           </div>
                                         </div>
+                                        {!produzido && (
+                                          <div className="mt-2.5">
+                                            <input
+                                              type="number"
+                                              min="1"
+                                              max={faltamItem}
+                                              value={produtoInputQty[inlineQtyKey] ?? ''}
+                                              onChange={(e) => setProdutoInputQty((prev) => ({ ...prev, [inlineQtyKey]: e.target.value }))}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                  const qty = produtoInputQty[inlineQtyKey]?.trim() || '1';
+                                                  executarBaixaProduto(grupo.id, produto, qty, secao);
+                                                  setProdutoInputQty((prev) => ({ ...prev, [inlineQtyKey]: '' }));
+                                                }
+                                              }}
+                                              placeholder={`Qtd (máx ${faltamItem}) → Enter`}
+                                              disabled={salvandoBaixaCategoria}
+                                              className="w-full text-xs border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white disabled:opacity-50"
+                                            />
+                                          </div>
+                                        )}
                                       </div>
-                                      {!produzido && (
-                                        <div className="mt-2.5">
-                                          <input
-                                            type="number"
-                                            min="1"
-                                            max={faltamItem}
-                                            value={produtoInputQty[inlineQtyKey] ?? ''}
-                                            onChange={(e) => setProdutoInputQty((prev) => ({ ...prev, [inlineQtyKey]: e.target.value }))}
-                                            onKeyDown={(e) => {
-                                              if (e.key === 'Enter') {
-                                                const qty = produtoInputQty[inlineQtyKey]?.trim() || '1';
-                                                executarBaixaProduto(grupo.id, produto, qty);
-                                                setProdutoInputQty((prev) => ({ ...prev, [inlineQtyKey]: '' }));
-                                              }
-                                            }}
-                                            placeholder={`Qtd (máx ${faltamItem}) → Enter`}
-                                            disabled={salvandoBaixaCategoria}
-                                            className="w-full text-xs border rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white disabled:opacity-50"
-                                          />
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            )}
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </Card>
+                        );
+                      })}
+                    </div>
+                  );
+
+                  const urgGrupos = buildGrupos(urgQtyByKey);
+                  const normGrupos = buildGrupos(normQtyByKey);
+
+                  return (
+                    <div className="space-y-8">
+                      {/* ───── URGENTES ───── */}
+                      {urgGrupos.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-4 pb-2 border-b-2 border-red-400">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white text-[11px] font-bold shrink-0">!</span>
+                            <h4 className="text-sm font-bold uppercase tracking-wide text-red-700">Urgentes</h4>
+                            <span className="text-[11px] text-red-400">ML · Shopee · TikTok · Magalu · PIX · Carrinho · Social</span>
                           </div>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                )}
+                          {renderGrupos(urgGrupos, 'urgente')}
+                        </div>
+                      )}
+                      {/* ───── NORMAIS ───── */}
+                      {normGrupos.length > 0 && (
+                        <div>
+                          <div className="flex items-center gap-2 mb-4 pb-2 border-b-2 border-blue-300">
+                            <FaBoxesStacked className="h-4 w-4 text-blue-500" />
+                            <h4 className="text-sm font-bold uppercase tracking-wide text-blue-700">Normais</h4>
+                            <span className="text-[11px] text-blue-400">Yampi e outros</span>
+                          </div>
+                          {renderGrupos(normGrupos, 'normal')}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
@@ -2733,7 +2925,7 @@ export function Logistica() {
                     type="button"
                     size="sm"
                     variant={pacotesSubTab === 'comuns' ? 'default' : 'outline'}
-                    onClick={() => setPacotesSubTab('comuns')}
+                    onClick={() => { setPacotesSubTab('comuns'); if (pacotesDisponivelTab === 'parcial') setPacotesDisponivelTab('disponivel'); }}
                   >
                     Comuns
                   </Button>
@@ -2757,6 +2949,7 @@ export function Logistica() {
                   >
                     ✓ Disponíveis
                   </Button>
+                  {pacotesSubTab === 'incomuns' && (
                   <Button
                     type="button"
                     size="sm"
@@ -2764,8 +2957,10 @@ export function Logistica() {
                     className={pacotesDisponivelTab === 'parcial' ? 'bg-amber-500 hover:bg-amber-600 text-white border-amber-500' : 'text-amber-600 border-amber-500 hover:bg-amber-50'}
                     onClick={() => setPacotesDisponivelTab('parcial')}
                   >
-                    ◑ Parcial
+                     <Eclipse className="h-3 w-3 text-amber-600 shrink-0" />
+                     Parcial
                   </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"
@@ -2781,21 +2976,41 @@ export function Logistica() {
                   <div className="mb-6">
                     <div className="rounded-md border p-3" style={dropdownHeaderStyles.comuns}>
                       {comumCaseGroups.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">Nenhum pedido comum encontrado.</div>
-                      ) : (
+                        <div className="flex flex-col items-center gap-2 py-8 text-center">
+                          <span className="text-3xl">📦</span>
+                          <p className="text-sm font-medium text-muted-foreground">Nenhum pedido comum encontrado.</p>
+                        </div>
+                      ) : (() => {
+                        const comumFilter = (cg: any) => {
+                          const avail = getCaseGroupAvailableSlotCount(cg);
+                          const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                          if (pacotesDisponivelTab === 'disponivel') return avail > 0;
+                          if (pacotesDisponivelTab === 'parcial') return avail === 0 && pend > 0 && getCaseGroupPartialInfo(cg).isPartial;
+                          return avail === 0 && pend > 0 && !getCaseGroupPartialInfo(cg).isPartial;
+                        };
+                        const hasVisibleComum = groupedComumCaseGroupsByType.some((g) => g.groups.some(comumFilter));
+                        const emptyLabels: Record<string, { icon: string; text: string }> = {
+                          disponivel: { icon: '✅', text: 'Nenhum pacote disponível nos pedidos comuns.' },
+                          indisponivel: { icon: '⏳', text: 'Nenhum pacote indisponível nos pedidos comuns.' },
+                        };
+                        if (!hasVisibleComum) {
+                          const label = emptyLabels[pacotesDisponivelTab] || { icon: '📦', text: 'Nenhum item nesta aba.' };
+                          return (
+                            <div className="flex flex-col items-center gap-2 py-8 text-center">
+                              <span className="text-3xl">{label.icon}</span>
+                              <p className="text-sm font-medium text-muted-foreground">{label.text}</p>
+                            </div>
+                          );
+                        }
+                        return (
                         <div className="space-y-3">
                           {groupedComumCaseGroupsByType.map((group) => (
                             <div key={`comum-${group.type}`} className="space-y-2">
                               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
                               <div className="flex flex-wrap gap-2">
                                 {group.groups
-                                  .filter((cg: any) => {
-                                    const avail = getCaseGroupAvailableSlotCount(cg);
-                                    const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
-                                    if (pacotesDisponivelTab === 'disponivel') return avail > 0;
-                                    if (pacotesDisponivelTab === 'parcial') return avail === 0 && pend > 0 && getCaseGroupPartialInfo(cg).isPartial;
-                                    return avail === 0 && pend > 0 && !getCaseGroupPartialInfo(cg).isPartial;
-                                  })
+                                  .filter(comumFilter)
+                                  .sort((a: any, b: any) => getCaseGroupPriority(a) - getCaseGroupPriority(b))
                                   .map((caseGroup: any) => {
                                   const nomePreview = caseGroup.label;
                                   const imgPreview = caseGroup.imgUrl;
@@ -2812,7 +3027,7 @@ export function Logistica() {
                                   return (
                                     <div
                                       key={caseGroup.signature}
-                                      className={`relative flex flex-col items-center gap-1.5 rounded-lg border p-2 w-24 shadow-sm transition-shadow ${
+                                      className={`relative rounded-lg border shadow-sm transition-shadow ${
                                         pacoteDisponivel
                                           ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
                                           : isDisponivelTab
@@ -2820,70 +3035,94 @@ export function Logistica() {
                                           : isParcialTab
                                           ? 'border-amber-400 bg-amber-50 hover:shadow-md cursor-default'
                                           : 'bg-card opacity-45 cursor-not-allowed'
-                                      }`}
+                                      } ${isParcialTab ? 'flex flex-row items-stretch w-full' : 'flex flex-col items-center gap-1.5 p-2 w-24'}`}
                                       onClick={() => {
                                         if (!isDisponivelTab) return;
                                         setEntradaPacoteModal({ open: true, caseGroup, loading: false });
                                       }}
                                     >
-                                      <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                        ×{badgeCount}
-                                      </span>
+                                      {/* ── Lado esquerdo: info do produto ── */}
+                                      <div className={isParcialTab ? 'flex flex-col items-center gap-1 p-2 w-24 shrink-0' : 'contents'}>
+                                        <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                          ×{badgeCount}
+                                        </span>
 
-                                      {imgPreview ? (
-                                        <img
-                                          src={imgPreview}
-                                          alt={nomePreview}
-                                          className="h-14 w-14 rounded-md object-cover border"
-                                        />
-                                      ) : (
-                                        <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                                          sem foto
+                                        {imgPreview ? (
+                                          <img
+                                            src={imgPreview}
+                                            alt={nomePreview}
+                                            className="h-14 w-14 rounded-md object-cover border"
+                                          />
+                                        ) : (
+                                          <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                            sem foto
+                                          </div>
+                                        )}
+
+                                        <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                          {nomePreview}
+                                        </p>
+                                        <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                                          {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                                        </p>
+
+                                        {/* Badges de prazo, urgência e disponibilidade */}
+                                        <div className="flex flex-wrap justify-center gap-0.5 w-full">
+                                          {pacoteDisponivel && (
+                                            <span className="text-[8px] font-bold bg-green-600 text-white rounded px-1 py-0.5 leading-tight">✓ DISPONÍVEL</span>
+                                          )}
+                                          {temUrgente && (
+                                            <span className="text-[8px] font-bold bg-purple-600 text-white rounded px-1 py-0.5 leading-tight">URGENTE</span>
+                                          )}
+                                          {deadline === 'atrasado' && (
+                                            <span className="text-[8px] font-bold bg-red-600 text-white rounded px-1 py-0.5 leading-tight">ATRASADO</span>
+                                          )}
+                                          {deadline === 'hoje' && (
+                                            <span className="text-[8px] font-bold bg-orange-500 text-white rounded px-1 py-0.5 leading-tight">HOJE</span>
+                                          )}
+                                          {deadline === 'amanha' && (
+                                            <span className="text-[8px] font-bold bg-yellow-400 text-gray-800 rounded px-1 py-0.5 leading-tight">AMANHÃ</span>
+                                          )}
                                         </div>
-                                      )}
 
-                                      <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                                        {nomePreview}
-                                      </p>
-                                      <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
-                                        {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
-                                      </p>
-
-                                      {/* Badges de prazo, urgência e disponibilidade */}
-                                      <div className="flex flex-wrap justify-center gap-0.5 w-full">
-                                        {pacoteDisponivel && (
-                                          <span className="text-[8px] font-bold bg-green-600 text-white rounded px-1 py-0.5 leading-tight">✓ DISPONÍVEL</span>
-                                        )}
-                                        {temUrgente && (
-                                          <span className="text-[8px] font-bold bg-purple-600 text-white rounded px-1 py-0.5 leading-tight">URGENTE</span>
-                                        )}
-                                        {deadline === 'atrasado' && (
-                                          <span className="text-[8px] font-bold bg-red-600 text-white rounded px-1 py-0.5 leading-tight">ATRASADO</span>
-                                        )}
-                                        {deadline === 'hoje' && (
-                                          <span className="text-[8px] font-bold bg-orange-500 text-white rounded px-1 py-0.5 leading-tight">HOJE</span>
-                                        )}
-                                        {deadline === 'amanha' && (
-                                          <span className="text-[8px] font-bold bg-yellow-400 text-gray-800 rounded px-1 py-0.5 leading-tight">AMANHÃ</span>
+                                        {/* Mensagem para aba indisponível */}
+                                        {!isDisponivelTab && !isParcialTab && (
+                                          <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
+                                            Itens insuficientes embalados
+                                          </p>
                                         )}
                                       </div>
 
-                                      {/* Itens faltando (aba Parcial) */}
+                                      {/* ── Lado direito: itens faltando (só na aba Parcial) ── */}
                                       {isParcialTab && parcialInfo && parcialInfo.missingItems.length > 0 && (
-                                        <div className="w-full mt-0.5 space-y-0.5">
-                                          <p className="text-[8px] font-bold text-amber-700 text-center leading-tight">Aguardando:</p>
+                                        <div className="flex-1 border-l border-amber-300 bg-amber-50/50 p-2 flex flex-col justify-center gap-1.5 min-w-0 rounded-r-lg">
+                                          <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1">
+                                            <span>⏳</span> Faltando
+                                          </p>
                                           {parcialInfo.missingItems.map((mi, idx) => (
-                                            <p key={idx} className="text-[7.5px] text-amber-800 leading-tight text-center line-clamp-2">
-                                              {mi.nome} ({mi.disponivel}/{mi.necessario})
-                                            </p>
+                                            <div key={idx} className="flex items-center gap-2 bg-white rounded-md p-1.5 border border-amber-200 shadow-sm">
+                                              {mi.imgUrl ? (
+                                                <img src={mi.imgUrl} alt={mi.nome} className="h-9 w-9 rounded object-cover border border-amber-300 shrink-0 opacity-40 grayscale" />
+                                              ) : (
+                                                <div className="h-9 w-9 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center shrink-0">
+                                                  <span className="text-xs text-amber-400">?</span>
+                                                </div>
+                                              )}
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-[9px] font-semibold text-amber-900 leading-tight line-clamp-2">{mi.nome}</p>
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                  <div className="flex-1 h-2 rounded-full bg-amber-200 overflow-hidden">
+                                                    <div
+                                                      className="h-full rounded-full bg-amber-500 transition-all"
+                                                      style={{ width: `${Math.round((mi.disponivel / mi.necessario) * 100)}%` }}
+                                                    />
+                                                  </div>
+                                                  <span className="text-[9px] font-bold text-amber-700 whitespace-nowrap">{mi.disponivel}/{mi.necessario}</span>
+                                                </div>
+                                              </div>
+                                            </div>
                                           ))}
                                         </div>
-                                      )}
-
-                                      {!isDisponivelTab && !isParcialTab && (
-                                        <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
-                                          Itens insuficientes embalados
-                                        </p>
                                       )}
                                     </div>
                                   );
@@ -2892,7 +3131,8 @@ export function Logistica() {
                             </div>
                           ))}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -2901,21 +3141,42 @@ export function Logistica() {
                   <div className="mb-6">
                     <div className="rounded-md border p-3" style={dropdownHeaderStyles.incomuns}>
                       {incomumCaseGroups.length === 0 ? (
-                        <div className="text-sm text-muted-foreground">Nenhum pedido incomum encontrado.</div>
-                      ) : (
+                        <div className="flex flex-col items-center gap-2 py-8 text-center">
+                          <span className="text-3xl">📦</span>
+                          <p className="text-sm font-medium text-muted-foreground">Nenhum pedido incomum encontrado.</p>
+                        </div>
+                      ) : (() => {
+                        const incomumFilter = (cg: any) => {
+                          const avail = getCaseGroupAvailableSlotCount(cg);
+                          const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
+                          if (pacotesDisponivelTab === 'disponivel') return avail > 0;
+                          if (pacotesDisponivelTab === 'parcial') return avail === 0 && pend > 0 && getCaseGroupPartialInfo(cg).isPartial;
+                          return avail === 0 && pend > 0 && !getCaseGroupPartialInfo(cg).isPartial;
+                        };
+                        const hasVisibleIncomum = groupedIncomumCaseGroupsByType.some((g) => g.groups.some(incomumFilter));
+                        const emptyLabelsInc: Record<string, { icon: string; text: string }> = {
+                          disponivel: { icon: '✅', text: 'Nenhum pacote disponível nos pedidos incomuns.' },
+                          parcial: { icon: '◑', text: 'Nenhum pacote parcialmente embalado nos pedidos incomuns.' },
+                          indisponivel: { icon: '⏳', text: 'Nenhum pacote indisponível nos pedidos incomuns.' },
+                        };
+                        if (!hasVisibleIncomum) {
+                          const label = emptyLabelsInc[pacotesDisponivelTab] || { icon: '📦', text: 'Nenhum item nesta aba.' };
+                          return (
+                            <div className="flex flex-col items-center gap-2 py-8 text-center">
+                              <span className="text-3xl">{label.icon}</span>
+                              <p className="text-sm font-medium text-muted-foreground">{label.text}</p>
+                            </div>
+                          );
+                        }
+                        return (
                         <div className="space-y-3">
                           {groupedIncomumCaseGroupsByType.map((group) => (
                             <div key={`incomum-${group.type}`} className="space-y-2">
                               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{group.type}</p>
                               <div className="flex flex-wrap gap-2">
                                 {group.groups
-                                  .filter((cg: any) => {
-                                    const avail = getCaseGroupAvailableSlotCount(cg);
-                                    const pend = (cg.pedidos || []).filter((p: any) => !p.pacote_disponivel).length;
-                                    if (pacotesDisponivelTab === 'disponivel') return avail > 0;
-                                    if (pacotesDisponivelTab === 'parcial') return avail === 0 && pend > 0 && getCaseGroupPartialInfo(cg).isPartial;
-                                    return avail === 0 && pend > 0 && !getCaseGroupPartialInfo(cg).isPartial;
-                                  })
+                                  .filter(incomumFilter)
+                                  .sort((a: any, b: any) => getCaseGroupPriority(a) - getCaseGroupPriority(b))
                                   .map((caseGroup: any) => {
                                   const nomePreview = caseGroup.label;
                                   const imgPreview = caseGroup.imgUrl;
@@ -2932,7 +3193,7 @@ export function Logistica() {
                                   return (
                                     <div
                                       key={caseGroup.signature}
-                                      className={`relative flex flex-col items-center gap-1.5 rounded-lg border p-2 w-24 shadow-sm transition-shadow ${
+                                      className={`relative rounded-lg border shadow-sm transition-shadow ${
                                         pacoteDisponivel
                                           ? 'border-green-500 bg-green-50 hover:shadow-md cursor-pointer'
                                           : isDisponivelTab
@@ -2940,70 +3201,94 @@ export function Logistica() {
                                           : isParcialTab
                                           ? 'border-amber-400 bg-amber-50 hover:shadow-md cursor-default'
                                           : 'bg-card opacity-45 cursor-not-allowed'
-                                      }`}
+                                      } ${isParcialTab ? 'flex flex-row items-stretch w-full' : 'flex flex-col items-center gap-1.5 p-2 w-24'}`}
                                       onClick={() => {
                                         if (!isDisponivelTab) return;
                                         setEntradaPacoteModal({ open: true, caseGroup, loading: false });
                                       }}
                                     >
-                                      <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                                        ×{badgeCount}
-                                      </span>
+                                      {/* ── Lado esquerdo: info do produto ── */}
+                                      <div className={isParcialTab ? 'flex flex-col items-center gap-1 p-2 w-24 shrink-0' : 'contents'}>
+                                        <span className="absolute -top-1.5 -right-1.5 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                          ×{badgeCount}
+                                        </span>
 
-                                      {imgPreview ? (
-                                        <img
-                                          src={imgPreview}
-                                          alt={nomePreview}
-                                          className="h-14 w-14 rounded-md object-cover border"
-                                        />
-                                      ) : (
-                                        <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                                          sem foto
+                                        {imgPreview ? (
+                                          <img
+                                            src={imgPreview}
+                                            alt={nomePreview}
+                                            className="h-14 w-14 rounded-md object-cover border"
+                                          />
+                                        ) : (
+                                          <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                            sem foto
+                                          </div>
+                                        )}
+
+                                        <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                          {nomePreview}
+                                        </p>
+                                        <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
+                                          {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
+                                        </p>
+
+                                        {/* Badges de disponibilidade, prazo e urgência */}
+                                        <div className="flex flex-wrap justify-center gap-0.5 w-full">
+                                          {pacoteDisponivel && (
+                                            <span className="text-[8px] font-bold bg-green-600 text-white rounded px-1 py-0.5 leading-tight">✓ DISPONÍVEL</span>
+                                          )}
+                                          {temUrgente && (
+                                            <span className="text-[8px] font-bold bg-purple-600 text-white rounded px-1 py-0.5 leading-tight">URGENTE</span>
+                                          )}
+                                          {deadline === 'atrasado' && (
+                                            <span className="text-[8px] font-bold bg-red-600 text-white rounded px-1 py-0.5 leading-tight">ATRASADO</span>
+                                          )}
+                                          {deadline === 'hoje' && (
+                                            <span className="text-[8px] font-bold bg-orange-500 text-white rounded px-1 py-0.5 leading-tight">HOJE</span>
+                                          )}
+                                          {deadline === 'amanha' && (
+                                            <span className="text-[8px] font-bold bg-yellow-400 text-gray-800 rounded px-1 py-0.5 leading-tight">AMANHÃ</span>
+                                          )}
                                         </div>
-                                      )}
 
-                                      <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                                        {nomePreview}
-                                      </p>
-                                      <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-2 w-full">
-                                        {caseGroup.pedidos.length} pedido(s) • {caseGroup.totalUnidades} unid.
-                                      </p>
-
-                                      {/* Badges de disponibilidade, prazo e urgência */}
-                                      <div className="flex flex-wrap justify-center gap-0.5 w-full">
-                                        {pacoteDisponivel && (
-                                          <span className="text-[8px] font-bold bg-green-600 text-white rounded px-1 py-0.5 leading-tight">✓ DISPONÍVEL</span>
-                                        )}
-                                        {temUrgente && (
-                                          <span className="text-[8px] font-bold bg-purple-600 text-white rounded px-1 py-0.5 leading-tight">URGENTE</span>
-                                        )}
-                                        {deadline === 'atrasado' && (
-                                          <span className="text-[8px] font-bold bg-red-600 text-white rounded px-1 py-0.5 leading-tight">ATRASADO</span>
-                                        )}
-                                        {deadline === 'hoje' && (
-                                          <span className="text-[8px] font-bold bg-orange-500 text-white rounded px-1 py-0.5 leading-tight">HOJE</span>
-                                        )}
-                                        {deadline === 'amanha' && (
-                                          <span className="text-[8px] font-bold bg-yellow-400 text-gray-800 rounded px-1 py-0.5 leading-tight">AMANHÃ</span>
+                                        {/* Mensagem para aba indisponível */}
+                                        {!isDisponivelTab && !isParcialTab && (
+                                          <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
+                                            Itens insuficientes embalados
+                                          </p>
                                         )}
                                       </div>
 
-                                      {/* Itens faltando (aba Parcial) */}
+                                      {/* ── Lado direito: itens faltando (só na aba Parcial) ── */}
                                       {isParcialTab && parcialInfo && parcialInfo.missingItems.length > 0 && (
-                                        <div className="w-full mt-0.5 space-y-0.5">
-                                          <p className="text-[8px] font-bold text-amber-700 text-center leading-tight">Aguardando:</p>
+                                        <div className="flex-1 border-l border-amber-300 bg-amber-50/50 p-2 flex flex-col justify-center gap-1.5 min-w-0 rounded-r-lg">
+                                          <p className="text-[9px] font-bold text-amber-800 uppercase tracking-wide flex items-center gap-1">
+                                            <span>⏳</span> Faltando
+                                          </p>
                                           {parcialInfo.missingItems.map((mi, idx) => (
-                                            <p key={idx} className="text-[7.5px] text-amber-800 leading-tight text-center line-clamp-2">
-                                              {mi.nome} ({mi.disponivel}/{mi.necessario})
-                                            </p>
+                                            <div key={idx} className="flex items-center gap-2 bg-white rounded-md p-1.5 border border-amber-200 shadow-sm">
+                                              {mi.imgUrl ? (
+                                                <img src={mi.imgUrl} alt={mi.nome} className="h-9 w-9 rounded object-cover border border-amber-300 shrink-0 opacity-40 grayscale" />
+                                              ) : (
+                                                <div className="h-9 w-9 rounded border border-dashed border-amber-400 bg-amber-50 flex items-center justify-center shrink-0">
+                                                  <span className="text-xs text-amber-400">?</span>
+                                                </div>
+                                              )}
+                                              <div className="flex-1 min-w-0">
+                                                <p className="text-[9px] font-semibold text-amber-900 leading-tight line-clamp-2">{mi.nome}</p>
+                                                <div className="flex items-center gap-1.5 mt-1">
+                                                  <div className="flex-1 h-2 rounded-full bg-amber-200 overflow-hidden">
+                                                    <div
+                                                      className="h-full rounded-full bg-amber-500 transition-all"
+                                                      style={{ width: `${Math.round((mi.disponivel / mi.necessario) * 100)}%` }}
+                                                    />
+                                                  </div>
+                                                  <span className="text-[9px] font-bold text-amber-700 whitespace-nowrap">{mi.disponivel}/{mi.necessario}</span>
+                                                </div>
+                                              </div>
+                                            </div>
                                           ))}
                                         </div>
-                                      )}
-
-                                      {!isDisponivelTab && !isParcialTab && (
-                                        <p className="text-[9px] text-red-600 font-semibold text-center leading-tight w-full mt-0.5">
-                                          Itens insuficientes embalados
-                                        </p>
                                       )}
                                     </div>
                                   );
@@ -3012,7 +3297,8 @@ export function Logistica() {
                             </div>
                           ))}
                         </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 )}
@@ -3022,32 +3308,42 @@ export function Logistica() {
             {logisticaMainTab === 'enviar' && (
               <div className="mt-6">
               {atrasados.length > 0 && (
-                <div className="mb-4 rounded-lg border-2 border-red-500 bg-red-50 p-3">
-                  <div className="flex items-center gap-2 mb-2">
+                <div className="mb-4 rounded-lg border-2 border-red-500 bg-red-50 overflow-hidden">
+                  {/* Header clicável */}
+                  <button
+                    type="button"
+                    className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-red-100 transition-colors"
+                    onClick={() => setAtrasadosOpen((v) => !v)}
+                  >
                     <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-600 text-white font-bold text-xs shrink-0">{atrasados.length}</div>
-                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide">⚠️ Pedidos com prazo ultrapassado</h3>
-                  </div>
-                  <div className="space-y-1">
-                    {atrasados.map((pedido: any) => {
-                      const dataUrgente = new Date(pedido.data_logistica_urgente);
-                      const now = new Date(); now.setHours(0,0,0,0);
-                      const diasAtraso = Math.ceil((now.getTime() - dataUrgente.getTime()) / 86400000);
-                      return (
-                        <div key={pedido.id} className="flex items-center justify-between rounded-md border border-red-300 bg-white px-3 py-1.5 cursor-pointer hover:bg-red-50 transition-colors"
-                          onClick={() => { setBarcode(pedido.id_externo || pedido.id); setTimeout(() => barcodeRef.current?.focus(), 50); }}
-                        >
-                          <div className="flex items-center gap-2">
-                            {pedido.plataformas?.img_url && <img src={pedido.plataformas.img_url} alt={pedido.plataformas.nome} className="h-4 w-4 rounded object-cover" />}
-                            <span className="text-sm font-semibold text-red-800">{pedido.id_externo || pedido.id}</span>
+                    <h3 className="text-xs font-bold text-red-700 uppercase tracking-wide flex-1 text-left">⚠️ Pedidos com prazo ultrapassado</h3>
+                    <ChevronDown className={`h-4 w-4 text-red-600 transition-transform ${atrasadosOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Lista colapsável */}
+                  {atrasadosOpen && (
+                    <div className="px-3 pb-3 space-y-1">
+                      {atrasados.map((pedido: any) => {
+                        const dataUrgente = new Date(pedido.data_logistica_urgente);
+                        const now = new Date(); now.setHours(0,0,0,0);
+                        const diasAtraso = Math.ceil((now.getTime() - dataUrgente.getTime()) / 86400000);
+                        return (
+                          <div key={pedido.id} className="flex items-center justify-between rounded-md border border-red-300 bg-white px-3 py-1.5 cursor-pointer hover:bg-red-50 transition-colors"
+                            onClick={() => { setBarcode(pedido.id_externo || pedido.id); setTimeout(() => barcodeRef.current?.focus(), 50); }}
+                          >
+                            <div className="flex items-center gap-2">
+                              {pedido.plataformas?.img_url && <img src={pedido.plataformas.img_url} alt={pedido.plataformas.nome} className="h-4 w-4 rounded object-cover" />}
+                              <span className="text-sm font-semibold text-red-800">{pedido.id_externo || pedido.id}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-red-700">Prazo: {dataUrgente.toLocaleDateString('pt-BR')}</span>
+                              <span className="rounded-full bg-red-600 text-white text-[10px] font-bold px-2 py-0.5">{diasAtraso > 0 ? `${diasAtraso}d atrasado` : 'Vence hoje'}</span>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs text-red-700">Prazo: {dataUrgente.toLocaleDateString('pt-BR')}</span>
-                            <span className="rounded-full bg-red-600 text-white text-[10px] font-bold px-2 py-0.5">{diasAtraso > 0 ? `${diasAtraso}d atrasado` : 'Vence hoje'}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
               <div className="flex items-center justify-between mb-3">
@@ -3103,6 +3399,36 @@ export function Logistica() {
                         ? 'COMERCIAL'
                         : (pc.nome || '').toUpperCase();
 
+                    // qual aba está ativa para este card: 'a-enviar' | 'enviados' | null
+                    const activeTab: 'a-enviar' | 'enviados' | null =
+                      isOpen ? 'a-enviar' : openEnviadosId === cardDropdownKey ? 'enviados' : null;
+
+                    const handleTabAEnviar = async (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      if (activeTab === 'a-enviar') {
+                        setOpenPlatformId(null);
+                      } else {
+                        setOpenEnviadosId(null);
+                        setOpenPlatformId(cardDropdownKey);
+                        setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
+                        try {
+                          const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                          if (ids.length > 0) await fetchItemsForPedidoIds(ids);
+                        } catch (err) { console.error(err); }
+                      }
+                    };
+
+                    const handleTabEnviados = async (e: React.MouseEvent) => {
+                      e.stopPropagation();
+                      if (activeTab === 'enviados') {
+                        setOpenEnviadosId(null);
+                      } else {
+                        setOpenPlatformId(null);
+                        setOpenEnviadosId(cardDropdownKey);
+                        await fetchPedidosEnviados(cardDropdownKey, pc);
+                      }
+                    };
+
                     return (
                       <Card key={pc.id} className="overflow-hidden" style={sectionStyle}>
                         <CardHeader className="pb-3">
@@ -3122,13 +3448,17 @@ export function Logistica() {
                               {sectionLabel}
                             </CardTitle>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-muted-foreground">{pc.count} pedido(s)</span>
+                              <div className="flex items-center gap-1 text-sm">
+                                <span className="font-semibold">{pc.count + (enviadosContagem[pc.id] ?? 0)}</span>
+                                <span className="text-muted-foreground">pedido(s)</span>
+                              </div>
                               <Button
                                 type="button"
                                 size="sm"
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   setOpenPlatformId(null);
+                                  setOpenEnviadosId(null);
                                   if (isSyntheticCard) {
                                     setLoadingPedidosFiltrados(true);
                                     try {
@@ -3155,29 +3485,120 @@ export function Logistica() {
                               >
                                 Enviar
                               </Button>
-                              <button
-                                type="button"
-                                className="p-1.5"
-                                onClick={async (e) => {
-                                  e.preventDefault();
-                                  const next = isOpen ? null : cardDropdownKey;
-                                  setOpenPlatformId(next);
-                                  if (next) {
-                                    setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
-                                    try {
-                                      const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                      if (ids.length > 0) await fetchItemsForPedidoIds(ids);
-                                    } catch (err) { console.error(err); }
-                                  }
-                                }}
-                                aria-label="Ver pedidos"
-                              >
-                                <ChevronDown className={`h-4 w-4 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
-                              </button>
                             </div>
                           </div>
-                          <p className="text-xs text-black/60 mt-1">Selecione um intervalo para ver os pedidos detalhados.</p>
+
+                          {/* Tab bar */}
+                          <div className="flex mt-3 rounded-lg overflow-hidden border border-black/10 bg-black/5 p-0.5 gap-0.5">
+                            <button
+                              type="button"
+                              onClick={handleTabAEnviar}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                activeTab === 'a-enviar'
+                                  ? 'bg-white shadow-sm text-foreground'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${activeTab === 'a-enviar' ? 'rotate-180' : ''}`} />
+                              A Enviar
+                              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                                activeTab === 'a-enviar' ? 'bg-foreground/10 text-foreground' : 'bg-black/10 text-muted-foreground'
+                              }`}>{pc.count}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleTabEnviados}
+                              className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                activeTab === 'enviados'
+                                  ? 'bg-green-600 text-white shadow-sm'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              <PackageCheck className="h-3.5 w-3.5" />
+                              Enviados
+                              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                                activeTab === 'enviados' ? 'bg-white/25 text-white' : 'bg-black/10 text-muted-foreground'
+                              }`}>{enviadosContagem[pc.id] ?? 0}</span>
+                            </button>
+                          </div>
                         </CardHeader>
+
+                        {openEnviadosId === cardDropdownKey && (
+                          <CardContent className="pt-0 border-t">
+                            <div className="rounded-lg border bg-white/70 p-3" onClick={(e) => e.stopPropagation()}>
+                              <h4 className="text-xs font-semibold mb-3 text-muted-foreground uppercase tracking-wide flex items-center gap-1.5">
+                                <PackageCheck className="h-3.5 w-3.5" />
+                                Pedidos enviados com pacote
+                              </h4>
+                              {loadingEnviados === cardDropdownKey ? (
+                                <div className="text-sm text-muted-foreground py-2">Carregando...</div>
+                              ) : (pedidosEnviadosCache[cardDropdownKey] || []).length === 0 ? (
+                                <div className="flex flex-col items-center gap-2 py-4 text-muted-foreground">
+                                  <Package className="h-8 w-8 opacity-30" />
+                                  <span className="text-xs">Nenhum pedido enviado com pacote.</span>
+                                </div>
+                              ) : (
+                                <div className="space-y-2">
+                                  {(pedidosEnviadosCache[cardDropdownKey] || []).map((p: any) => {
+                                    const itens: any[] = p.itens_pedido || [];
+                                    return (
+                                      <div key={p.id} className="rounded-lg border border-green-200 bg-green-50 px-3 py-2.5">
+                                        {/* Linha de cabeçalho */}
+                                        <div className="flex items-center justify-between gap-2 mb-2">
+                                          <div className="flex items-center gap-1.5">
+                                            <CheckCircle className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                                            <span className="text-sm font-semibold text-green-800">{p.id_externo || p.id}</span>
+                                          </div>
+                                          <span className="text-[11px] text-green-700">{new Date(p.criado_em).toLocaleDateString('pt-BR')}</span>
+                                        </div>
+
+                                        {/* Conteúdo: produtos à esquerda, pacote à direita */}
+                                        <div className="flex items-start gap-3">
+                                          {/* Produtos */}
+                                          <div className="flex flex-wrap gap-1.5 flex-1 min-w-0">
+                                            {itens.length === 0 ? (
+                                              <span className="text-xs text-green-700/60">Sem itens</span>
+                                            ) : (
+                                              itens.map((it: any, itIdx: number) => {
+                                                const nome = it.variacao?.nome || it.produto?.nome || '—';
+                                                const imgUrl = it.variacao?.img_url || it.produto?.img_url;
+                                                const qty = it.quantidade ?? 1;
+                                                return (
+                                                  <div key={itIdx} className="flex flex-col items-center gap-0.5 max-w-[52px]">
+                                                    {imgUrl ? (
+                                                      <img src={imgUrl} alt={nome} className="h-10 w-10 rounded object-cover border border-green-200" />
+                                                    ) : (
+                                                      <div className="h-10 w-10 rounded border border-green-200 bg-green-100 flex items-center justify-center">
+                                                        <Package className="h-4 w-4 text-green-400" />
+                                                      </div>
+                                                    )}
+                                                    <span className="text-[9px] text-center leading-tight line-clamp-2 text-green-800 w-full">{nome}</span>
+                                                    {qty > 1 && <span className="text-[9px] font-semibold text-green-700">×{qty}</span>}
+                                                  </div>
+                                                );
+                                              })
+                                            )}
+                                          </div>
+
+                                          {/* Pacote */}
+                                          {p.pacotes && (
+                                            <div className="shrink-0 flex flex-col items-end gap-0.5 min-w-[100px] max-w-[140px]">
+                                              <div className="flex items-center gap-1 rounded bg-green-100 border border-green-300 px-2 py-1 w-full">
+                                                <PackageCheck className="h-3 w-3 text-green-600 shrink-0" />
+                                                <span className="text-[10px] text-green-800 font-medium leading-tight line-clamp-3">{p.pacotes.rotulo}</span>
+                                              </div>
+                                              <span className="text-[9px] rounded-full bg-green-200 text-green-800 px-1.5 py-0.5">{p.pacotes.tipo}</span>
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        )}
 
                         {isOpen && (
                           <CardContent className="pt-0">
@@ -3214,6 +3635,7 @@ export function Logistica() {
                                   {pedidosPagina.map((p: any) => {
                                     const items = platformOrderItems[p.id] || [];
                                     const pacoteOk = p.pacote_disponivel === true;
+                                    const pacoteInfo = pacoteOk ? p.pacotes : null;
                                     return (
                                       <div key={p.id} className={`rounded border px-3 py-2.5 bg-white transition-opacity ${!pacoteOk ? 'opacity-40 pointer-events-none' : ''}`}>
                                         <div className="flex items-center justify-between gap-2">
@@ -3224,7 +3646,7 @@ export function Logistica() {
                                           </div>
                                           <button
                                             type="button"
-                                            className="text-sm text-primary underline-offset-4 hover:underline"
+                                            className="text-sm text-primary underline-offset-4 hover:underline shrink-0"
                                             onClick={async (e) => {
                                               e.preventDefault();
                                               e.stopPropagation();
@@ -3255,8 +3677,10 @@ export function Logistica() {
                                             Abrir
                                           </button>
                                         </div>
-                                        {items.length > 0 && (
-                                          <div className="flex flex-wrap gap-2 border-t mt-3 pt-3">
+                                        {(items.length > 0 || pacoteInfo) && (
+                                          <div className="flex items-start gap-3 border-t mt-3 pt-3">
+                                            {/* Imagens dos itens */}
+                                            <div className="flex flex-wrap gap-2 flex-1">
                                             {items.map((item: any, itemIdx: number) => (
                                               <div key={itemIdx} className="flex flex-col items-center gap-1 max-w-[60px]">
                                                 {item.img_url ? (
@@ -3270,6 +3694,21 @@ export function Logistica() {
                                                 )}
                                               </div>
                                             ))}
+                                            </div>{/* fim itens */}
+
+                                            {/* Pacote vinculado à direita */}
+                                            {pacoteInfo && (
+                                              <div className="shrink-0 flex flex-col items-end gap-1 min-w-[110px] max-w-[150px] self-center">
+                                                <div className="flex items-center gap-1 rounded-md bg-green-50 border border-green-200 px-2 py-1 w-full">
+                                                  <PackageCheck className="h-3 w-3 text-green-600 shrink-0" />
+                                                  <span className="text-[10px] text-green-800 font-medium leading-tight line-clamp-3">{pacoteInfo.rotulo}</span>
+                                                </div>
+                                                <span className="text-[9px] text-muted-foreground">
+                                                  Vinculado em {new Date(pacoteInfo.criado_em).toLocaleDateString('pt-BR')}
+                                                </span>
+                                                <span className="text-[9px] rounded-full bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5">{pacoteInfo.tipo}</span>
+                                              </div>
+                                            )}
                                           </div>
                                         )}
                                       </div>
