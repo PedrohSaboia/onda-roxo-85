@@ -197,6 +197,9 @@ export function Logistica() {
   const [produtoInputQty, setProdutoInputQty] = useState<Record<string, string>>({});
   const [atrasados, setAtrasados] = useState<any[]>([]);
   const [loadingAtrasados, setLoadingAtrasados] = useState(false);
+  const [pacotesLiberados, setPacotesLiberados] = useState<any[]>([]);
+  const [loadingPacotesLiberados, setLoadingPacotesLiberados] = useState(false);
+  const [pacotesLiberadosOpen, setPacotesLiberadosOpen] = useState(true);
   const [baixaCategoriaModal, setBaixaCategoriaModal] = useState<{ open: boolean; groupId: string | null; itemKey: string; quantidade: string }>({
     open: false,
     groupId: null,
@@ -664,7 +667,7 @@ export function Logistica() {
         setPlataformasList(plataformasOrdenadas);
         // também buscar os cards por plataforma (contagens de pedidos em logística com etiqueta disponível)
         try {
-          await fetchPlataformaCards();
+          await Promise.all([fetchPlataformaCards(), fetchPacotesLiberados()]);
         } catch (e) {
           // ignore
         }
@@ -912,10 +915,33 @@ export function Logistica() {
       
       toast({ title: 'Entrada registrada!', description: `Pacote "${caseGroup.label}" marcado como disponível.${mensagemRestante}` });
       setEntradaPacoteModal({ open: false, caseGroup: null, loading: false });
+      fetchPacotesLiberados();
     } catch (err) {
       console.error('Erro ao dar entrada no pacote:', err);
       toast({ title: 'Erro', description: 'Não foi possível registrar a entrada do pacote.', variant: 'destructive' });
       setEntradaPacoteModal((prev) => ({ ...prev, loading: false }));
+    }
+  };
+
+  // Busca pacotes já liberados (vinculados a pedidos) da tabela pacotes
+  const fetchPacotesLiberados = async () => {
+    setLoadingPacotesLiberados(true);
+    try {
+      let query = (supabase as any)
+        .from('pacotes')
+        .select('id, rotulo, assinatura, tipo, criado_em, pedidos:pedidos(id, id_externo, status_id, plataforma_id, plataformas(id, nome, img_url))')
+        .order('criado_em', { ascending: false })
+        .limit(100);
+
+      if (empresaId) query = query.eq('empresa_id', empresaId);
+
+      const { data, error } = await query;
+      if (error) throw error;
+      setPacotesLiberados(data || []);
+    } catch (err) {
+      console.error('Erro ao buscar pacotes liberados:', err);
+    } finally {
+      setLoadingPacotesLiberados(false);
     }
   };
 
@@ -2920,24 +2946,103 @@ export function Logistica() {
                     </div>
                   );
                 })()}
-                <div className="mb-2 flex items-center gap-2">
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={pacotesSubTab === 'comuns' ? 'default' : 'outline'}
+                      onClick={() => { setPacotesSubTab('comuns'); if (pacotesDisponivelTab === 'parcial') setPacotesDisponivelTab('disponivel'); }}
+                    >
+                      Comuns
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={pacotesSubTab === 'incomuns' ? 'default' : 'outline'}
+                      onClick={() => setPacotesSubTab('incomuns')}
+                    >
+                      Incomuns
+                    </Button>
+                  </div>
                   <Button
                     type="button"
                     size="sm"
-                    variant={pacotesSubTab === 'comuns' ? 'default' : 'outline'}
-                    onClick={() => { setPacotesSubTab('comuns'); if (pacotesDisponivelTab === 'parcial') setPacotesDisponivelTab('disponivel'); }}
+                    variant={pacotesLiberadosOpen ? 'default' : 'outline'}
+                    className={pacotesLiberadosOpen ? 'bg-green-600 hover:bg-green-700 text-white border-green-600' : 'text-green-700 border-green-600 hover:bg-green-50'}
+                    onClick={() => setPacotesLiberadosOpen((v) => !v)}
                   >
-                    Comuns
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant={pacotesSubTab === 'incomuns' ? 'default' : 'outline'}
-                    onClick={() => setPacotesSubTab('incomuns')}
-                  >
-                    Incomuns
+                    <PackageCheck className="h-3.5 w-3.5 mr-1" />
+                    📦 Liberados ({pacotesLiberados.length})
                   </Button>
                 </div>
+
+                {/* ── Seção: Pacotes Liberados (collapsible) ── */}
+                {pacotesLiberadosOpen && (
+                  <div className="mb-4 rounded-lg border border-green-400 bg-green-50/50 overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2">
+                      <h3 className="text-xs font-bold text-green-800 uppercase tracking-wide">
+                        Pacotes Liberados
+                      </h3>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-6 px-2 text-[10px] border border-green-300 text-green-700 hover:bg-green-100"
+                        onClick={() => fetchPacotesLiberados()}
+                      >
+                        <RefreshCw className="h-3 w-3 mr-1" /> Atualizar
+                      </Button>
+                    </div>
+                    <div className="px-3 pb-3">
+                      {loadingPacotesLiberados ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">Carregando pacotes...</p>
+                      ) : pacotesLiberados.length === 0 ? (
+                        <p className="text-sm text-muted-foreground py-4 text-center">Nenhum pacote liberado ainda.</p>
+                      ) : (
+                        <div className="space-y-1.5 max-h-[300px] overflow-y-auto">
+                          {pacotesLiberados.map((pacote: any) => {
+                            const pedidos = pacote.pedidos || [];
+                            const dataCriacao = new Date(pacote.criado_em);
+                            return (
+                              <div key={pacote.id} className="flex items-center justify-between rounded-md border border-green-200 bg-white px-3 py-2 hover:bg-green-50/60 transition-colors">
+                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                  <PackageCheck className="h-4 w-4 text-green-600 shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-semibold text-green-900 leading-tight truncate">{pacote.rotulo}</p>
+                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                      <span className="text-[10px] text-muted-foreground">{dataCriacao.toLocaleDateString('pt-BR')} {dataCriacao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                                      <span className={`text-[9px] font-semibold rounded-full px-1.5 py-0.5 ${pacote.tipo === 'comum' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                        {pacote.tipo || 'comum'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  {pedidos.length > 0 && (
+                                    <div className="flex items-center gap-1">
+                                      {pedidos.slice(0, 3).map((p: any) => (
+                                        <div key={p.id} className="flex items-center gap-1 rounded bg-muted/60 px-1.5 py-0.5">
+                                          {p.plataformas?.img_url && <img src={p.plataformas.img_url} alt="" className="h-3 w-3 rounded object-cover" />}
+                                          <span className="text-[10px] text-muted-foreground font-medium">{p.id_externo || String(p.id).slice(0, 8)}</span>
+                                        </div>
+                                      ))}
+                                      {pedidos.length > 3 && (
+                                        <span className="text-[10px] text-muted-foreground font-medium">+{pedidos.length - 3}</span>
+                                      )}
+                                    </div>
+                                  )}
+                                  <span className="text-[10px] font-semibold rounded-full bg-green-100 text-green-700 px-2 py-0.5">
+                                    {pedidos.length} pedido{pedidos.length !== 1 ? 's' : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {/* Tab disponíveis / parcial / indisponíveis */}
                 <div className="mb-4 flex items-center gap-2">
                   <Button
