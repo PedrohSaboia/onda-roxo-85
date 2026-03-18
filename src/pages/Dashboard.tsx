@@ -1140,7 +1140,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="text-3xl font-bold">{metrics.totalPedidos - metrics.pedidosEnviados}</div>
+                  <div className="text-3xl font-bold">{Math.abs(metrics.totalPedidos - metrics.pedidosEnviados)}</div>
                   <p className="text-sm text-muted-foreground">Aguardando envio</p>
                 </div>
               </CardContent>
