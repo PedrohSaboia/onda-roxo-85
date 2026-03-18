@@ -25,7 +25,10 @@ interface DashboardMetrics {
   vendasTotal: number;
   ticketMedio: number;
   pedidosHoje: number;
+  pedidosMesAtual: number;
   pedidosEnviados: number;
+  pedidosEnviadosHoje: number;
+  pedidosEnviadosMesAtual: number;
   topProdutos: { nome: string; quantidade: number; receita: number; img_url: string | null }[];
   produtosMaiorTicket: { nome: string; quantidade: number; ticketMedio: number; receita: number; img_url: string | null }[];
   vendasPorPlataforma: { nome: string; total: number; pedidos: number; cor: string }[];
@@ -89,27 +92,93 @@ export function Dashboard() {
         throw pedidosError;
       }
       
-      // Buscar pedidos com status "Enviado" atualizados no período
+      // Buscar pedidos enviados no período: detalhes (gráficos) + métricas via RPC (paralelo)
       const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
-      const { data: pedidosEnviadosData, error: pedidosEnviadosError } = await supabase
-        .from('pedidos')
-        .select('id, atualizado_em, plataformas(nome, cor)')
-        .eq('status_id', ENVIADO_STATUS_ID)
-        .gte('atualizado_em', startISO)
-        .lte('atualizado_em', endISO)
-        .or('duplicata.is.null,duplicata.eq.false')
-        .abortSignal(signal);
+      const [
+        { data: pedidosEnviadosData, error: pedidosEnviadosError },
+        { data: metricasEnviadosRpc, error: metricasEnviadosError },
+        { data: metricasTotalRpc, error: metricasTotalError },
+        { data: vendasPlataformaRpc, error: vendasPlataformaError },
+        { data: enviosPlataformaRpc, error: enviosPlataformaError },
+        { data: pedidosStatusRpc, error: pedidosStatusError },
+        { data: topProdutosRpc, error: topProdutosError },
+        { data: maiorTicketRpc, error: maiorTicketError },
+      ] =
+        await Promise.all([
+          supabase
+            .from('pedidos')
+            .select('id, atualizado_em, plataformas(nome, cor)')
+            .eq('status_id', ENVIADO_STATUS_ID)
+            .gte('atualizado_em', startISO)
+            .lte('atualizado_em', endISO)
+            .or('duplicata.is.null,duplicata.eq.false')
+            .abortSignal(signal),
+          (supabase as any).rpc('get_metricas_enviados', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_total_pedidos', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_vendas_por_plataforma', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_envios_por_plataforma', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_pedidos_por_status', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_top_produtos_mais_vendidos', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_top_produtos_maior_ticket', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+        ]);
 
       if (pedidosEnviadosError) {
-        if (pedidosEnviadosError.message.includes('aborted')) return;
+        if (pedidosEnviadosError.message?.includes('aborted')) return;
         throw pedidosEnviadosError;
       }
-      
+      if (metricasEnviadosError) {
+        console.warn('[get_metricas_enviados] RPC error:', metricasEnviadosError);
+      }
+      if (metricasTotalError) {
+        console.warn('[get_total_pedidos] RPC error:', metricasTotalError);
+      }
+      if (vendasPlataformaError) {
+        console.warn('[get_vendas_por_plataforma] RPC error:', vendasPlataformaError);
+      }
+      if (enviosPlataformaError) {
+        console.warn('[get_envios_por_plataforma] RPC error:', enviosPlataformaError);
+      }
+      if (pedidosStatusError) {
+        console.warn('[get_pedidos_por_status] RPC error:', pedidosStatusError);
+      }
+      if (topProdutosError) {
+        console.warn('[get_top_produtos_mais_vendidos] RPC error:', topProdutosError);
+      }
+      if (maiorTicketError) {
+        console.warn('[get_top_produtos_maior_ticket] RPC error:', maiorTicketError);
+      }
+
       if (signal.aborted) return;
 
         const pedidosData = (pedidos || []) as any[];
         const pedidosEnviadosArray = (pedidosEnviadosData || []) as any[];
-        const pedidosEnviadosCount = pedidosEnviadosArray.length;
+        const rpcEnviados = (metricasEnviadosRpc as any[])?.[0] ?? null;
+        const rpcTotal = (metricasTotalRpc as any[])?.[0] ?? null;
+        const rpcVendasPlataforma = (vendasPlataformaRpc as any[]) ?? null;
+        const rpcEnviosPlataforma = (enviosPlataformaRpc as any[]) ?? null;
+        // Preferir contagem da RPC (exclui duplicatas no banco); fallback para array local
+        const pedidosEnviadosCount = rpcEnviados ? Number(rpcEnviados.total_enviados) : pedidosEnviadosArray.length;
 
         // Calcular envios por plataforma
         const enviosPlataformaMap: Record<string, { quantidade: number; cor: string }> = {};
@@ -121,7 +190,9 @@ export function Dashboard() {
           }
           enviosPlataformaMap[nome].quantidade += 1;
         });
-        const enviosPorPlataforma = Object.entries(enviosPlataformaMap).map(([nome, data]) => ({ nome, ...data }));
+        const enviosPorPlataforma = rpcEnviosPlataforma
+          ? rpcEnviosPlataforma.map((r: any) => ({ nome: r.nome, quantidade: Number(r.quantidade), cor: r.cor || '#cccccc' }))
+          : Object.entries(enviosPlataformaMap).map(([nome, data]) => ({ nome, ...data }));
 
         // Calcular envios por dia
         const enviosPorDiaMap: Record<string, number> = {};
@@ -137,21 +208,29 @@ export function Dashboard() {
           .sort((a, b) => a.data.localeCompare(b.data));
 
         // Calcular métricas
-        const totalPedidos = pedidosData.length;
-        const vendasTotal = pedidosData.reduce((sum, p) => sum + (Number(p.valor_total) || 0), 0);
-        const ticketMedio = totalPedidos > 0 ? vendasTotal / totalPedidos : 0;
+        // Preferir RPC para total_pedidos (exclui duplicatas no banco); fallback para array local
+        const totalPedidos = rpcTotal ? Number(rpcTotal.total_pedidos) : pedidosData.length;
+        const vendasTotal = rpcTotal ? Number(rpcTotal.valor_total) : pedidosData.reduce((sum, p) => sum + (Number(p.valor_total) || 0), 0);
+        const ticketMedio = rpcTotal ? Number(rpcTotal.ticket_medio) : (totalPedidos > 0 ? vendasTotal / totalPedidos : 0);
+        const pedidosHojeRpc = rpcTotal ? Number(rpcTotal.total_hoje) : 0;
+        const pedidosMesAtualRpc = rpcTotal ? Number(rpcTotal.total_mes_atual) : 0;
 
         const hoje = new Date().toDateString();
-        const pedidosHoje = pedidosData.filter(p => new Date(p.criado_em).toDateString() === hoje).length;
+        const pedidosHoje = pedidosHojeRpc || pedidosData.filter(p => new Date(p.criado_em).toDateString() === hoje).length;
 
         // Usar contagem da query separada de pedidos enviados no período
         const pedidosEnviados = pedidosEnviadosCount;
+        const pedidosEnviadosHoje = rpcEnviados ? Number(rpcEnviados.total_hoje) : 0;
+        const pedidosEnviadosMesAtual = rpcEnviados ? Number(rpcEnviados.total_mes_atual) : 0;
 
         // Determinar se é período curto (dia ou semana - até 7 dias)
         const diffDays = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
         const isPeriodoCurto = diffDays <= 7;
 
         // Top produtos e produtos com maior ticket médio
+        const rpcTopProdutos = (topProdutosRpc as any[]) ?? null;
+        const rpcMaiorTicket = (maiorTicketRpc as any[]) ?? null;
+
         const produtosMap: Record<string, { quantidade: number; receita: number; img_url: string | null }> = {};
         pedidosData.forEach(p => {
           (p.itens_pedido || []).forEach((item: any) => {
@@ -169,20 +248,18 @@ export function Dashboard() {
         });
 
         const produtosArray = Object.entries(produtosMap).map(([nome, data]) => ({ nome, ...data }));
-        const topProdutos = produtosArray.sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
+        const topProdutos = rpcTopProdutos
+          ? rpcTopProdutos.map((r: any) => ({ nome: r.nome, quantidade: Number(r.quantidade), receita: Number(r.receita), img_url: r.img_url || null }))
+          : produtosArray.sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
         
         // Produtos com maior ticket médio
-        const produtosMaiorTicket = produtosArray
-          .filter(p => p.quantidade > 0)
-          .map(p => ({
-            nome: p.nome,
-            quantidade: p.quantidade,
-            receita: p.receita,
-            ticketMedio: p.receita / p.quantidade,
-            img_url: p.img_url
-          }))
-          .sort((a, b) => b.ticketMedio - a.ticketMedio)
-          .slice(0, 5);
+        const produtosMaiorTicket = rpcMaiorTicket
+          ? rpcMaiorTicket.map((r: any) => ({ nome: r.nome, quantidade: Number(r.quantidade), receita: Number(r.receita), ticketMedio: Number(r.ticket_medio), img_url: r.img_url || null }))
+          : produtosArray
+              .filter(p => p.quantidade > 0)
+              .map(p => ({ nome: p.nome, quantidade: p.quantidade, receita: p.receita, ticketMedio: p.receita / p.quantidade, img_url: p.img_url }))
+              .sort((a, b) => b.ticketMedio - a.ticketMedio)
+              .slice(0, 5);
 
         // Vendas por plataforma (total)
         const plataformasMap: Record<string, { total: number; pedidos: number; cor: string }> = {};
@@ -195,7 +272,9 @@ export function Dashboard() {
           plataformasMap[nome].total += Number(p.valor_total) || 0;
           plataformasMap[nome].pedidos += 1;
         });
-        const vendasPorPlataforma = Object.entries(plataformasMap).map(([nome, data]) => ({ nome, ...data }));
+        const vendasPorPlataforma = rpcVendasPlataforma
+          ? rpcVendasPlataforma.map((r: any) => ({ nome: r.nome, total: Number(r.valor_total), pedidos: Number(r.total_pedidos), cor: r.cor || '#cccccc' }))
+          : Object.entries(plataformasMap).map(([nome, data]) => ({ nome, ...data }));
 
         // Vendas por plataforma por período (para período curto)
         let vendasPorPlataformaPorPeriodo: { periodo: string; plataformas: { nome: string; valor: number; cor: string }[] }[] = [];
@@ -221,7 +300,8 @@ export function Dashboard() {
             .sort((a, b) => a.periodo.localeCompare(b.periodo));
         }
 
-        // Vendas por status
+        // Pedidos por status
+        const rpcPedidosStatus = (pedidosStatusRpc as any[]) ?? null;
         const statusMap: Record<string, { pedidos: number; cor: string }> = {};
         pedidosData.forEach(p => {
           const nome = (p.status as any)?.nome || 'Sem Status';
@@ -231,7 +311,9 @@ export function Dashboard() {
           }
           statusMap[nome].pedidos += 1;
         });
-        const vendasPorStatus = Object.entries(statusMap).map(([nome, data]) => ({ nome, ...data }));
+        const vendasPorStatus = rpcPedidosStatus
+          ? rpcPedidosStatus.map((r: any) => ({ nome: r.nome, pedidos: Number(r.pedidos), cor: r.cor || '#cccccc' }))
+          : Object.entries(statusMap).map(([nome, data]) => ({ nome, ...data }));
 
         // Vendas totais por dia (para gráfico de linha)
         const vendasPorDiaMap: Record<string, number> = {};
@@ -251,7 +333,10 @@ export function Dashboard() {
           vendasTotal,
           ticketMedio,
           pedidosHoje,
+          pedidosMesAtual: pedidosMesAtualRpc,
           pedidosEnviados,
+          pedidosEnviadosHoje,
+          pedidosEnviadosMesAtual,
           topProdutos,
           produtosMaiorTicket,
           vendasPorPlataforma,
@@ -581,7 +666,7 @@ export function Dashboard() {
             <MetricCard
               title="Total de Pedidos"
               value={metrics.totalPedidos.toString()}
-              description={`${metrics.pedidosHoje} pedidos hoje`}
+              description={`${metrics.pedidosHoje} hoje • ${metrics.pedidosMesAtual} no mês`}
               icon={BiSolidPurchaseTag }
               color="custom"
             />
@@ -602,7 +687,7 @@ export function Dashboard() {
             <MetricCard
               title="Pedidos Enviados"
               value={metrics.pedidosEnviados.toString()}
-              description={`${((metrics.pedidosEnviados / metrics.totalPedidos) * 100).toFixed(1)}% dos pedidos`}
+              description={`${metrics.pedidosEnviadosHoje} hoje • ${metrics.pedidosEnviadosMesAtual} no mês`}
               icon={BsSendCheckFill}
               color="orange"
             />
