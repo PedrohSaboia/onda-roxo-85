@@ -80,6 +80,7 @@ export function Dashboard() {
         `)
         .gte('criado_em', startISO)
         .lte('criado_em', endISO)
+        .or('duplicata.is.null,duplicata.eq.false')
         .order('criado_em', { ascending: false })
         .abortSignal(signal);
 
@@ -96,6 +97,7 @@ export function Dashboard() {
         .eq('status_id', ENVIADO_STATUS_ID)
         .gte('atualizado_em', startISO)
         .lte('atualizado_em', endISO)
+        .or('duplicata.is.null,duplicata.eq.false')
         .abortSignal(signal);
 
       if (pedidosEnviadosError) {
