@@ -141,16 +141,16 @@ export function DashboardComercial() {
   const [pixDailyChartStyle, setPixDailyChartStyle] = useState<DailyChartStyle>('linha');
   const [carrinhoDailyChartStyle, setCarrinhoDailyChartStyle] = useState<DailyChartStyle>('linha');
   const [whatsappDailyChartStyle, setWhatsappDailyChartStyle] = useState<DailyChartStyle>('linha');
-  const [dashboardDateStart, setDashboardDateStart] = useState<string>(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [dashboardDateStart, setDashboardDateStart] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [dashboardDateEnd, setDashboardDateEnd] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [dashboardPickerOpen, setDashboardPickerOpen] = useState(false);
-  const [dashboardTempStartDate, setDashboardTempStartDate] = useState<Date | null>(() => startOfMonth(new Date()));
+  const [dashboardTempStartDate, setDashboardTempStartDate] = useState<Date | null>(() => new Date());
   const [dashboardTempEndDate, setDashboardTempEndDate] = useState<Date | null>(() => new Date());
   const [dashboardHoverDate, setDashboardHoverDate] = useState<Date | null>(null);
   const [dashboardCalendarMonth, setDashboardCalendarMonth] = useState<number>(() => new Date().getMonth());
   const [dashboardCalendarYear, setDashboardCalendarYear] = useState<number>(() => new Date().getFullYear());
   const [dashboardRangeApplied, setDashboardRangeApplied] = useState<{ start: string; end: string }>(() => ({
-    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    start: format(new Date(), 'yyyy-MM-dd'),
     end: format(new Date(), 'yyyy-MM-dd'),
   }));
 
