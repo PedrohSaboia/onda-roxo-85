@@ -143,6 +143,10 @@ export function Comercial() {
   const [selectedMelhorEnvioIds, setSelectedMelhorEnvioIds] = useState<string[]>([]);
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
 
+  // Estados para confirmação de duplicação
+  const [duplicateConfirmOpen, setDuplicateConfirmOpen] = useState(false);
+  const [duplicateTargetId, setDuplicateTargetId] = useState<string | null>(null);
+
   // Função para deletar os pedidos selecionados (usada pelo AlertDialog)
   const deleteSelectedPedidos = async () => {
     try {
@@ -1152,7 +1156,7 @@ export function Comercial() {
         plataforma_id: (pedidoRow as any).plataforma_id || null,
         status_id: COMERCIAL_STATUS_ID,
         responsavel_id: (pedidoRow as any).responsavel_id || null,
-        valor_total: (pedidoRow as any).valor_total || null,
+        valor_total: 0,
         frete_venda: (pedidoRow as any).frete_venda || null,
         cor_do_pedido: '#FF0000',
         criado_em: now,
@@ -2619,7 +2623,8 @@ export function Comercial() {
                           toast({ title: 'Sem permissão', description: 'Você não tem permissão para duplicar pedidos.', variant: 'destructive' });
                           return;
                         }
-                        duplicatePedido(pedido.id);
+                        setDuplicateTargetId(pedido.id);
+                        setDuplicateConfirmOpen(true);
                       }}
                     >
                       <Copy className="h-4 w-4" />
@@ -2917,6 +2922,27 @@ export function Comercial() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Confirmação para duplicar pedido */}
+      <AlertDialog open={duplicateConfirmOpen} onOpenChange={(open) => { if (!open) { setDuplicateConfirmOpen(false); setDuplicateTargetId(null); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Duplicar Pedido</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja duplicar este pedido? Uma cópia será criada com todos os dados.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDuplicateConfirmOpen(false); setDuplicateTargetId(null); }}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              const id = duplicateTargetId;
+              setDuplicateConfirmOpen(false);
+              setDuplicateTargetId(null);
+              if (id) duplicatePedido(id);
+            }}>Confirmar</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

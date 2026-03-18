@@ -448,7 +448,7 @@ export function PedidosEnviados() {
         plataforma_id: (pedidoRow as any).plataforma_id || null,
         status_id: COMERCIAL_STATUS_ID,
         responsavel_id: (pedidoRow as any).responsavel_id || null,
-        valor_total: (pedidoRow as any).valor_total || null,
+        valor_total: 0,
         frete_venda: (pedidoRow as any).frete_venda || null,
         cor_do_pedido: '#FF0000',
         criado_em: now,
