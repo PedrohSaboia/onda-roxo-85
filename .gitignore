@@ -27,5 +27,11 @@ PROMPT_REPLICAR_POPUP_PERMISSOES.md
 *.njsproj
 *.sln
 *.sw?
+*.env
 
+# Supabase migrations
+supabase/migrations/
+
+
+supabase/functions/
 
