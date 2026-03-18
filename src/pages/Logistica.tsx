@@ -538,7 +538,8 @@ export function Logistica() {
         .select(selectQuery)
         .eq('plataforma_id', plataformaId)
         .eq('status_id', LOGISTICA_STATUS_ID)
-        .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID);
+        .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID)
+        .eq('pacote_disponivel', true);
 
       if (pedidoIdsFiltroProduto && pedidoIdsFiltroProduto.length > 0) {
         query = query.in('id', pedidoIdsFiltroProduto);
@@ -1108,7 +1109,7 @@ export function Logistica() {
     setLoadingPedidosFiltrados(true);
     try {
       const ids = produtoPedidosModal.pedidos.map((p: any) => p.id).filter(Boolean);
-      const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+      const fullList = sortPedidos(await fetchPedidosPorIds(ids)).filter((p: any) => p.pacote_disponivel === true);
 
       setProdutoPedidosModal((prev) => ({ ...prev, open: false }));
       setOpenPlatformId(null);
@@ -3551,7 +3552,7 @@ export function Logistica() {
                                     setLoadingPedidosFiltrados(true);
                                     try {
                                       const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                      const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                      const fullList = sortPedidos(await fetchPedidosPorIds(ids)).filter((p: any) => p.pacote_disponivel === true);
                                       setModoListaPorPlataforma(true);
                                       setFilterPlataformaId('');
                                       setPedidosFiltrados(fullList);
@@ -3782,7 +3783,7 @@ export function Logistica() {
                                               if (isSyntheticCard) {
                                                 try {
                                                   const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                                  const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                                  const fullList = sortPedidos(await fetchPedidosPorIds(ids)).filter((p: any) => p.pacote_disponivel === true);
                                                   const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
                                                   setModoListaPorPlataforma(true);
                                                   setFilterPlataformaId('');
