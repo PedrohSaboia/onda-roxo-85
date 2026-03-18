@@ -8,6 +8,7 @@ import { NotificacoesProvider } from "@/contexts/NotificacoesContext";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import Pedido from "./pages/Pedido";
 import PedidoContabilidade from "./pages/PedidoContabilidade";
@@ -59,6 +60,7 @@ const App = () => {
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
             
             {/* Pedido contabilidade moved inside AppLayout so header appears */}
             
