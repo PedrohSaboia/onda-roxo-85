@@ -38,7 +38,7 @@ interface DashboardMetrics {
   enviosPorPlataforma: { nome: string; quantidade: number; cor: string }[];
   enviosPorDia: { data: string; quantidade: number }[];
   isPeriodoCurto: boolean;
-  spreadFrete: { receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number } | null;
+  spreadFrete: { receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number; idsReceitaFrete: string[]; idsCustoFrete: string[] } | null;
 }
 
 export function Dashboard() {
@@ -246,6 +246,8 @@ export function Dashboard() {
           spreadValor: Number(rpcSpreadFreteData.spread_valor),
           spreadPercentual: Number(rpcSpreadFreteData.spread_percentual),
           totalPedidosComFrete: Number(rpcSpreadFreteData.total_pedidos_com_frete),
+          idsReceitaFrete: (rpcSpreadFreteData.ids_receita_frete as string[]) ?? [],
+          idsCustoFrete: (rpcSpreadFreteData.ids_custo_frete as string[]) ?? [],
         } : null;
 
         const produtosMap: Record<string, { quantidade: number; receita: number; img_url: string | null }> = {};
@@ -719,28 +721,28 @@ export function Dashboard() {
                 value={formatCurrency(metrics.spreadFrete.receitaFrete)}
                 description={`${metrics.spreadFrete.totalPedidosComFrete} pedidos com frete`}
                 icon={Truck}
-                color="blue"
+                color="teal"
               />
               <MetricCard
                 title="Custo de Frete"
                 value={formatCurrency(metrics.spreadFrete.custoFrete)}
                 description="Valor pago ao MelhorEnvio"
                 icon={TrendingDown}
-                color="red"
+                color="pink"
               />
               <MetricCard
                 title="Resultado do Frete"
                 value={formatCurrency(metrics.spreadFrete.spreadValor)}
                 description="Frete cobrado menos frete pago"
                 icon={TrendingUp}
-                color="green"
+                color="indigo"
               />
               <MetricCard
                 title="Margem de Frete"
                 value={`${metrics.spreadFrete.spreadPercentual.toFixed(1)}%`}
                 description="Percentual do spread sobre a receita"
                 icon={BarChart3}
-                color={metrics.spreadFrete.spreadPercentual >= 0 ? 'green' : 'red'}
+                color="yellow"
               />
             </div>
           )}
