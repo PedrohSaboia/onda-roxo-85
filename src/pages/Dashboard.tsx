@@ -38,6 +38,7 @@ interface DashboardMetrics {
   enviosPorPlataforma: { nome: string; quantidade: number; cor: string }[];
   enviosPorDia: { data: string; quantidade: number }[];
   isPeriodoCurto: boolean;
+  spreadFrete: { receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number } | null;
 }
 
 export function Dashboard() {
@@ -103,6 +104,7 @@ export function Dashboard() {
         { data: pedidosStatusRpc, error: pedidosStatusError },
         { data: topProdutosRpc, error: topProdutosError },
         { data: maiorTicketRpc, error: maiorTicketError },
+        { data: spreadFreteRpc, error: spreadFreteError },
       ] =
         await Promise.all([
           supabase
@@ -141,6 +143,10 @@ export function Dashboard() {
             p_data_inicio: startISO,
             p_data_fim: endISO,
           }),
+          (supabase as any).rpc('get_spread_frete', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
         ]);
 
       if (pedidosEnviadosError) {
@@ -167,6 +173,9 @@ export function Dashboard() {
       }
       if (maiorTicketError) {
         console.warn('[get_top_produtos_maior_ticket] RPC error:', maiorTicketError);
+      }
+      if (spreadFreteError) {
+        console.warn('[get_spread_frete] RPC error:', spreadFreteError);
       }
 
       if (signal.aborted) return;
@@ -230,6 +239,14 @@ export function Dashboard() {
         // Top produtos e produtos com maior ticket médio
         const rpcTopProdutos = (topProdutosRpc as any[]) ?? null;
         const rpcMaiorTicket = (maiorTicketRpc as any[]) ?? null;
+        const rpcSpreadFreteData = (spreadFreteRpc as any[])?.[0] ?? null;
+        const spreadFrete = rpcSpreadFreteData ? {
+          receitaFrete: Number(rpcSpreadFreteData.receita_frete),
+          custoFrete: Number(rpcSpreadFreteData.custo_frete),
+          spreadValor: Number(rpcSpreadFreteData.spread_valor),
+          spreadPercentual: Number(rpcSpreadFreteData.spread_percentual),
+          totalPedidosComFrete: Number(rpcSpreadFreteData.total_pedidos_com_frete),
+        } : null;
 
         const produtosMap: Record<string, { quantidade: number; receita: number; img_url: string | null }> = {};
         pedidosData.forEach(p => {
@@ -346,6 +363,7 @@ export function Dashboard() {
           enviosPorPlataforma,
           enviosPorDia,
           isPeriodoCurto,
+          spreadFrete,
         });
 
       } catch (err: any) {
@@ -693,6 +711,40 @@ export function Dashboard() {
             />
           </div>
 
+          {/* Métricas de Spread de Frete */}
+          {metrics.spreadFrete && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                title="Receita de Frete"
+                value={formatCurrency(metrics.spreadFrete.receitaFrete)}
+                description={`${metrics.spreadFrete.totalPedidosComFrete} pedidos com frete`}
+                icon={Truck}
+                color="blue"
+              />
+              <MetricCard
+                title="Custo de Frete"
+                value={formatCurrency(metrics.spreadFrete.custoFrete)}
+                description="Valor pago ao MelhorEnvio"
+                icon={TrendingDown}
+                color="red"
+              />
+              <MetricCard
+                title="Resultado do Frete"
+                value={formatCurrency(metrics.spreadFrete.spreadValor)}
+                description="Frete cobrado menos frete pago"
+                icon={TrendingUp}
+                color="green"
+              />
+              <MetricCard
+                title="Margem de Frete"
+                value={`${metrics.spreadFrete.spreadPercentual.toFixed(1)}%`}
+                description="Percentual do spread sobre a receita"
+                icon={BarChart3}
+                color={metrics.spreadFrete.spreadPercentual >= 0 ? 'green' : 'red'}
+              />
+            </div>
+          )}
+
           {/* Gráficos de Vendas por Plataforma, Envios e Pedidos por Status */}
           {/* Layout unificado - gráficos lado a lado */}
           <>
@@ -713,6 +765,13 @@ export function Dashboard() {
                   </CardHeader>
                   <CardContent className="pt-6">
                     <TabsContent value="plataformas" className="mt-0">
+                      {metrics.vendasPorPlataforma.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
+                      <>
                       <ResponsiveContainer width="100%" height={300}>
                         <BarChart 
                           data={metrics.vendasPorPlataforma.map(p => ({
@@ -776,8 +835,16 @@ export function Dashboard() {
                           </div>
                         ))}
                       </div>
+                      </>
+                      )}
                     </TabsContent>
                     <TabsContent value="total" className="mt-0">
+                      {metrics.vendasTotaisPorDia.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart 
                           data={metrics.vendasTotaisPorDia}
@@ -831,6 +898,7 @@ export function Dashboard() {
                           />
                         </LineChart>
                       </ResponsiveContainer>
+                      )}
                     </TabsContent>
                   </CardContent>
                 </Tabs>
@@ -853,6 +921,13 @@ export function Dashboard() {
                   </CardHeader>
                   <CardContent className="pt-6">
                     <TabsContent value="plataformas" className="mt-0">
+                      {metrics.enviosPorPlataforma.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
+                      <>
                       <ResponsiveContainer width="100%" height={300}>
                         <BarChart 
                           data={metrics.enviosPorPlataforma.map(p => ({
@@ -910,8 +985,16 @@ export function Dashboard() {
                           </div>
                         ))}
                       </div>
+                      </>
+                      )}
                     </TabsContent>
                     <TabsContent value="total" className="mt-0">
+                      {metrics.enviosPorDia.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart 
                           data={metrics.enviosPorDia}
@@ -965,6 +1048,7 @@ export function Dashboard() {
                           />
                         </LineChart>
                       </ResponsiveContainer>
+                      )}
                     </TabsContent>
                   </CardContent>
                 </Tabs>
@@ -978,6 +1062,13 @@ export function Dashboard() {
                 <CardDescription>Distribuição atual dos pedidos criados no período</CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
+                {metrics.vendasPorStatus.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[320px] text-muted-foreground gap-2">
+                    <BarChart3 className="h-12 w-12 opacity-20" />
+                    <p className="text-sm">Nenhum dado para o período selecionado</p>
+                  </div>
+                ) : (
+                <>
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart 
                     data={metrics.vendasPorStatus.map(s => ({
@@ -1034,6 +1125,8 @@ export function Dashboard() {
                     </div>
                   ))}
                 </div>
+                </>
+                )}
               </CardContent>
             </Card>
             </>
@@ -1140,7 +1233,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="text-3xl font-bold">{Math.abs(metrics.totalPedidos - metrics.pedidosEnviados)}</div>
+                  <div className="text-3xl font-bold">{Math.max(0, metrics.totalPedidos - metrics.pedidosEnviados)}</div>
                   <p className="text-sm text-muted-foreground">Aguardando envio</p>
                 </div>
               </CardContent>
