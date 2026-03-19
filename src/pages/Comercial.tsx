@@ -2571,16 +2571,6 @@ export function Comercial() {
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex flex-col items-center">
-                      {((pedido as any).etiquetaEnvioId === ETIQUETA_FILTER_ID) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="mb-1 bg-custom-600 text-white hover:bg-custom-700 px-2 py-0 h-6 rounded text-xs"
-                          onClick={(e) => { e.stopPropagation(); handleEnvioRapido(pedido.id); }}
-                        >
-                          {processingRapid[pedido.id] ? 'Processando...' : 'Envio Rápido'}
-                        </Button>
-                      )}
                       <div className="flex items-center justify-center">
                         <Badge 
                           variant="outline" 
