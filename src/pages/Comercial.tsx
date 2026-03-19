@@ -344,13 +344,15 @@ export function Comercial() {
 
         // apply data_inicio filter
         if (filterDataInicio) {
-          const dataInicioISO = new Date(filterDataInicio).toISOString();
+          // 'T00:00:00' sem Z força interpretação como horário local (não UTC)
+          const dataInicioISO = new Date(filterDataInicio + 'T00:00:00').toISOString();
           (query as any).gte('pedido_criado_em', dataInicioISO);
         }
 
         // apply data_fim filter
         if (filterDataFim) {
-          const dataFimDate = new Date(filterDataFim);
+          // 'T00:00:00' sem Z força interpretação como horário local (não UTC)
+          const dataFimDate = new Date(filterDataFim + 'T00:00:00');
           dataFimDate.setHours(23, 59, 59, 999);
           const dataFimISO = dataFimDate.toISOString();
           (query as any).lte('pedido_criado_em', dataFimISO);
@@ -359,13 +361,10 @@ export function Comercial() {
         // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
         if (filterEnvioAdiado) {
           if (filterEnvioAdiadoDate) {
-            // Filtrar pela data específica selecionada
-            const startOfDay = new Date(filterEnvioAdiadoDate);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(filterEnvioAdiadoDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            (query as any).gte('tempo_ganho', startOfDay.toISOString());
-            (query as any).lte('tempo_ganho', endOfDay.toISOString());
+            // Comparar como string de data (yyyy-MM-dd) para evitar problemas de timezone
+            // tempo_ganho é coluna date no banco — comparação com string de data é segura
+            const dateStr = format(filterEnvioAdiadoDate, 'yyyy-MM-dd');
+            (query as any).eq('tempo_ganho', dateStr);
           } else {
             // Filtrar apenas por tempo_ganho preenchido (qualquer data)
             (query as any).not('tempo_ganho', 'is', null);
@@ -668,8 +667,9 @@ export function Comercial() {
         const datas = new Set<string>();
         data?.forEach((pedido: any) => {
           if (pedido.tempo_ganho) {
-            const date = new Date(pedido.tempo_ganho);
-            datas.add(format(date, 'yyyy-MM-dd'));
+            // Pegar direto os primeiros 10 chars (yyyy-MM-dd) sem converter para Date
+            // new Date("yyyy-MM-dd") seria UTC midnight, causando desvio de -1 dia em BRT
+            datas.add(String(pedido.tempo_ganho).substring(0, 10));
           }
         });
         
