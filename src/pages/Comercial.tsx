@@ -1813,6 +1813,7 @@ export function Comercial() {
                           <option key={et.id} value={et.id}>{et.nome}</option>
                         ))}
                       </select>
+                      
                     </div>
                     <div className="mb-3">
                       <label htmlFor="filter-produto" className="text-sm block mb-1">Filtrar por produto</label>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
-import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard, AlertCircle, History } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard, AlertCircle, History, BarChart3, Eye, EyeOff } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -215,13 +215,104 @@ function HistoricoTab() {
   );
 }
 
+const DASHBOARD_COMERCIAL_SECTIONS_KEY = 'dashboardComercialSections';
+
+const defaultDashboardSections = {
+  painelHero: true,
+  upsellYampi: true,
+  recPix: true,
+  recCarrinho: true,
+  whatsappRedes: true,
+  typebots: true,
+};
+
+// Mapeamento entre chave local e id na tabela secoes_dashboard_comercial
+const SECTION_DB_IDS: Partial<Record<keyof typeof defaultDashboardSections, number>> = {
+  painelHero: 1,
+  upsellYampi: 2,
+  recPix: 3,
+  whatsappRedes: 4,
+  typebots: 5,
+  recCarrinho: 6,
+};
+
 export function Configuracoes() {
+  const { toast } = useToast();
+
   const [darkMode, setDarkMode] = useState(() => {
     // Load dark mode preference from localStorage
     const stored = localStorage.getItem('darkMode');
     return stored === 'true';
   });
-  const { toast } = useToast();
+
+  const [dashboardSections, setDashboardSections] = useState<typeof defaultDashboardSections>(() => {
+    try {
+      const saved = localStorage.getItem(DASHBOARD_COMERCIAL_SECTIONS_KEY);
+      return saved ? { ...defaultDashboardSections, ...JSON.parse(saved) } : defaultDashboardSections;
+    } catch {
+      return defaultDashboardSections;
+    }
+  });
+  const [loadingDashboardSections, setLoadingDashboardSections] = useState(false);
+
+  const fetchDashboardSectionsFromDB = async () => {
+    setLoadingDashboardSections(true);
+    try {
+      const { data, error } = await supabase
+        .from('secoes_dashboard_comercial')
+        .select('id, visivel');
+      if (error) throw error;
+      if (!data) return;
+      const updated = { ...defaultDashboardSections };
+      for (const row of data) {
+        const entry = Object.entries(SECTION_DB_IDS).find(([, dbId]) => dbId === row.id);
+        if (entry) {
+          updated[entry[0] as keyof typeof defaultDashboardSections] = row.visivel ?? true;
+        }
+      }
+      setDashboardSections(updated);
+      localStorage.setItem(DASHBOARD_COMERCIAL_SECTIONS_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.error('Erro ao buscar seções do dashboard:', err);
+    } finally {
+      setLoadingDashboardSections(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardSectionsFromDB();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleDashboardSection = async (key: keyof typeof defaultDashboardSections) => {
+    const newValue = !dashboardSections[key];
+
+    // 1. Atualiza o front-end imediatamente
+    setDashboardSections(prev => {
+      const updated = { ...prev, [key]: newValue };
+      localStorage.setItem(DASHBOARD_COMERCIAL_SECTIONS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Persiste no banco
+    const dbId = SECTION_DB_IDS[key];
+    if (dbId === undefined) return;
+
+    const { error } = await supabase
+      .from('secoes_dashboard_comercial')
+      .update({ visivel: newValue })
+      .eq('id', dbId);
+
+    if (error) {
+      console.error('Erro ao atualizar seção no banco:', error);
+      // Apenas informa o erro — NÃO reverte o estado para não travar a UI
+      toast({
+        title: 'Erro ao salvar no banco',
+        description: `Não foi possível persistir a alteração (${error.message})`,
+        variant: 'destructive',
+      });
+    }
+  };
   const { empresaId, user: currentUser, permissoes, hasPermissao, isLoading } = useAuth();
 
   // permissões por usuário (dialog)
@@ -1018,7 +1109,7 @@ export function Configuracoes() {
       </div>
 
       <Tabs defaultValue="usuarios" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="usuarios">
             <Users className="h-4 w-4 mr-2" />
             Usuários
@@ -1043,6 +1134,10 @@ export function Configuracoes() {
           <TabsTrigger value="preferencias">
             <Palette className="h-4 w-4 mr-2" />
             Preferências
+          </TabsTrigger>
+          <TabsTrigger value="dashboard-comercial">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Dashboard Comercial
           </TabsTrigger>
         </TabsList>
 
@@ -2539,6 +2634,167 @@ export function Configuracoes() {
               </Card>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="dashboard-comercial">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Personalizar Dashboard Comercial
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Ative ou desative seções exibidas no Dashboard Comercial. As alterações são salvas automaticamente.
+              </p>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Painel Hero */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.painelHero ? 'bg-custom-600' : 'bg-muted'}`}>
+                      <BarChart3 className={`h-4 w-4 ${dashboardSections.painelHero ? 'text-white' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Painel Hero</p>
+                      <p className="text-xs text-muted-foreground">Resumo geral: faturamento total, participação comercial e receita incremental por origem</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dashboardSections.painelHero ? (
+                      <Eye className="h-4 w-4 text-custom-600" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={dashboardSections.painelHero}
+                      onCheckedChange={() => toggleDashboardSection('painelHero')}
+                    />
+                  </div>
+                </div>
+
+                {/* Upsell Yampi */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.upsellYampi ? 'bg-custom-600' : 'bg-muted'}`}>
+                      <BarChart3 className={`h-4 w-4 ${dashboardSections.upsellYampi ? 'text-white' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Upsell Yampi</p>
+                      <p className="text-xs text-muted-foreground">Taxa de upsell, ticket médio, top produtos e detalhamento de incremento por pedido</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dashboardSections.upsellYampi ? (
+                      <Eye className="h-4 w-4 text-custom-600" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={dashboardSections.upsellYampi}
+                      onCheckedChange={() => toggleDashboardSection('upsellYampi')}
+                    />
+                  </div>
+                </div>
+
+                {/* Recuperação PIX */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.recPix ? 'bg-custom-600' : 'bg-muted'}`}>
+                      <BarChart3 className={`h-4 w-4 ${dashboardSections.recPix ? 'text-white' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Recuperação PIX</p>
+                      <p className="text-xs text-muted-foreground">Cards com PIX cancelados, recuperados, taxa de recuperação, ticket médio e faturamento</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dashboardSections.recPix ? (
+                      <Eye className="h-4 w-4 text-custom-600" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={dashboardSections.recPix}
+                      onCheckedChange={() => toggleDashboardSection('recPix')}
+                    />
+                  </div>
+                </div>
+
+                {/* Recuperação Carrinho */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.recCarrinho ? 'bg-custom-600' : 'bg-muted'}`}>
+                      <BarChart3 className={`h-4 w-4 ${dashboardSections.recCarrinho ? 'text-white' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Recuperação Carrinho</p>
+                      <p className="text-xs text-muted-foreground">Cards com carrinhos abandonados, recuperados, taxa de recuperação, ticket médio e faturamento</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dashboardSections.recCarrinho ? (
+                      <Eye className="h-4 w-4 text-custom-600" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={dashboardSections.recCarrinho}
+                      onCheckedChange={() => toggleDashboardSection('recCarrinho')}
+                    />
+                  </div>
+                </div>
+
+                {/* WhatsApp + Redes Sociais */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.whatsappRedes ? 'bg-custom-600' : 'bg-muted'}`}>
+                      <BarChart3 className={`h-4 w-4 ${dashboardSections.whatsappRedes ? 'text-white' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">WhatsApp + Redes Sociais</p>
+                      <p className="text-xs text-muted-foreground">Leads captados, taxa de conversão, ticket médio, faturamento e receita por lead</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dashboardSections.whatsappRedes ? (
+                      <Eye className="h-4 w-4 text-custom-600" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={dashboardSections.whatsappRedes}
+                      onCheckedChange={() => toggleDashboardSection('whatsappRedes')}
+                    />
+                  </div>
+                </div>
+
+                {/* Typebots */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.typebots ? 'bg-custom-600' : 'bg-muted'}`}>
+                      <BarChart3 className={`h-4 w-4 ${dashboardSections.typebots ? 'text-white' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Typebots</p>
+                      <p className="text-xs text-muted-foreground">Métricas individuais por typebot: leads, taxa de conversão, ticket médio, faturamento e receita por lead</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dashboardSections.typebots ? (
+                      <Eye className="h-4 w-4 text-custom-600" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={dashboardSections.typebots}
+                      onCheckedChange={() => toggleDashboardSection('typebots')}
+                    />
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Edit Empresa Dialog */}

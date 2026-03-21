@@ -118,6 +118,16 @@ type TopProdutosUpsellRow = {
 
 type DailyChartStyle = 'linha' | 'barras' | 'pizza';
 
+// Mapeamento id DB → chave local (fora do componente para evitar recriação)
+const DB_SECTION_MAP: Record<number, string> = {
+  1: 'painelHero',
+  2: 'upsellYampi',
+  3: 'recPix',
+  4: 'whatsappRedes',
+  5: 'typebots',
+  6: 'recCarrinho',
+};
+
 export function DashboardComercial() {
   const navigate = useNavigate();
   const { empresaId } = useAuth();
@@ -153,6 +163,58 @@ export function DashboardComercial() {
     start: format(new Date(), 'yyyy-MM-dd'),
     end: format(new Date(), 'yyyy-MM-dd'),
   }));
+
+  const [dashboardSections, setDashboardSections] = useState<Record<string, boolean>>(() => {
+    const defaults = { painelHero: true, upsellYampi: true, recPix: true, recCarrinho: true, whatsappRedes: true, typebots: true };
+    try {
+      const saved = localStorage.getItem('dashboardComercialSections');
+      return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+    } catch {
+      return defaults;
+    }
+  });
+
+  useEffect(() => {
+    // Carrega estado inicial das seções
+    supabase
+      .from('secoes_dashboard_comercial')
+      .select('id, visivel')
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        setDashboardSections(prev => {
+          const updated = { ...prev };
+          for (const row of data) {
+            const key = DB_SECTION_MAP[row.id as number];
+            if (key !== undefined) updated[key] = row.visivel ?? true;
+          }
+          localStorage.setItem('dashboardComercialSections', JSON.stringify(updated));
+          return updated;
+        });
+      });
+
+    // Subscription real-time: qualquer UPDATE na tabela reflete imediatamente
+    const channel = supabase
+      .channel('secoes_dashboard_comercial_rt')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'secoes_dashboard_comercial' },
+        (payload) => {
+          const row = payload.new as { id: number; visivel: boolean };
+          const key = DB_SECTION_MAP[row.id];
+          if (!key) return;
+          setDashboardSections(prev => {
+            const updated = { ...prev, [key]: row.visivel ?? true };
+            localStorage.setItem('dashboardComercialSections', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -634,6 +696,12 @@ export function DashboardComercial() {
 
                 const taxaUpsell           = Number(yampiUpsellMetrics?.taxa_inclusao_itens_pct ?? 0);
                 const totalPedidosYampi    = Number(yampiUpsellMetrics?.total_pedidos_yampi ?? 0);
+                // Taxa combinada: up-sell (upgrade) + incremento (novo item) + ambos
+                const _pedidosUpsell        = Number(yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0);
+                const _pedidosIncremento    = Number(yampiUpsellIncrementoMetrics?.pedidos_com_incremento ?? 0);
+                const _pedidosAmbos         = Number(yampiUpsellIncrementoMetrics?.pedidos_com_ambos ?? 0);
+                const pedidosComAlteracao   = _pedidosUpsell + _pedidosIncremento + _pedidosAmbos;
+                const taxaUpsellCombinada   = totalPedidosYampi > 0 ? (pedidosComAlteracao / totalPedidosYampi) * 100 : taxaUpsell;
                 // Financeiro de up-sell: apenas quando há upsell real (taxa > 0)
                 const _faturamentoUpsellRaw = Number(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0);
                 const faturamentoUpsell    = taxaUpsell > 0 ? _faturamentoUpsellRaw : 0;
@@ -654,7 +722,7 @@ export function DashboardComercial() {
                 return (
                   <>
                     {/* ══ PAINEL HERO ═══════════════════════════════════════════ */}
-                    {(() => {
+                    {dashboardSections.painelHero && (() => {
                       // ROI real: receita incremental ÷ custo proporcional ao período
                       // Rateio: custo mensal / dias do mês * dias do intervalo aplicado
                       const _inicio = parseISO(`${dashboardRangeApplied.start}T00:00:00`);
@@ -1145,7 +1213,7 @@ export function DashboardComercial() {
                     })()}
 
                     {/* ── UPSELL YAMPI ─────────────────────────────────────────── */}
-                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5">
+                    {dashboardSections.upsellYampi && <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 mb-4">Upsell Yampi</p>
 
                       <div className="flex gap-4 items-stretch">
@@ -1157,8 +1225,8 @@ export function DashboardComercial() {
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Upsell</p>
-                              <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsell)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0} de {totalPedidosYampi} pedidos</p>
+                              <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsellCombinada)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{pedidosComAlteracao} de {totalPedidosYampi} pedidos</p>
                             </div>
                             <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio Upsell</p>
@@ -1168,7 +1236,7 @@ export function DashboardComercial() {
                             <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Upsell</p>
                               <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoUpsell)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsell)} × {formatCurrency(ticketUpsell)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsellCombinada)} × {formatCurrency(ticketUpsell)}</p>
                             </div>
                           </div>
 
@@ -1249,10 +1317,10 @@ export function DashboardComercial() {
                         </div>
 
                       </div>
-                    </div>
+                    </div>}
 
                     {/* ── REC PIX: linha 5 cards ───────────────────────────────── */}
-                    {(() => {
+                    {dashboardSections.recPix && (() => {
                       const _pixTotal   = Number(pixMetrics?.total_periodo ?? 0);
                       const _pixRec2Raw = Number(pixMetrics?.total_vendidos_periodo ?? 0);
                       // Se total_vendidos retornou 0 mas há faturamento, derivar qtd de pedidos pelo faturamento/ticket
@@ -1323,7 +1391,7 @@ export function DashboardComercial() {
                     })()}
 
                     {/* ── REC CARRINHO: linha 5 cards ──────────────────────────── */}
-                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                    {dashboardSections.recCarrinho && <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC CARRINHO</p>
                       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                         {/* Carrinhos Abandonados */}
@@ -1377,10 +1445,10 @@ export function DashboardComercial() {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </div>}
 
                     {/* ── WHATSAPP + REDES SOCIAIS: linha 5 cards ──────────────── */}
-                    {(() => {
+                    {dashboardSections.whatsappRedes && (() => {
                       const _leadsS2   = Number(whatsappMetrics?.total_periodo ?? 0);
                       const _vendS2    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
                       const recPorLead = _leadsS2 > 0 ? faturamentoSocial / _leadsS2 : 0;
@@ -1444,7 +1512,7 @@ export function DashboardComercial() {
                     })()}
 
                     {/* ── TYPEBOTS (dinâmico) ───────────────────────────────────── */}
-                    {typebotsMetrics.length > 0 && typebotsMetrics.map((tbMetric) => {
+                    {dashboardSections.typebots && typebotsMetrics.length > 0 && typebotsMetrics.map((tbMetric) => {
                       const leadsTypeBot = Number(tbMetric.total_periodo ?? 0);
                       const vendidosTypeBot = Number(tbMetric.total_vendidos_periodo ?? 0);
                       const taxaTypeBot = Number(tbMetric.taxa_conversao_periodo ?? 0);
