@@ -1,4 +1,6 @@
-import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, List, BookOpen, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -52,6 +54,22 @@ export function Dashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [pedidosModal, setPedidosModal] = useState<{
+    open: boolean;
+    loading: boolean;
+    data: Array<{
+      id: string;
+      id_externo: string | null;
+      criado_em: string;
+      valor_total: number;
+      plataforma: string;
+      plataformaCor: string;
+      status: string;
+      statusCor: string;
+      itens: Array<{ nome: string; quantidade: number; img_url: string | null }>;
+      temLivraria: boolean;
+    }>;
+  }>({ open: false, loading: false, data: [] });
   const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
   const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
@@ -409,6 +427,50 @@ export function Dashboard() {
     };
   }, [startDate, endDate, fetchMetrics, hasAccess]);
 
+  const fetchPedidosModal = async () => {
+    setPedidosModal(prev => ({ ...prev, open: true, loading: true }));
+    try {
+      const startISO = new Date(startDate + 'T00:00:00').toISOString();
+      const endISO = new Date(endDate + 'T23:59:59').toISOString();
+      const { data, error } = await (supabase as any)
+        .from('pedidos')
+        .select('id, id_externo, criado_em, valor_total, plataformas(nome, cor), status(nome, cor_hex), itens_pedido(quantidade, produto:produtos(nome, img_url))')
+        .gte('criado_em', startISO)
+        .lte('criado_em', endISO)
+        .or('duplicata.is.null,duplicata.eq.false')
+        .order('criado_em', { ascending: false });
+      if (error) throw error;
+      const rows = (data || []).map((p: any) => {
+        const itens = (p.itens_pedido || []).map((it: any) => ({
+          nome: it?.produto?.nome || '',
+          quantidade: Number(it?.quantidade || 1),
+          img_url: it?.produto?.img_url || null,
+        }));
+        const temLivraria = itens.some((it: any) =>
+          it.nome.toLowerCase().includes('livraria')
+        );
+        return {
+          id: p.id,
+          id_externo: p.id_externo,
+          criado_em: p.criado_em,
+          valor_total: Number(p.valor_total || 0),
+          plataforma: (p.plataformas as any)?.nome || '—',
+          plataformaCor: (p.plataformas as any)?.cor || '#888',
+          status: (p.status as any)?.nome || '—',
+          statusCor: (p.status as any)?.cor_hex || '#888',
+          itens,
+          temLivraria,
+        };
+      });
+      // Ordenar: pedidos com livraria primeiro
+      rows.sort((a: any, b: any) => Number(b.temLivraria) - Number(a.temLivraria));
+      setPedidosModal({ open: true, loading: false, data: rows });
+    } catch (err) {
+      console.error('Erro ao buscar pedidos:', err);
+      setPedidosModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   const formatCurrency = useCallback((value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }, []);
@@ -684,13 +746,23 @@ export function Dashboard() {
         <>
           {/* Métricas Principais */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              title="Total de Pedidos"
-              value={metrics.totalPedidos.toString()}
-              description={`${metrics.pedidosHoje} hoje • ${metrics.pedidosMesAtual} no mês`}
-              icon={BiSolidPurchaseTag }
-              color="custom"
-            />
+            <div className="relative group">
+              <MetricCard
+                title="Total de Pedidos"
+                value={metrics.totalPedidos.toString()}
+                description={`${metrics.pedidosHoje} hoje • ${metrics.pedidosMesAtual} no mês`}
+                icon={BiSolidPurchaseTag}
+                color="custom"
+              />
+              <button
+                onClick={fetchPedidosModal}
+                className="absolute bottom-3 right-3 flex items-center gap-1 text-[11px] font-medium text-custom-600 bg-custom-50 hover:bg-custom-100 border border-custom-200 rounded-md px-2 py-1 shadow-sm transition-colors"
+                title="Ver relação de pedidos"
+              >
+                <List className="h-3 w-3" />
+                Ver pedidos
+              </button>
+            </div>
             <MetricCard
               title="Receita Total"
               value={formatCurrency(metrics.vendasTotal)}
@@ -1245,6 +1317,47 @@ export function Dashboard() {
           </div>
         </>
       )}
+
+      {/* Modal: relação de pedidos com destaque de livrarias */}
+      <Dialog open={pedidosModal.open} onOpenChange={(v) => setPedidosModal(prev => ({ ...prev, open: v }))}>
+        <DialogContent className="max-w-sm w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <List className="h-5 w-5 text-custom-600" />
+              Relação de Pedidos
+            </DialogTitle>
+            <DialogDescription>Resumo do período selecionado.</DialogDescription>
+          </DialogHeader>
+
+          {pedidosModal.loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-custom-600" />
+            </div>
+          ) : pedidosModal.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum pedido encontrado no período.</p>
+          ) : (() => {
+            const comLiv = pedidosModal.data.filter(p => p.temLivraria);
+            const semLiv = pedidosModal.data.filter(p => !p.temLivraria);
+            return (
+              <div className="grid grid-cols-2 gap-3 py-2">
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex flex-col items-center gap-1">
+                  <BookOpen className="h-5 w-5 text-amber-600" />
+                  <span className="text-2xl font-bold text-amber-800">{comLiv.length}</span>
+                  <span className="text-xs text-amber-700 font-medium text-center">Com livraria</span>
+                  <span className="text-xs text-amber-600">{formatCurrency(comLiv.reduce((s, p) => s + p.valor_total, 0))}</span>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-4 flex flex-col items-center gap-1">
+                  <List className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-2xl font-bold text-foreground">{semLiv.length}</span>
+                  <span className="text-xs text-muted-foreground font-medium text-center">Sem livraria</span>
+                  <span className="text-xs text-muted-foreground">{formatCurrency(semLiv.reduce((s, p) => s + p.valor_total, 0))}</span>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

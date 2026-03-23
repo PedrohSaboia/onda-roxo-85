@@ -63,6 +63,12 @@ type PixConvertedByResponsavelRow = {
   ticket_medio_convertido: number;
 };
 
+type PixConvertidosMetricsRow = {
+  total_convertidos: number;
+  valor_total_convertido: number;
+  ticket_medio_convertido: number;
+};
+
 type YampiUpsellMetricsRow = {
   total_pedidos_yampi: number;
   pedidos_com_inclusao_itens: number;
@@ -156,6 +162,7 @@ export function DashboardComercial() {
   const [whatsappDailySeries, setWhatsappDailySeries] = useState<PixDailyRow[]>([]);
   const [pixConvertedByResponsavel, setPixConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
   const [carrinhoConvertedByResponsavel, setCarrinhoConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
+  const [pixConvertidosMetrics, setPixConvertidosMetrics] = useState<PixConvertidosMetricsRow | null>(null);
   const [yampiUpsellMetrics, setYampiUpsellMetrics] = useState<YampiUpsellMetricsRow | null>(null);
   const [yampiUpsellIncrementoMetrics, setYampiUpsellIncrementoMetrics] = useState<YampiUpsellIncrementoRow | null>(null);
   const [entradaValoresUpsellMetrics, setEntradaValoresUpsellMetrics] = useState<EntradaValoresUpsellMetricsRow | null>(null);
@@ -257,8 +264,10 @@ export function DashboardComercial() {
       setLoadingPixDashboard(true);
       setPixDashboardError(null);
       try {
-        const startDate = new Date(`${dashboardRangeApplied.start}T00:00:00`);
-        const endDate = new Date(`${dashboardRangeApplied.end}T23:59:59.999`);
+        // Usa offset explícito -03:00 (Brasília) para garantir que o intervalo
+        // seja calculado corretamente independentemente do timezone do browser.
+        const startDate = new Date(`${dashboardRangeApplied.start}T00:00:00-03:00`);
+        const endDate   = new Date(`${dashboardRangeApplied.end}T23:59:59.999-03:00`);
         const intervaloDias = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
         const [
@@ -277,6 +286,7 @@ export function DashboardComercial() {
           { data: topProdutosData, error: topProdutosError },
           { data: metricasCarrinhoData, error: metricasCarrinhoError },
           { data: spreadFreteRpcData, error: spreadFreteRpcError },
+          { data: pixConvertidosData, error: pixConvertidosError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -368,6 +378,12 @@ export function DashboardComercial() {
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
           }),
+          (supabase as any).rpc('comercial_get_metricas_pix_convertidos', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -385,6 +401,7 @@ export function DashboardComercial() {
         if (topProdutosError) console.warn('[TopProdutos] RPC error:', topProdutosError);
         if (metricasCarrinhoError) throw metricasCarrinhoError;
         if (spreadFreteRpcError) console.warn('[SpreadFrete] RPC error:', spreadFreteRpcError);
+        if (pixConvertidosError) console.warn('[PixConvertidos] RPC error:', pixConvertidosError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -401,6 +418,7 @@ export function DashboardComercial() {
         setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
         setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
         setCarrinhoMetrics((metricasCarrinhoData?.[0] || null) as PixMetricsRow | null);
+        setPixConvertidosMetrics((pixConvertidosData?.[0] || null) as PixConvertidosMetricsRow | null);
         const _sf = (spreadFreteRpcData as any)?.[0] ?? null;
         setSpreadFreteData(_sf ? {
           receitaFrete: Number(_sf.receita_frete),
@@ -421,6 +439,7 @@ export function DashboardComercial() {
         setWhatsappDailySeries([]);
         setPixConvertedByResponsavel([]);
         setCarrinhoConvertedByResponsavel([]);
+        setPixConvertidosMetrics(null);
         setYampiUpsellMetrics(null);
         setCustoComercial(0);
         setYampiUpsellIncrementoMetrics(null);
@@ -1431,16 +1450,13 @@ export function DashboardComercial() {
                     {dashboardSections.recPix && (
                       <div style={{ order: sectionOrdemMap[3] ?? 3 }}>
                       {(() => {
-                      const _pixTotal   = Number(pixMetrics?.total_periodo ?? 0);
-                      const _pixRec2Raw = Number(pixMetrics?.total_vendidos_periodo ?? 0);
-                      // Se total_vendidos retornou 0 mas há faturamento, derivar qtd de pedidos pelo faturamento/ticket
-                      const _pixRec2    = _pixRec2Raw > 0
-                        ? _pixRec2Raw
-                        : (faturamentoPix > 0 && ticketPix > 0 ? Math.round(faturamentoPix / ticketPix) : 0);
+                      const _pixTotal          = Number(pixMetrics?.total_periodo ?? 0);
+                      // Recuperados: dados diretos da function comercial_get_metricas_pix_convertidos (status_lead_id = 2)
+                      const _pixRec2           = Number(pixConvertidosMetrics?.total_convertidos ?? 0);
+                      const _faturamentoPixRec = Number(pixConvertidosMetrics?.valor_total_convertido ?? 0);
+                      const _ticketPixRec      = Number(pixConvertidosMetrics?.ticket_medio_convertido ?? 0);
                       // Taxa efetiva de recuperação PIX
-                      const _taxaPixEff = taxaPix > 0
-                        ? taxaPix
-                        : (_pixTotal > 0 && _pixRec2 > 0 ? (_pixRec2 / _pixTotal) * 100 : 0);
+                      const _taxaPixEff        = _pixTotal > 0 && _pixRec2 > 0 ? (_pixRec2 / _pixTotal) * 100 : 0;
                       return (
                         <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                           <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC PIX</p>
@@ -1482,7 +1498,7 @@ export function DashboardComercial() {
                               </span>
                               <div className="min-w-0">
                                 <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
-                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketPix)}</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(_ticketPixRec)}</p>
                               </div>
                             </div>
                             {/* Faturamento Rec Pix */}
@@ -1492,7 +1508,7 @@ export function DashboardComercial() {
                               </span>
                               <div className="min-w-0">
                                 <p className="text-[12px] text-custom-200 leading-tight">Faturamento Rec Pix</p>
-                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoPix)}</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(_faturamentoPixRec)}</p>
                               </div>
                             </div>
                           </div>
