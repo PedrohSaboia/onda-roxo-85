@@ -3544,6 +3544,7 @@ export function Logistica() {
                               <Button
                                 type="button"
                                 size="sm"
+                                disabled={(pc.pedidos || []).filter((p: any) => p.pacote_disponivel === true).length === 0}
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   setOpenPlatformId(null);
