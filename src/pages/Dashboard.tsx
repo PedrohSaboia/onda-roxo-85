@@ -246,6 +246,7 @@ export function Dashboard() {
           spreadValor: Number(rpcSpreadFreteData.spread_valor),
           spreadPercentual: Number(rpcSpreadFreteData.spread_percentual),
           totalPedidosComFrete: Number(rpcSpreadFreteData.total_pedidos_com_frete),
+          totalPedidosComCusto: Number(rpcSpreadFreteData.total_pedidos_com_custo ?? 0),
           idsReceitaFrete: (rpcSpreadFreteData.ids_receita_frete as string[]) ?? [],
           idsCustoFrete: (rpcSpreadFreteData.ids_custo_frete as string[]) ?? [],
         } : null;
@@ -726,7 +727,7 @@ export function Dashboard() {
               <MetricCard
                 title="Custo de Frete"
                 value={formatCurrency(metrics.spreadFrete.custoFrete)}
-                description="Valor pago ao MelhorEnvio"
+                description={`${metrics.spreadFrete.totalPedidosComCusto} pedidos via MelhorEnvio`}
                 icon={TrendingDown}
                 color="pink"
               />

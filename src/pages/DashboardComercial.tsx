@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Zap, CreditCard, RefreshCw, CheckCircle2, ShoppingCart, Mail, MessageCircle, Users, TrendingUp, DollarSign, AlertCircle, X } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Zap, CreditCard, RefreshCw, CheckCircle2, ShoppingCart, Mail, MessageCircle, Users, TrendingUp, TrendingDown, DollarSign, AlertCircle, X, Truck } from 'lucide-react';
 import { FaCalendarAlt } from 'react-icons/fa';
 import { format, parseISO, startOfMonth, subMonths, isSameDay, isWithinInterval, differenceInDays, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -139,6 +139,7 @@ const DB_SECTION_MAP: Record<number, string> = {
   5: 'typebots',
   6: 'recCarrinho',
   7: 'comparativoLeads',
+  8: 'spreadFrete',
 };
 
 export function DashboardComercial() {
@@ -147,6 +148,7 @@ export function DashboardComercial() {
 
   const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
   const [carrinhoMetrics, setCarrinhoMetrics] = useState<PixMetricsRow | null>(null);
+  const [spreadFreteData, setSpreadFreteData] = useState<{ receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number; totalPedidosComCusto: number } | null>(null);
   const [whatsappMetrics, setWhatsappMetrics] = useState<PixMetricsRow | null>(null);
   const [typebotsMetrics, setTypebotsMetrics] = useState<TypeBotMetricsRow[]>([]);
   const [pixDailySeries, setPixDailySeries] = useState<PixDailyRow[]>([]);
@@ -182,7 +184,7 @@ export function DashboardComercial() {
   }));
 
   const [dashboardSections, setDashboardSections] = useState<Record<string, boolean>>(() => {
-    const defaults = { painelHero: true, upsellYampi: true, recPix: true, recCarrinho: true, whatsappRedes: true, typebots: true, comparativoLeads: true };
+    const defaults = { painelHero: true, upsellYampi: true, recPix: true, recCarrinho: true, whatsappRedes: true, typebots: true, comparativoLeads: true, spreadFrete: true };
     try {
       const saved = localStorage.getItem('dashboardComercialSections');
       return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
@@ -191,20 +193,32 @@ export function DashboardComercial() {
     }
   });
 
+  // ordem de cada seção (id → ordem); id=1 (painelHero) é sempre o primeiro
+  const [sectionOrdemMap, setSectionOrdemMap] = useState<Record<number, number>>(
+    () => Object.fromEntries(Object.keys(DB_SECTION_MAP).map(id => [Number(id), Number(id)]))
+  );
+
   useEffect(() => {
     // Carrega estado inicial das seções
     supabase
       .from('secoes_dashboard_comercial')
-      .select('id, visivel')
+      .select('id, visivel, ordem')
       .then(({ data, error }) => {
         if (error || !data) return;
         setDashboardSections(prev => {
           const updated = { ...prev };
           for (const row of data) {
             const key = DB_SECTION_MAP[row.id as number];
-            if (key !== undefined) updated[key] = row.visivel ?? true;
+            if (key !== undefined) updated[key] = (row as any).visivel ?? true;
           }
           localStorage.setItem('dashboardComercialSections', JSON.stringify(updated));
+          return updated;
+        });
+        setSectionOrdemMap(prev => {
+          const updated = { ...prev };
+          for (const row of data) {
+            if (row.id !== 1 && (row as any).ordem != null) updated[row.id as number] = (row as any).ordem;
+          }
           return updated;
         });
       });
@@ -216,7 +230,7 @@ export function DashboardComercial() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'secoes_dashboard_comercial' },
         (payload) => {
-          const row = payload.new as { id: number; visivel: boolean };
+          const row = payload.new as { id: number; visivel: boolean; ordem?: number };
           const key = DB_SECTION_MAP[row.id];
           if (!key) return;
           setDashboardSections(prev => {
@@ -224,6 +238,9 @@ export function DashboardComercial() {
             localStorage.setItem('dashboardComercialSections', JSON.stringify(updated));
             return updated;
           });
+          if (row.id !== 1 && row.ordem != null) {
+            setSectionOrdemMap(prev => ({ ...prev, [row.id]: row.ordem! }));
+          }
         }
       )
       .subscribe();
@@ -259,6 +276,7 @@ export function DashboardComercial() {
           { data: entradaValoresUpsellData, error: entradaValoresUpsellError },
           { data: topProdutosData, error: topProdutosError },
           { data: metricasCarrinhoData, error: metricasCarrinhoError },
+          { data: spreadFreteRpcData, error: spreadFreteRpcError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -345,6 +363,11 @@ export function DashboardComercial() {
             p_data_fim: endDate.toISOString(),
             p_timezone: 'America/Sao_Paulo',
           }),
+          (supabase as any).rpc('get_spread_frete', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -361,6 +384,7 @@ export function DashboardComercial() {
         if (entradaValoresUpsellError) console.warn('[EntradaValores] RPC error:', entradaValoresUpsellError);
         if (topProdutosError) console.warn('[TopProdutos] RPC error:', topProdutosError);
         if (metricasCarrinhoError) throw metricasCarrinhoError;
+        if (spreadFreteRpcError) console.warn('[SpreadFrete] RPC error:', spreadFreteRpcError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -377,6 +401,15 @@ export function DashboardComercial() {
         setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
         setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
         setCarrinhoMetrics((metricasCarrinhoData?.[0] || null) as PixMetricsRow | null);
+        const _sf = (spreadFreteRpcData as any)?.[0] ?? null;
+        setSpreadFreteData(_sf ? {
+          receitaFrete: Number(_sf.receita_frete),
+          custoFrete: Number(_sf.custo_frete),
+          spreadValor: Number(_sf.spread_valor),
+          spreadPercentual: Number(_sf.spread_percentual),
+          totalPedidosComFrete: Number(_sf.total_pedidos_com_frete),
+          totalPedidosComCusto: Number(_sf.total_pedidos_com_custo ?? 0),
+        } : null);
       } catch (err: any) {
         if (!mounted) return;
         setPixDashboardError(err?.message || String(err));
@@ -394,6 +427,7 @@ export function DashboardComercial() {
         setEntradaValoresUpsellMetrics(null);
         setTopProdutosUpsell([]);
         setCarrinhoMetrics(null);
+        setSpreadFreteData(null);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -786,9 +820,11 @@ export function DashboardComercial() {
                 ].filter(d => d.value > 0);
 
                 return (
-                  <>
-                    {/* ══ PAINEL HERO ═══════════════════════════════════════════ */}
-                    {dashboardSections.painelHero && (() => {
+                  <div className="flex flex-col gap-6">
+                    {/* ══ PAINEL HERO — sempre primeiro (order 0) ═══════════════ */}
+                    {dashboardSections.painelHero && (
+                      <div style={{ order: 0 }}>
+                      {(() => {
                       // ROI real: receita incremental ÷ custo proporcional ao período
                       // Rateio: custo mensal / dias do mês * dias do intervalo aplicado
                       const _inicio = parseISO(`${dashboardRangeApplied.start}T00:00:00`);
@@ -983,6 +1019,8 @@ export function DashboardComercial() {
                         </div>
                       );
                     })()}
+                      </div>
+                    )}
 
                     {/* ── RESUMO RECUPERAÇÃO: removido – mantido apenas o formato compacto abaixo ── */}
                     {false && (() => {
@@ -1279,7 +1317,9 @@ export function DashboardComercial() {
                     })()}
 
                     {/* ── UPSELL YAMPI ─────────────────────────────────────────── */}
-                    {dashboardSections.upsellYampi && <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5">
+                    {dashboardSections.upsellYampi && (
+                      <div style={{ order: sectionOrdemMap[2] ?? 2 }}>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 mb-4">Upsell Yampi</p>
 
                       <div className="flex gap-4 items-stretch">
@@ -1383,10 +1423,14 @@ export function DashboardComercial() {
                         </div>
 
                       </div>
-                    </div>}
+                    </div>
+                      </div>
+                    )}
 
                     {/* ── REC PIX: linha 5 cards ───────────────────────────────── */}
-                    {dashboardSections.recPix && (() => {
+                    {dashboardSections.recPix && (
+                      <div style={{ order: sectionOrdemMap[3] ?? 3 }}>
+                      {(() => {
                       const _pixTotal   = Number(pixMetrics?.total_periodo ?? 0);
                       const _pixRec2Raw = Number(pixMetrics?.total_vendidos_periodo ?? 0);
                       // Se total_vendidos retornou 0 mas há faturamento, derivar qtd de pedidos pelo faturamento/ticket
@@ -1455,9 +1499,13 @@ export function DashboardComercial() {
                         </div>
                       );
                     })()}
+                      </div>
+                    )}
 
                     {/* ── REC CARRINHO: linha 5 cards ──────────────────────────── */}
-                    {dashboardSections.recCarrinho && <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                    {dashboardSections.recCarrinho && (
+                      <div style={{ order: sectionOrdemMap[6] ?? 6 }}>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC CARRINHO</p>
                       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                         {/* Carrinhos Abandonados */}
@@ -1511,10 +1559,14 @@ export function DashboardComercial() {
                           </div>
                         </div>
                       </div>
-                    </div>}
+                    </div>
+                      </div>
+                    )}
 
                     {/* ── WHATSAPP + REDES SOCIAIS: linha 5 cards ──────────────── */}
-                    {dashboardSections.whatsappRedes && (() => {
+                    {dashboardSections.whatsappRedes && (
+                      <div style={{ order: sectionOrdemMap[4] ?? 4 }}>
+                      {(() => {
                       const _leadsS2   = Number(whatsappMetrics?.total_periodo ?? 0);
                       const _vendS2    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
                       const recPorLead = _leadsS2 > 0 ? faturamentoSocial / _leadsS2 : 0;
@@ -1576,9 +1628,13 @@ export function DashboardComercial() {
                         </div>
                       );
                     })()}
+                      </div>
+                    )}
 
                     {/* ── CONVERSÃO DE LEADS POR RESPONSÁVEL (hoje) ────────────── */}
-                    {dashboardSections.comparativoLeads && (() => {
+                    {dashboardSections.comparativoLeads && (
+                      <div style={{ order: sectionOrdemMap[7] ?? 7 }}>
+                      {(() => {
                       const hoje = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
                       // Coleta todos os responsáveis únicos para construir cabeçalho do modal
                       const allResp = Array.from(
@@ -1717,9 +1773,72 @@ export function DashboardComercial() {
                         </>
                       );
                     })()}
+                      </div>
+                    )}
+
+                    {/* ── SPREAD DE FRETE ─────────────────────────────────────── */}
+                    {dashboardSections.spreadFrete && spreadFreteData && (
+                      <div style={{ order: sectionOrdemMap[8] ?? 8 }}>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Spread de Frete</p>
+                        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                          {/* Receita de Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <Truck className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Receita de Frete</p>
+                              <p className="text-xl font-bold text-white leading-tight">{formatCurrency(spreadFreteData.receitaFrete)}</p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">{spreadFreteData.totalPedidosComFrete} pedidos com frete</p>
+                            </div>
+                          </div>
+                          {/* Custo de Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <TrendingDown className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Custo de Frete</p>
+                              <p className="text-xl font-bold text-white leading-tight">{formatCurrency(spreadFreteData.custoFrete)}</p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">{spreadFreteData.totalPedidosComCusto} pedidos via MelhorEnvio</p>
+                            </div>
+                          </div>
+                          {/* Resultado do Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <TrendingUp className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Resultado do Frete</p>
+                              <p className={`text-xl font-bold leading-tight ${spreadFreteData.spreadValor >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {formatCurrency(spreadFreteData.spreadValor)}
+                              </p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">Frete cobrado menos frete pago</p>
+                            </div>
+                          </div>
+                          {/* Margem de Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <BarChart3 className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Margem de Frete</p>
+                              <p className={`text-xl font-bold leading-tight ${spreadFreteData.spreadPercentual >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {spreadFreteData.spreadPercentual.toFixed(1)}%
+                              </p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">Spread sobre a receita de frete</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      </div>
+                    )}
 
                     {/* ── TYPEBOTS (dinâmico) ───────────────────────────────────── */}
-                    {dashboardSections.typebots && typebotsMetrics.length > 0 && typebotsMetrics.map((tbMetric) => {
+                    {dashboardSections.typebots && typebotsMetrics.length > 0 && (
+                      <div style={{ order: sectionOrdemMap[5] ?? 5 }}>
+                      {typebotsMetrics.map((tbMetric) => {
                       const leadsTypeBot = Number(tbMetric.total_periodo ?? 0);
                       const vendidosTypeBot = Number(tbMetric.total_vendidos_periodo ?? 0);
                       const taxaTypeBot = Number(tbMetric.taxa_conversao_periodo ?? 0);
@@ -1801,7 +1920,9 @@ export function DashboardComercial() {
                         </div>
                       );
                     })}
-                  </>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
             </>

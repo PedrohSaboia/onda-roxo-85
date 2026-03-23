@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
-import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard, AlertCircle, History, BarChart3, Eye, EyeOff } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, ChevronUp, CreditCard, AlertCircle, History, BarChart3, Eye, EyeOff, Truck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -225,6 +225,7 @@ const defaultDashboardSections = {
   whatsappRedes: true,
   typebots: true,
   comparativoLeads: true,
+  spreadFrete: true,
 };
 
 // Mapeamento entre chave local e id na tabela secoes_dashboard_comercial
@@ -236,7 +237,20 @@ const SECTION_DB_IDS: Partial<Record<keyof typeof defaultDashboardSections, numb
   typebots: 5,
   recCarrinho: 6,
   comparativoLeads: 7,
+  spreadFrete: 8,
 };
+
+// Configuração descritiva de cada seção (usada no render)
+const SECTION_CONFIG: { key: keyof typeof defaultDashboardSections; dbId: number; label: string; desc: string; fixedFirst?: boolean }[] = [
+  { key: 'painelHero',       dbId: 1, label: 'Painel Hero',              desc: 'Resumo geral: faturamento total, participação comercial e receita incremental por origem', fixedFirst: true },
+  { key: 'upsellYampi',     dbId: 2, label: 'Upsell Yampi',             desc: 'Taxa de upsell, ticket médio, top produtos e detalhamento de incremento por pedido' },
+  { key: 'recPix',          dbId: 3, label: 'Recuperação PIX',          desc: 'Cards com PIX cancelados, recuperados, taxa de recuperação, ticket médio e faturamento' },
+  { key: 'whatsappRedes',   dbId: 4, label: 'WhatsApp + Redes Sociais', desc: 'Leads captados, taxa de conversão, ticket médio, faturamento e receita por lead' },
+  { key: 'typebots',        dbId: 5, label: 'Typebots',                 desc: 'Métricas individuais por typebot: leads, taxa de conversão, ticket médio e faturamento' },
+  { key: 'recCarrinho',     dbId: 6, label: 'Recuperação Carrinho',     desc: 'Carrinhos abandonados, recuperados, taxa de recuperação, ticket médio e faturamento' },
+  { key: 'comparativoLeads',dbId: 7, label: 'Comparativo Leads',        desc: 'Conversão de leads por responsável no dia atual, com comparativo mensal' },
+  { key: 'spreadFrete',     dbId: 8, label: 'Spread de Frete',          desc: 'Receita de frete, custo via MelhorEnvio, resultado e margem percentual de frete' },
+];
 
 export function Configuracoes() {
   const { toast } = useToast();
@@ -256,23 +270,30 @@ export function Configuracoes() {
     }
   });
   const [loadingDashboardSections, setLoadingDashboardSections] = useState(false);
+  // ordem de cada seção (id → valor da coluna `ordem`)
+  const [sectionOrdems, setSectionOrdems] = useState<Record<number, number>>(
+    () => Object.fromEntries(SECTION_CONFIG.map(s => [s.dbId, s.dbId]))
+  );
 
   const fetchDashboardSectionsFromDB = async () => {
     setLoadingDashboardSections(true);
     try {
       const { data, error } = await supabase
         .from('secoes_dashboard_comercial')
-        .select('id, visivel');
+        .select('id, visivel, ordem');
       if (error) throw error;
       if (!data) return;
       const updated = { ...defaultDashboardSections };
+      const newOrdems: Record<number, number> = {};
       for (const row of data) {
         const entry = Object.entries(SECTION_DB_IDS).find(([, dbId]) => dbId === row.id);
         if (entry) {
-          updated[entry[0] as keyof typeof defaultDashboardSections] = row.visivel ?? true;
+          updated[entry[0] as keyof typeof defaultDashboardSections] = (row as any).visivel ?? true;
         }
+        if ((row as any).ordem != null) newOrdems[row.id as number] = (row as any).ordem;
       }
       setDashboardSections(updated);
+      setSectionOrdems(prev => ({ ...prev, ...newOrdems }));
       localStorage.setItem(DASHBOARD_COMERCIAL_SECTIONS_KEY, JSON.stringify(updated));
     } catch (err) {
       console.error('Erro ao buscar seções do dashboard:', err);
@@ -315,6 +336,40 @@ export function Configuracoes() {
       });
     }
   };
+
+  const moveSectionOrdem = async (dbId: number, direction: 'up' | 'down') => {
+    // Pega só seções não fixas, sorted pela ordem atual
+    const sortable = SECTION_CONFIG
+      .filter(s => !s.fixedFirst)
+      .slice()
+      .sort((a, b) => (sectionOrdems[a.dbId] ?? a.dbId) - (sectionOrdems[b.dbId] ?? b.dbId));
+
+    const idx = sortable.findIndex(s => s.dbId === dbId);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sortable.length) return;
+
+    const sA = sortable[idx];
+    const sB = sortable[swapIdx];
+    const ordemA = sectionOrdems[sA.dbId] ?? sA.dbId;
+    const ordemB = sectionOrdems[sB.dbId] ?? sB.dbId;
+
+    // Atualiza localmente de imediato
+    setSectionOrdems(prev => ({ ...prev, [sA.dbId]: ordemB, [sB.dbId]: ordemA }));
+
+    // Persiste no banco
+    const [r1, r2] = await Promise.all([
+      (supabase as any).from('secoes_dashboard_comercial').update({ ordem: ordemB }).eq('id', sA.dbId),
+      (supabase as any).from('secoes_dashboard_comercial').update({ ordem: ordemA }).eq('id', sB.dbId),
+    ]);
+    if (r1.error || r2.error) {
+      console.error('Erro ao atualizar ordem:', r1.error || r2.error);
+      // Reverte
+      setSectionOrdems(prev => ({ ...prev, [sA.dbId]: ordemA, [sB.dbId]: ordemB }));
+      toast({ title: 'Erro ao salvar ordem', variant: 'destructive' });
+    }
+  };
+
   const { empresaId, user: currentUser, permissoes, hasPermissao, isLoading } = useAuth();
 
   // permissões por usuário (dialog)
@@ -2646,179 +2701,91 @@ export function Configuracoes() {
                 Personalizar Dashboard Comercial
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Ative ou desative seções exibidas no Dashboard Comercial. As alterações são salvas automaticamente.
+                Ative ou desative seções e arranje a ordem de exibição. O Painel Hero é sempre o primeiro e não pode ser movido.
               </p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {/* Painel Hero */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.painelHero ? 'bg-custom-600' : 'bg-muted'}`}>
-                      <BarChart3 className={`h-4 w-4 ${dashboardSections.painelHero ? 'text-white' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Painel Hero</p>
-                      <p className="text-xs text-muted-foreground">Resumo geral: faturamento total, participação comercial e receita incremental por origem</p>
-                    </div>
+              {loadingDashboardSections ? (
+                <p className="text-sm text-muted-foreground py-4">Carregando...</p>
+              ) : (() => {
+                // Separa hero (fixo) das demais ordenadas
+                const hero = SECTION_CONFIG.find(s => s.fixedFirst)!;
+                const sortable = SECTION_CONFIG
+                  .filter(s => !s.fixedFirst)
+                  .slice()
+                  .sort((a, b) => (sectionOrdems[a.dbId] ?? a.dbId) - (sectionOrdems[b.dbId] ?? b.dbId));
+                const all = [hero, ...sortable];
+                return (
+                  <div className="space-y-3">
+                    {all.map((section, idx) => {
+                      const isFirst = idx === 0; // painelHero
+                      const sortableIdx = isFirst ? -1 : sortable.findIndex(s => s.dbId === section.dbId);
+                      const canMoveUp   = !isFirst && sortableIdx > 0;
+                      const canMoveDown = !isFirst && sortableIdx < sortable.length - 1;
+                      return (
+                        <div key={section.dbId} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            {/* Botões de ordem */}
+                            {!isFirst ? (
+                              <div className="flex flex-col gap-0.5">
+                                <button
+                                  type="button"
+                                  disabled={!canMoveUp}
+                                  onClick={() => moveSectionOrdem(section.dbId, 'up')}
+                                  className={`rounded p-0.5 transition-colors ${canMoveUp ? 'hover:bg-muted text-foreground' : 'text-muted-foreground/30 cursor-not-allowed'}`}
+                                  title="Mover para cima"
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!canMoveDown}
+                                  onClick={() => moveSectionOrdem(section.dbId, 'down')}
+                                  className={`rounded p-0.5 transition-colors ${canMoveDown ? 'hover:bg-muted text-foreground' : 'text-muted-foreground/30 cursor-not-allowed'}`}
+                                  title="Mover para baixo"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-[22px]" />
+                            )}
+                            <div className={`flex items-center justify-center h-9 w-9 rounded-full ${
+                              dashboardSections[section.key] ? 'bg-custom-600' : 'bg-muted'
+                            }`}>
+                              {section.dbId === 8 ? (
+                                <Truck className={`h-4 w-4 ${dashboardSections[section.key] ? 'text-white' : 'text-muted-foreground'}`} />
+                              ) : (
+                                <BarChart3 className={`h-4 w-4 ${dashboardSections[section.key] ? 'text-white' : 'text-muted-foreground'}`} />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm">{section.label}</p>
+                                {isFirst && (
+                                  <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-medium uppercase tracking-wide">fixo</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">{section.desc}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {dashboardSections[section.key] ? (
+                              <Eye className="h-4 w-4 text-custom-600" />
+                            ) : (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <Switch
+                              checked={dashboardSections[section.key]}
+                              onCheckedChange={() => toggleDashboardSection(section.key)}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
-                  <div className="flex items-center gap-2">
-                    {dashboardSections.painelHero ? (
-                      <Eye className="h-4 w-4 text-custom-600" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Switch
-                      checked={dashboardSections.painelHero}
-                      onCheckedChange={() => toggleDashboardSection('painelHero')}
-                    />
-                  </div>
-                </div>
-
-                {/* Upsell Yampi */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.upsellYampi ? 'bg-custom-600' : 'bg-muted'}`}>
-                      <BarChart3 className={`h-4 w-4 ${dashboardSections.upsellYampi ? 'text-white' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Upsell Yampi</p>
-                      <p className="text-xs text-muted-foreground">Taxa de upsell, ticket médio, top produtos e detalhamento de incremento por pedido</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dashboardSections.upsellYampi ? (
-                      <Eye className="h-4 w-4 text-custom-600" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Switch
-                      checked={dashboardSections.upsellYampi}
-                      onCheckedChange={() => toggleDashboardSection('upsellYampi')}
-                    />
-                  </div>
-                </div>
-
-                {/* Recuperação PIX */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.recPix ? 'bg-custom-600' : 'bg-muted'}`}>
-                      <BarChart3 className={`h-4 w-4 ${dashboardSections.recPix ? 'text-white' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Recuperação PIX</p>
-                      <p className="text-xs text-muted-foreground">Cards com PIX cancelados, recuperados, taxa de recuperação, ticket médio e faturamento</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dashboardSections.recPix ? (
-                      <Eye className="h-4 w-4 text-custom-600" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Switch
-                      checked={dashboardSections.recPix}
-                      onCheckedChange={() => toggleDashboardSection('recPix')}
-                    />
-                  </div>
-                </div>
-
-                {/* Recuperação Carrinho */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.recCarrinho ? 'bg-custom-600' : 'bg-muted'}`}>
-                      <BarChart3 className={`h-4 w-4 ${dashboardSections.recCarrinho ? 'text-white' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Recuperação Carrinho</p>
-                      <p className="text-xs text-muted-foreground">Cards com carrinhos abandonados, recuperados, taxa de recuperação, ticket médio e faturamento</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dashboardSections.recCarrinho ? (
-                      <Eye className="h-4 w-4 text-custom-600" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Switch
-                      checked={dashboardSections.recCarrinho}
-                      onCheckedChange={() => toggleDashboardSection('recCarrinho')}
-                    />
-                  </div>
-                </div>
-
-                {/* WhatsApp + Redes Sociais */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.whatsappRedes ? 'bg-custom-600' : 'bg-muted'}`}>
-                      <BarChart3 className={`h-4 w-4 ${dashboardSections.whatsappRedes ? 'text-white' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">WhatsApp + Redes Sociais</p>
-                      <p className="text-xs text-muted-foreground">Leads captados, taxa de conversão, ticket médio, faturamento e receita por lead</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dashboardSections.whatsappRedes ? (
-                      <Eye className="h-4 w-4 text-custom-600" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Switch
-                      checked={dashboardSections.whatsappRedes}
-                      onCheckedChange={() => toggleDashboardSection('whatsappRedes')}
-                    />
-                  </div>
-                </div>
-
-                {/* Typebots */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.typebots ? 'bg-custom-600' : 'bg-muted'}`}>
-                      <BarChart3 className={`h-4 w-4 ${dashboardSections.typebots ? 'text-white' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Typebots</p>
-                      <p className="text-xs text-muted-foreground">Métricas individuais por typebot: leads, taxa de conversão, ticket médio, faturamento e receita por lead</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dashboardSections.typebots ? (
-                      <Eye className="h-4 w-4 text-custom-600" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Switch
-                      checked={dashboardSections.typebots}
-                      onCheckedChange={() => toggleDashboardSection('typebots')}
-                    />
-                  </div>
-                </div>
-
-                {/* Comparativo Leads */}
-                <div className="flex items-center justify-between p-4 border rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.comparativoLeads ? 'bg-custom-600' : 'bg-muted'}`}>
-                      <BarChart3 className={`h-4 w-4 ${dashboardSections.comparativoLeads ? 'text-white' : 'text-muted-foreground'}`} />
-                    </div>
-                    <div>
-                      <p className="font-medium text-sm">Comparativo Leads</p>
-                      <p className="text-xs text-muted-foreground">Conversão de leads por responsável no dia atual, com comparativo mensal</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {dashboardSections.comparativoLeads ? (
-                      <Eye className="h-4 w-4 text-custom-600" />
-                    ) : (
-                      <EyeOff className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <Switch
-                      checked={dashboardSections.comparativoLeads}
-                      onCheckedChange={() => toggleDashboardSection('comparativoLeads')}
-                    />
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
