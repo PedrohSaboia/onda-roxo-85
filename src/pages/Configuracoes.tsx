@@ -224,6 +224,7 @@ const defaultDashboardSections = {
   recCarrinho: true,
   whatsappRedes: true,
   typebots: true,
+  comparativoLeads: true,
 };
 
 // Mapeamento entre chave local e id na tabela secoes_dashboard_comercial
@@ -234,6 +235,7 @@ const SECTION_DB_IDS: Partial<Record<keyof typeof defaultDashboardSections, numb
   whatsappRedes: 4,
   typebots: 5,
   recCarrinho: 6,
+  comparativoLeads: 7,
 };
 
 export function Configuracoes() {
@@ -2789,6 +2791,30 @@ export function Configuracoes() {
                     <Switch
                       checked={dashboardSections.typebots}
                       onCheckedChange={() => toggleDashboardSection('typebots')}
+                    />
+                  </div>
+                </div>
+
+                {/* Comparativo Leads */}
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex items-center justify-center h-9 w-9 rounded-full ${dashboardSections.comparativoLeads ? 'bg-custom-600' : 'bg-muted'}`}>
+                      <BarChart3 className={`h-4 w-4 ${dashboardSections.comparativoLeads ? 'text-white' : 'text-muted-foreground'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-sm">Comparativo Leads</p>
+                      <p className="text-xs text-muted-foreground">Conversão de leads por responsável no dia atual, com comparativo mensal</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {dashboardSections.comparativoLeads ? (
+                      <Eye className="h-4 w-4 text-custom-600" />
+                    ) : (
+                      <EyeOff className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <Switch
+                      checked={dashboardSections.comparativoLeads}
+                      onCheckedChange={() => toggleDashboardSection('comparativoLeads')}
                     />
                   </div>
                 </div>

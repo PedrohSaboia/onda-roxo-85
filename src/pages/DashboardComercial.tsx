@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Zap, CreditCard, RefreshCw, CheckCircle2, ShoppingCart, Mail, MessageCircle, Users, TrendingUp, DollarSign } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Zap, CreditCard, RefreshCw, CheckCircle2, ShoppingCart, Mail, MessageCircle, Users, TrendingUp, DollarSign, AlertCircle, X } from 'lucide-react';
 import { FaCalendarAlt } from 'react-icons/fa';
 import { format, parseISO, startOfMonth, subMonths, isSameDay, isWithinInterval, differenceInDays, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -13,6 +13,7 @@ import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import IconDashboard from '@/components/icons/IconDashboard';
 import IconYampi from '@/components/icons/IconYampi';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { ResponsiveContainer, AreaChart, Area, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -116,6 +117,17 @@ type TopProdutosUpsellRow = {
   ticket_medio: number;
 };
 
+type ConversaoLeadsPorResponsavelRow = {
+  responsavel_id: string | null;
+  responsavel_nome: string;
+  total_leads: number;
+  total_convertidos: number;
+  total_nao_convertidos: number;
+  taxa_conversao_pct: number;
+  valor_total_convertido: number;
+  ticket_medio_convertido: number;
+};
+
 type DailyChartStyle = 'linha' | 'barras' | 'pizza';
 
 // Mapeamento id DB → chave local (fora do componente para evitar recriação)
@@ -126,6 +138,7 @@ const DB_SECTION_MAP: Record<number, string> = {
   4: 'whatsappRedes',
   5: 'typebots',
   6: 'recCarrinho',
+  7: 'comparativoLeads',
 };
 
 export function DashboardComercial() {
@@ -146,6 +159,10 @@ export function DashboardComercial() {
   const [entradaValoresUpsellMetrics, setEntradaValoresUpsellMetrics] = useState<EntradaValoresUpsellMetricsRow | null>(null);
   const [topProdutosUpsell, setTopProdutosUpsell] = useState<TopProdutosUpsellRow[]>([]);
   const [custoComercial, setCustoComercial] = useState<number>(0);
+  const [conversaoHoje, setConversaoHoje] = useState<ConversaoLeadsPorResponsavelRow[]>([]);
+  const [conversaoModalOpen, setConversaoModalOpen] = useState(false);
+  const [conversaoMeses, setConversaoMeses] = useState<{ label: string; dados: ConversaoLeadsPorResponsavelRow[] }[]>([]);
+  const [loadingConversaoModal, setLoadingConversaoModal] = useState(false);
   const [loadingPixDashboard, setLoadingPixDashboard] = useState(false);
   const [pixDashboardError, setPixDashboardError] = useState<string | null>(null);
   const [pixDailyChartStyle, setPixDailyChartStyle] = useState<DailyChartStyle>('linha');
@@ -165,7 +182,7 @@ export function DashboardComercial() {
   }));
 
   const [dashboardSections, setDashboardSections] = useState<Record<string, boolean>>(() => {
-    const defaults = { painelHero: true, upsellYampi: true, recPix: true, recCarrinho: true, whatsappRedes: true, typebots: true };
+    const defaults = { painelHero: true, upsellYampi: true, recPix: true, recCarrinho: true, whatsappRedes: true, typebots: true, comparativoLeads: true };
     try {
       const saved = localStorage.getItem('dashboardComercialSections');
       return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
@@ -388,6 +405,55 @@ export function DashboardComercial() {
       mounted = false;
     };
   }, [empresaId, dashboardRangeApplied]);
+
+  // Carrega conversão de leads por responsável sempre referenciando o dia atual
+  useEffect(() => {
+    if (!empresaId) return;
+    const hoje = new Date();
+    const inicio = new Date(`${format(hoje, 'yyyy-MM-dd')}T00:00:00`);
+    const fim = new Date(`${format(hoje, 'yyyy-MM-dd')}T23:59:59.999`);
+    (supabase as any)
+      .rpc('comercial_get_conversao_leads_por_responsavel', {
+        p_empresa_id: empresaId,
+        p_data_inicio: inicio.toISOString(),
+        p_data_fim: fim.toISOString(),
+        p_timezone: 'America/Sao_Paulo',
+      })
+      .then(({ data, error }: any) => {
+        if (!error && data) setConversaoHoje(data as ConversaoLeadsPorResponsavelRow[]);
+      });
+  }, [empresaId]);
+
+  const handleOpenConversaoModal = async () => {
+    setConversaoModalOpen(true);
+    if (conversaoMeses.length > 0) return;
+    setLoadingConversaoModal(true);
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 6 }, (_, i) => {
+          const date = subMonths(new Date(), i);
+          const inicio = startOfMonth(date);
+          const fim = i === 0
+            ? new Date()
+            : new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+          return (supabase as any)
+            .rpc('comercial_get_conversao_leads_por_responsavel', {
+              p_empresa_id: empresaId ?? null,
+              p_data_inicio: inicio.toISOString(),
+              p_data_fim: fim.toISOString(),
+              p_timezone: 'America/Sao_Paulo',
+            })
+            .then(({ data }: any) => ({
+              label: format(date, 'MMM/yy', { locale: ptBR }),
+              dados: (data || []) as ConversaoLeadsPorResponsavelRow[],
+            }));
+        })
+      );
+      setConversaoMeses(results.reverse());
+    } finally {
+      setLoadingConversaoModal(false);
+    }
+  };
 
   const handleDashboardDateClick = (date: Date) => {
     if (!dashboardTempStartDate || (dashboardTempStartDate && dashboardTempEndDate)) {
@@ -1508,6 +1574,147 @@ export function DashboardComercial() {
                             </div>
                           </div>
                         </div>
+                      );
+                    })()}
+
+                    {/* ── CONVERSÃO DE LEADS POR RESPONSÁVEL (hoje) ────────────── */}
+                    {dashboardSections.comparativoLeads && (() => {
+                      const hoje = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+                      // Coleta todos os responsáveis únicos para construir cabeçalho do modal
+                      const allResp = Array.from(
+                        new Map(
+                          conversaoMeses
+                            .flatMap(m => m.dados)
+                            .map(r => [r.responsavel_nome, r])
+                        ).values()
+                      ).map(r => r.responsavel_nome);
+
+                      return (
+                        <>
+                          {/* Seção principal — dados de hoje */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">CONVERSÃO DE LEADS POR RESPONSÁVEL</p>
+                                <span className="text-[10px] text-white/50">— hoje, {hoje}</span>
+                              </div>
+                              <button
+                                onClick={handleOpenConversaoModal}
+                                title="Ver comparativo mensal"
+                                className="flex items-center justify-center h-7 w-7 rounded-full bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/40 transition-colors"
+                              >
+                                <AlertCircle className="h-4 w-4 text-amber-400" />
+                              </button>
+                            </div>
+
+                            {conversaoHoje.length === 0 ? (
+                              <p className="text-sm text-white/50">Nenhum lead registrado hoje.</p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                                {conversaoHoje.map((r) => {
+                                  const pct = Number(r.taxa_conversao_pct);
+                                  const cor = pct >= 50 ? 'text-emerald-400' : pct >= 25 ? 'text-amber-400' : 'text-red-400';
+                                  const bgBarra = pct >= 50 ? 'bg-emerald-500' : pct >= 25 ? 'bg-amber-500' : 'bg-red-500';
+                                  return (
+                                    <div key={r.responsavel_id ?? r.responsavel_nome} className="rounded-xl bg-custom-700/50 border border-custom-600 px-4 py-3 space-y-2">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="flex items-center justify-center h-8 w-8 rounded-full bg-primary/20 flex-shrink-0">
+                                          <Users className="h-4 w-4 text-primary" />
+                                        </span>
+                                        <p className="flex-1 text-[13px] font-semibold text-white truncate">{r.responsavel_nome}</p>
+                                        <span className={`text-lg font-bold flex-shrink-0 ${cor}`}>{pct.toFixed(1)}%</span>
+                                      </div>
+                                      {/* Barra de progresso */}
+                                      <div className="w-full bg-custom-600 rounded-full h-1.5">
+                                        <div className={`${bgBarra} h-1.5 rounded-full transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                                      </div>
+                                      <div className="flex justify-between text-[11px] text-white/60">
+                                        <span>{r.total_convertidos} conv. / {r.total_leads} leads</span>
+                                        <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(r.valor_total_convertido))}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Modal — comparativo mensal */}
+                          <Dialog open={conversaoModalOpen} onOpenChange={setConversaoModalOpen}>
+                            <DialogContent className="max-w-5xl w-full bg-custom-800 border-custom-600 text-white">
+                              <DialogHeader>
+                                <DialogTitle className="text-white flex items-center gap-2">
+                                  <TrendingUp className="h-5 w-5 text-primary" />
+                                  Comparativo de Conversão por Responsável — Últimos 6 meses
+                                </DialogTitle>
+                              </DialogHeader>
+
+                              {loadingConversaoModal ? (
+                                <p className="text-sm text-white/50 py-6 text-center">Carregando dados mensais...</p>
+                              ) : conversaoMeses.length === 0 ? (
+                                <p className="text-sm text-white/50 py-6 text-center">Sem dados disponíveis.</p>
+                              ) : (() => {
+                                // Coleta responsáveis únicos em ordem decrescente de taxa no mês atual
+                                const mesAtual = conversaoMeses[conversaoMeses.length - 1];
+                                const respUnicos = Array.from(
+                                  new Map(
+                                    conversaoMeses
+                                      .flatMap(m => m.dados)
+                                      .map(r => [r.responsavel_nome, r.responsavel_nome])
+                                  ).keys()
+                                ).sort((a, b) => {
+                                  const tA = mesAtual.dados.find(r => r.responsavel_nome === a)?.taxa_conversao_pct ?? 0;
+                                  const tB = mesAtual.dados.find(r => r.responsavel_nome === b)?.taxa_conversao_pct ?? 0;
+                                  return Number(tB) - Number(tA);
+                                });
+
+                                return (
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border-collapse">
+                                      <thead>
+                                        <tr className="border-b border-custom-600">
+                                          <th className="text-left py-2 px-3 text-white/70 font-semibold min-w-[140px]">Responsável</th>
+                                          {conversaoMeses.map(m => (
+                                            <th key={m.label} className="text-center py-2 px-3 text-white/70 font-semibold capitalize min-w-[90px]">{m.label}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {respUnicos.map((nome) => (
+                                          <tr key={nome} className="border-b border-custom-700/50 hover:bg-custom-700/30 transition-colors">
+                                            <td className="py-2 px-3 text-white font-medium">{nome}</td>
+                                            {conversaoMeses.map(m => {
+                                              const dado = m.dados.find(r => r.responsavel_nome === nome);
+                                              const pct = dado ? Number(dado.taxa_conversao_pct) : null;
+                                              const conv = dado?.total_convertidos ?? 0;
+                                              const total = dado?.total_leads ?? 0;
+                                              const cor = pct === null ? 'text-white/30'
+                                                : pct >= 50 ? 'text-emerald-400'
+                                                : pct >= 25 ? 'text-amber-400'
+                                                : 'text-red-400';
+                                              return (
+                                                <td key={m.label} className="py-2 px-3 text-center">
+                                                  {pct === null ? (
+                                                    <span className="text-white/30 text-xs">—</span>
+                                                  ) : (
+                                                    <div>
+                                                      <span className={`font-bold ${cor}`}>{pct.toFixed(1)}%</span>
+                                                      <p className="text-[10px] text-white/50">{conv}/{total}</p>
+                                                    </div>
+                                                  )}
+                                                </td>
+                                              );
+                                            })}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              })()}
+                            </DialogContent>
+                          </Dialog>
+                        </>
                       );
                     })()}
 
