@@ -63,10 +63,13 @@ type PixConvertedByResponsavelRow = {
   ticket_medio_convertido: number;
 };
 
-type PixConvertidosMetricsRow = {
-  total_convertidos: number;
-  valor_total_convertido: number;
-  ticket_medio_convertido: number;
+type PixRecuperacaoYampiRow = {
+  total_leads: number;
+  total_recuperados: number;
+  total_nao_recuperados: number;
+  taxa_recuperacao_pct: number;
+  valor_total_recuperado: number;
+  ticket_medio_recuperado: number;
 };
 
 type YampiUpsellMetricsRow = {
@@ -162,7 +165,7 @@ export function DashboardComercial() {
   const [whatsappDailySeries, setWhatsappDailySeries] = useState<PixDailyRow[]>([]);
   const [pixConvertedByResponsavel, setPixConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
   const [carrinhoConvertedByResponsavel, setCarrinhoConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
-  const [pixConvertidosMetrics, setPixConvertidosMetrics] = useState<PixConvertidosMetricsRow | null>(null);
+  const [pixRecuperacaoYampi, setPixRecuperacaoYampi] = useState<PixRecuperacaoYampiRow | null>(null);
   const [yampiUpsellMetrics, setYampiUpsellMetrics] = useState<YampiUpsellMetricsRow | null>(null);
   const [yampiUpsellIncrementoMetrics, setYampiUpsellIncrementoMetrics] = useState<YampiUpsellIncrementoRow | null>(null);
   const [entradaValoresUpsellMetrics, setEntradaValoresUpsellMetrics] = useState<EntradaValoresUpsellMetricsRow | null>(null);
@@ -286,7 +289,7 @@ export function DashboardComercial() {
           { data: topProdutosData, error: topProdutosError },
           { data: metricasCarrinhoData, error: metricasCarrinhoError },
           { data: spreadFreteRpcData, error: spreadFreteRpcError },
-          { data: pixConvertidosData, error: pixConvertidosError },
+          { data: pixRecuperacaoData, error: pixRecuperacaoError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -378,7 +381,7 @@ export function DashboardComercial() {
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
           }),
-          (supabase as any).rpc('comercial_get_metricas_pix_convertidos', {
+          (supabase as any).rpc('comercial_get_recuperacao_pix_yampi', {
             p_empresa_id: empresaId ?? null,
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
@@ -401,7 +404,7 @@ export function DashboardComercial() {
         if (topProdutosError) console.warn('[TopProdutos] RPC error:', topProdutosError);
         if (metricasCarrinhoError) throw metricasCarrinhoError;
         if (spreadFreteRpcError) console.warn('[SpreadFrete] RPC error:', spreadFreteRpcError);
-        if (pixConvertidosError) console.warn('[PixConvertidos] RPC error:', pixConvertidosError);
+        if (pixRecuperacaoError) console.warn('[PixRecuperacaoYampi] RPC error:', pixRecuperacaoError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -418,7 +421,7 @@ export function DashboardComercial() {
         setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
         setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
         setCarrinhoMetrics((metricasCarrinhoData?.[0] || null) as PixMetricsRow | null);
-        setPixConvertidosMetrics((pixConvertidosData?.[0] || null) as PixConvertidosMetricsRow | null);
+        setPixRecuperacaoYampi((pixRecuperacaoData?.[0] || null) as PixRecuperacaoYampiRow | null);
         const _sf = (spreadFreteRpcData as any)?.[0] ?? null;
         setSpreadFreteData(_sf ? {
           receitaFrete: Number(_sf.receita_frete),
@@ -439,7 +442,7 @@ export function DashboardComercial() {
         setWhatsappDailySeries([]);
         setPixConvertedByResponsavel([]);
         setCarrinhoConvertedByResponsavel([]);
-        setPixConvertidosMetrics(null);
+        setPixRecuperacaoYampi(null);
         setYampiUpsellMetrics(null);
         setCustoComercial(0);
         setYampiUpsellIncrementoMetrics(null);
@@ -1450,13 +1453,13 @@ export function DashboardComercial() {
                     {dashboardSections.recPix && (
                       <div style={{ order: sectionOrdemMap[3] ?? 3 }}>
                       {(() => {
-                      const _pixTotal          = Number(pixMetrics?.total_periodo ?? 0);
-                      // Recuperados: dados diretos da function comercial_get_metricas_pix_convertidos (status_lead_id = 2)
-                      const _pixRec2           = Number(pixConvertidosMetrics?.total_convertidos ?? 0);
-                      const _faturamentoPixRec = Number(pixConvertidosMetrics?.valor_total_convertido ?? 0);
-                      const _ticketPixRec      = Number(pixConvertidosMetrics?.ticket_medio_convertido ?? 0);
+                      const _pixTotal          = Number(pixRecuperacaoYampi?.total_leads ?? pixMetrics?.total_periodo ?? 0);
+                      // Recuperados: via id_yampi → pedidos.id_externo (function comercial_get_recuperacao_pix_yampi)
+                      const _pixRec2           = Number(pixRecuperacaoYampi?.total_recuperados ?? 0);
+                      const _faturamentoPixRec = Number(pixRecuperacaoYampi?.valor_total_recuperado ?? 0);
+                      const _ticketPixRec      = Number(pixRecuperacaoYampi?.ticket_medio_recuperado ?? 0);
                       // Taxa efetiva de recuperação PIX
-                      const _taxaPixEff        = _pixTotal > 0 && _pixRec2 > 0 ? (_pixRec2 / _pixTotal) * 100 : 0;
+                      const _taxaPixEff        = Number(pixRecuperacaoYampi?.taxa_recuperacao_pct ?? 0);
                       return (
                         <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                           <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC PIX</p>

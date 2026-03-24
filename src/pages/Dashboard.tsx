@@ -1,4 +1,4 @@
-import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, List, BookOpen, Loader2 } from 'lucide-react';
+import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, List, BookOpen, Loader2, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { MetricCard } from '@/components/dashboard/MetricCard';
@@ -68,6 +68,17 @@ export function Dashboard() {
       statusCor: string;
       itens: Array<{ nome: string; quantidade: number; img_url: string | null }>;
       temLivraria: boolean;
+    }>;
+  }>({ open: false, loading: false, data: [] });
+  const [freteModal, setFreteModal] = useState<{
+    open: boolean;
+    loading: boolean;
+    data: Array<{
+      id_externo: string;
+      receita: number;
+      custo: number;
+      margem: number;
+      margemPct: number;
     }>;
   }>({ open: false, loading: false, data: [] });
   const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
@@ -471,6 +482,58 @@ export function Dashboard() {
     }
   };
 
+  const fetchFreteModal = async () => {
+    if (!metrics?.spreadFrete) return;
+    setFreteModal(prev => ({ ...prev, open: true, loading: true }));
+    try {
+      const allIds = [...new Set([
+        ...(metrics.spreadFrete.idsReceitaFrete || []),
+        ...(metrics.spreadFrete.idsCustoFrete || []),
+      ])];
+      if (allIds.length === 0) {
+        setFreteModal({ open: true, loading: false, data: [] });
+        return;
+      }
+      const { data, error } = await (supabase as any)
+        .from('pedidos')
+        .select('id_externo, valor_frete_yampi, frete_venda, frete_melhor_envio')
+        .in('id_externo', allIds);
+      if (error) throw error;
+      const rows = (data || []).map((p: any) => {
+        const receita = Number(
+          (p.valor_frete_yampi != null && Number(p.valor_frete_yampi) !== 0
+            ? p.valor_frete_yampi
+            : p.frete_venda) ?? 0
+        );
+        let freteME = p.frete_melhor_envio;
+        if (typeof freteME === 'string') {
+          try { freteME = JSON.parse(freteME); } catch { freteME = null; }
+        }
+        const custo = Number(
+          (freteME?.preco && Number(freteME.preco) !== 0 ? freteME.preco : null) ??
+          (freteME?.price && Number(freteME.price) !== 0 ? freteME.price : null) ??
+          (freteME?.raw_response?.custom_price && Number(freteME.raw_response.custom_price) !== 0 ? freteME.raw_response.custom_price : null) ??
+          (freteME?.raw_response?.price && Number(freteME.raw_response.price) !== 0 ? freteME.raw_response.price : null) ??
+          0
+        );
+        const margem = receita - custo;
+        const margemPct = receita > 0 ? (margem / receita) * 100 : 0;
+        return {
+          id_externo: p.id_externo || '—',
+          receita,
+          custo,
+          margem,
+          margemPct,
+        };
+      });
+      rows.sort((a: any, b: any) => a.margem - b.margem);
+      setFreteModal({ open: true, loading: false, data: rows });
+    } catch (err) {
+      console.error('Erro ao buscar detalhes de frete:', err);
+      setFreteModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   const formatCurrency = useCallback((value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
   }, []);
@@ -810,13 +873,23 @@ export function Dashboard() {
                 icon={TrendingUp}
                 color="indigo"
               />
-              <MetricCard
-                title="Margem de Frete"
-                value={`${metrics.spreadFrete.spreadPercentual.toFixed(1)}%`}
-                description="Percentual do spread sobre a receita"
-                icon={BarChart3}
-                color="yellow"
-              />
+              <div className="relative group">
+                <MetricCard
+                  title="Margem de Frete"
+                  value={`${metrics.spreadFrete.spreadPercentual.toFixed(1)}%`}
+                  description="Percentual do spread sobre a receita"
+                  icon={BarChart3}
+                  color="yellow"
+                />
+                <button
+                  onClick={fetchFreteModal}
+                  className="absolute bottom-3 right-3 flex items-center gap-1 text-[11px] font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 border border-yellow-300 rounded-md px-2 py-1 shadow-sm transition-colors"
+                  title="Ver detalhes de frete por pedido"
+                >
+                  <Eye className="h-3 w-3" />
+                  Ver detalhes
+                </button>
+              </div>
             </div>
           )}
 
@@ -1317,6 +1390,79 @@ export function Dashboard() {
           </div>
         </>
       )}
+
+      {/* Modal: detalhes de frete por pedido */}
+      <Dialog open={freteModal.open} onOpenChange={(v) => setFreteModal(prev => ({ ...prev, open: v }))}>
+        <DialogContent className="max-w-2xl w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-yellow-600" />
+              Detalhes de Frete por Pedido
+            </DialogTitle>
+            <DialogDescription>Receita, custo e margem individual de cada pedido no período.</DialogDescription>
+          </DialogHeader>
+
+          {freteModal.loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-yellow-600" />
+            </div>
+          ) : freteModal.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum pedido encontrado.</p>
+          ) : (() => {
+            const totalReceita = freteModal.data.reduce((s, r) => s + r.receita, 0);
+            const totalCusto   = freteModal.data.reduce((s, r) => s + r.custo,   0);
+            const totalMargem  = totalReceita - totalCusto;
+            const totalPct     = totalReceita > 0 ? (totalMargem / totalReceita) * 100 : 0;
+            return (
+              <>
+                {/* Totais resumidos */}
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {[
+                    { label: 'Receita total',  value: formatCurrency(totalReceita), cls: 'border-teal-300 bg-teal-50 text-teal-800' },
+                    { label: 'Custo total',    value: formatCurrency(totalCusto),   cls: 'border-pink-300 bg-pink-50 text-pink-800' },
+                    { label: 'Margem total',   value: formatCurrency(totalMargem),  cls: totalMargem >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800' },
+                    { label: '% Margem',       value: `${totalPct.toFixed(1)}%`,    cls: totalPct    >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800' },
+                  ].map(c => (
+                    <div key={c.label} className={`rounded-lg border p-3 flex flex-col items-center gap-0.5 ${c.cls}`}>
+                      <span className="text-[11px] font-medium opacity-70 text-center">{c.label}</span>
+                      <span className="text-sm font-bold">{c.value}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Tabela */}
+                <ScrollArea className="h-[340px] rounded-md border">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Pedido</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Receita</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Custo</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Margem</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {freteModal.data.map((row, i) => (
+                        <tr key={row.id_externo + i} className="border-t hover:bg-muted/30 transition-colors">
+                          <td className="px-3 py-2 font-mono text-[11px]">{row.id_externo}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.receita)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.custo)}</td>
+                          <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margem >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                            {formatCurrency(row.margem)}
+                          </td>
+                          <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margemPct >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                            {row.margemPct.toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollArea>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
 
       {/* Modal: relação de pedidos com destaque de livrarias */}
       <Dialog open={pedidosModal.open} onOpenChange={(v) => setPedidosModal(prev => ({ ...prev, open: v }))}>
