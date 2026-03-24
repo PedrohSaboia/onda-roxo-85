@@ -517,7 +517,7 @@ export function Dashboard() {
           0
         );
         const margem = receita - custo;
-        const margemPct = receita > 0 ? (margem / receita) * 100 : 0;
+        const margemPct = custo > 0 ? (margem / custo) * 100 : 0;
         return {
           id_externo: p.id_externo || '—',
           receita,
@@ -1412,7 +1412,7 @@ export function Dashboard() {
             const totalReceita = freteModal.data.reduce((s, r) => s + r.receita, 0);
             const totalCusto   = freteModal.data.reduce((s, r) => s + r.custo,   0);
             const totalMargem  = totalReceita - totalCusto;
-            const totalPct     = totalReceita > 0 ? (totalMargem / totalReceita) * 100 : 0;
+            const totalPct     = totalCusto > 0 ? (totalMargem / totalCusto) * 100 : 0;
             return (
               <>
                 {/* Totais resumidos */}
