@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
-import { format, startOfMonth, subMonths, parseISO, eachDayOfInterval, isSameDay, isWithinInterval, startOfDay, endOfDay } from 'date-fns';
+import { format, startOfMonth, subMonths, parseISO, eachDayOfInterval, isSameDay, isWithinInterval, startOfDay, endOfDay, addDays, subDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ interface DashboardMetrics {
   enviosPorPlataforma: { nome: string; quantidade: number; cor: string }[];
   enviosPorDia: { data: string; quantidade: number }[];
   isPeriodoCurto: boolean;
-  spreadFrete: { receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number; idsReceitaFrete: string[]; idsCustoFrete: string[] } | null;
+  spreadFrete: { receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number; totalPedidosComCusto: number; idsReceitaFrete: string[]; idsCustoFrete: string[] } | null;
 }
 
 export function Dashboard() {
@@ -73,6 +73,16 @@ export function Dashboard() {
   const [freteModal, setFreteModal] = useState<{
     open: boolean;
     loading: boolean;
+    selectedDate: string;
+    currentPage: number;
+    summary: {
+      receita: number;
+      custo: number;
+      margem: number;
+      margemPct: number;
+      totalPedidosComFrete: number;
+      totalPedidosComCusto: number;
+    } | null;
     data: Array<{
       id_externo: string;
       receita: number;
@@ -80,7 +90,14 @@ export function Dashboard() {
       margem: number;
       margemPct: number;
     }>;
-  }>({ open: false, loading: false, data: [] });
+  }>({
+    open: false,
+    loading: false,
+    selectedDate: startDate,
+    currentPage: 1,
+    summary: null,
+    data: [],
+  });
   const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
   const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
@@ -482,23 +499,46 @@ export function Dashboard() {
     }
   };
 
-  const fetchFreteModal = async () => {
-    if (!metrics?.spreadFrete) return;
-    setFreteModal(prev => ({ ...prev, open: true, loading: true }));
+  const fetchFreteModalByDate = async (targetDate: string) => {
+    setFreteModal(prev => ({ ...prev, open: true, loading: true, selectedDate: targetDate }));
     try {
+      const startISO = startOfDay(parseISO(targetDate)).toISOString();
+      const endISO = endOfDay(parseISO(targetDate)).toISOString();
+
+      const { data: spreadFreteRpc, error: spreadFreteError } = await (supabase as any).rpc('get_spread_frete', {
+        p_data_inicio: startISO,
+        p_data_fim: endISO,
+      });
+
+      if (spreadFreteError) throw spreadFreteError;
+
+      const rpcSpreadFreteData = (spreadFreteRpc as any[])?.[0] ?? null;
+      const summary = {
+        receita: Number(rpcSpreadFreteData?.receita_frete ?? 0),
+        custo: Number(rpcSpreadFreteData?.custo_frete ?? 0),
+        margem: Number(rpcSpreadFreteData?.spread_valor ?? 0),
+        margemPct: Number(rpcSpreadFreteData?.spread_percentual ?? 0),
+        totalPedidosComFrete: Number(rpcSpreadFreteData?.total_pedidos_com_frete ?? 0),
+        totalPedidosComCusto: Number(rpcSpreadFreteData?.total_pedidos_com_custo ?? 0),
+      };
+
       const allIds = [...new Set([
-        ...(metrics.spreadFrete.idsReceitaFrete || []),
-        ...(metrics.spreadFrete.idsCustoFrete || []),
+        ...((rpcSpreadFreteData?.ids_receita_frete as string[]) || []),
+        ...((rpcSpreadFreteData?.ids_custo_frete as string[]) || []),
       ])];
+
       if (allIds.length === 0) {
-        setFreteModal({ open: true, loading: false, data: [] });
+        setFreteModal({ open: true, loading: false, selectedDate: targetDate, currentPage: 1, summary, data: [] });
         return;
       }
+
       const { data, error } = await (supabase as any)
         .from('pedidos')
         .select('id_externo, valor_frete_yampi, frete_venda, frete_melhor_envio')
         .in('id_externo', allIds);
+
       if (error) throw error;
+
       const rows = (data || []).map((p: any) => {
         const receita = Number(
           (p.valor_frete_yampi != null && Number(p.valor_frete_yampi) !== 0
@@ -526,12 +566,27 @@ export function Dashboard() {
           margemPct,
         };
       });
+
       rows.sort((a: any, b: any) => a.margem - b.margem);
-      setFreteModal({ open: true, loading: false, data: rows });
+      setFreteModal({ open: true, loading: false, selectedDate: targetDate, currentPage: 1, summary, data: rows });
     } catch (err) {
       console.error('Erro ao buscar detalhes de frete:', err);
       setFreteModal(prev => ({ ...prev, loading: false }));
     }
+  };
+
+  const fetchFreteModal = async () => {
+    if (!metrics?.spreadFrete) return;
+    const initialDate = startDate;
+    await fetchFreteModalByDate(initialDate);
+  };
+
+  const goFreteModalDay = async (direction: 'prev' | 'next') => {
+    const currentDate = parseISO(freteModal.selectedDate);
+    const target = direction === 'prev' ? subDays(currentDate, 1) : addDays(currentDate, 1);
+    const targetDate = format(target, 'yyyy-MM-dd');
+    if (targetDate < startDate || targetDate > endDate) return;
+    await fetchFreteModalByDate(targetDate);
   };
 
   const formatCurrency = useCallback((value: number) => {
@@ -1393,71 +1448,152 @@ export function Dashboard() {
 
       {/* Modal: detalhes de frete por pedido */}
       <Dialog open={freteModal.open} onOpenChange={(v) => setFreteModal(prev => ({ ...prev, open: v }))}>
-        <DialogContent className="max-w-2xl w-full">
+        <DialogContent className="max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Truck className="h-5 w-5 text-yellow-600" />
               Detalhes de Frete por Pedido
             </DialogTitle>
-            <DialogDescription>Receita, custo e margem individual de cada pedido no período.</DialogDescription>
+            <DialogDescription>Receita, custo e margem individual dos pedidos enviados no dia selecionado.</DialogDescription>
           </DialogHeader>
 
-          {freteModal.loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-yellow-600" />
-            </div>
-          ) : freteModal.data.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">Nenhum pedido encontrado.</p>
-          ) : (() => {
-            const totalReceita = freteModal.data.reduce((s, r) => s + r.receita, 0);
-            const totalCusto   = freteModal.data.reduce((s, r) => s + r.custo,   0);
-            const totalMargem  = totalReceita - totalCusto;
-            const totalPct     = totalCusto > 0 ? (totalMargem / totalCusto) * 100 : 0;
+          {(() => {
+            const totalReceita = freteModal.summary?.receita ?? freteModal.data.reduce((s, r) => s + r.receita, 0);
+            const totalCusto = freteModal.summary?.custo ?? freteModal.data.reduce((s, r) => s + r.custo, 0);
+            const totalMargem = freteModal.summary?.margem ?? (totalReceita - totalCusto);
+            const totalPct = totalCusto > 0 ? (totalMargem / totalCusto) * 100 : 0;
+            const rowsPerPage = 10;
+            const totalPages = Math.max(1, Math.ceil(freteModal.data.length / rowsPerPage));
+            const startIndex = (freteModal.currentPage - 1) * rowsPerPage;
+            const endIndex = startIndex + rowsPerPage;
+            const paginatedData = freteModal.data.slice(startIndex, endIndex);
+
             return (
               <>
-                {/* Totais resumidos */}
-                <div className="grid grid-cols-4 gap-2 mb-3">
-                  {[
-                    { label: 'Receita total',  value: formatCurrency(totalReceita), cls: 'border-teal-300 bg-teal-50 text-teal-800' },
-                    { label: 'Custo total',    value: formatCurrency(totalCusto),   cls: 'border-pink-300 bg-pink-50 text-pink-800' },
-                    { label: 'Margem total',   value: formatCurrency(totalMargem),  cls: totalMargem >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800' },
-                    { label: '% Margem',       value: `${totalPct.toFixed(1)}%`,    cls: totalPct    >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800' },
-                  ].map(c => (
-                    <div key={c.label} className={`rounded-lg border p-3 flex flex-col items-center gap-0.5 ${c.cls}`}>
-                      <span className="text-[11px] font-medium opacity-70 text-center">{c.label}</span>
-                      <span className="text-sm font-bold">{c.value}</span>
-                    </div>
-                  ))}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="rounded-lg border border-teal-300 bg-teal-50 text-teal-800 p-3 text-center transition-all duration-200 ease-out hover:shadow-sm">
+                    <p className="text-[11px] font-medium opacity-70">Receita total</p>
+                    <p className="text-sm font-bold">{formatCurrency(totalReceita)}</p>
+                  </div>
+                  <div className="rounded-lg border border-pink-300 bg-pink-50 text-pink-800 p-3 text-center transition-all duration-200 ease-out hover:shadow-sm">
+                    <p className="text-[11px] font-medium opacity-70">Custo total</p>
+                    <p className="text-sm font-bold">{formatCurrency(totalCusto)}</p>
+                  </div>
+                  <div className={`rounded-lg border p-3 text-center transition-all duration-200 ease-out hover:shadow-sm ${totalMargem >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800'}`}>
+                    <p className="text-[11px] font-medium opacity-70">Margem total</p>
+                    <p className="text-sm font-bold">{formatCurrency(totalMargem)}</p>
+                  </div>
+                  <div className={`rounded-lg border p-3 text-center transition-all duration-200 ease-out hover:shadow-sm ${totalPct >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800'}`}>
+                    <p className="text-[11px] font-medium opacity-70">% Margem</p>
+                    <p className="text-sm font-bold">{totalPct.toFixed(1)}%</p>
+                  </div>
                 </div>
-                {/* Tabela */}
-                <ScrollArea className="h-[340px] rounded-md border">
-                  <table className="w-full text-xs">
-                    <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
-                      <tr>
-                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Pedido</th>
-                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Receita</th>
-                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Custo</th>
-                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Margem</th>
-                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">%</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {freteModal.data.map((row, i) => (
-                        <tr key={row.id_externo + i} className="border-t hover:bg-muted/30 transition-colors">
-                          <td className="px-3 py-2 font-mono text-[11px]">{row.id_externo}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.receita)}</td>
-                          <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.custo)}</td>
-                          <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margem >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                            {formatCurrency(row.margem)}
-                          </td>
-                          <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margemPct >= 0 ? 'text-green-700' : 'text-red-600'}`}>
-                            {row.margemPct.toFixed(1)}%
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </ScrollArea>
+
+                <div className="flex items-center justify-between gap-2 rounded-lg border bg-muted/30 p-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goFreteModalDay('prev')}
+                    disabled={freteModal.loading || freteModal.selectedDate <= startDate}
+                    className="h-8 transition-all duration-200 ease-out active:scale-95 hover:scale-[1.03]"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <div className="text-center">
+                    <p className="text-xs text-muted-foreground">Dia selecionado</p>
+                    <p className="text-sm font-semibold text-foreground">{format(parseISO(freteModal.selectedDate), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => goFreteModalDay('next')}
+                    disabled={freteModal.loading || freteModal.selectedDate >= endDate}
+                    className="h-8 transition-all duration-200 ease-out active:scale-95 hover:scale-[1.03]"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+
+                <div className="h-[430px] rounded-md border overflow-hidden transition-all duration-300 ease-out">
+                  {freteModal.loading ? (
+                    <div className="h-full flex items-center justify-center">
+                      <Loader2 className="h-6 w-6 animate-spin text-yellow-600" />
+                    </div>
+                  ) : freteModal.data.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center gap-3">
+                      <Package className="h-10 w-10 text-foreground opacity-50" />
+                      <p className="text-sm text-foreground">Nenhum pedido encontrado para esse dia.</p>
+                    </div>
+                  ) : (
+                    <>
+                      <ScrollArea className="h-[380px]">
+                        <table className="w-full text-xs">
+                          <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                            <tr>
+                              <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Pedido</th>
+                              <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Receita</th>
+                              <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Custo</th>
+                              <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Margem</th>
+                              <th className="text-right px-3 py-2 font-semibold text-muted-foreground">%</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {paginatedData.map((row, i) => (
+                              <tr key={row.id_externo + i} className="border-t hover:bg-muted/30 transition-colors">
+                                <td className="px-3 py-2 font-mono text-[11px]">{row.id_externo}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.receita)}</td>
+                                <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.custo)}</td>
+                                <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margem >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                  {formatCurrency(row.margem)}
+                                </td>
+                                <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margemPct >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                  {row.margemPct.toFixed(1)}%
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </ScrollArea>
+
+                      <div className="h-[50px] border-t flex items-center justify-between gap-2 px-2 bg-muted/20">
+                        {totalPages > 1 ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setFreteModal(prev => ({ ...prev, currentPage: Math.max(1, prev.currentPage - 1) }))}
+                              disabled={freteModal.currentPage === 1}
+                              className="h-8 transition-all duration-200 ease-out active:scale-95 hover:scale-[1.03]"
+                            >
+                              <ChevronLeft className="h-4 w-4" />
+                            </Button>
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-medium text-muted-foreground">Página</span>
+                              <span className="text-sm font-bold">{freteModal.currentPage}</span>
+                              <span className="text-xs text-muted-foreground">de</span>
+                              <span className="text-sm font-bold">{totalPages}</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setFreteModal(prev => ({ ...prev, currentPage: Math.min(totalPages, prev.currentPage + 1) }))}
+                              disabled={freteModal.currentPage === totalPages}
+                              className="h-8 transition-all duration-200 ease-out active:scale-95 hover:scale-[1.03]"
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <div className="w-full text-center text-xs text-muted-foreground"> </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
               </>
             );
           })()}
