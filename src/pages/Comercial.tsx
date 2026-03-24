@@ -245,6 +245,7 @@ export function Comercial() {
     setTempFilterPlataformaId(newPlataforma);
     setTempFilterStatusId(newStatus);
     setTempFilterDuplicados(newDuplicados);
+    setTempFilterEtiquetaId(newEtiqueta);
   }, [location.search]);
 
   // Fechar dropdown de filtros ao clicar fora
@@ -281,119 +282,83 @@ export function Comercial() {
         // If the ComercialSidebar requested a specific view (ex: enviados), apply extra filters
         const view = new URLSearchParams(location.search).get('view') || 'pedidos';
 
-        // Query the vw_clientes_pedidos view which flattens cliente+pedido fields
-        const query = (supabase as any)
-          .from('vw_clientes_pedidos')
-          .select(`*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio, tempo_ganho`, { count: 'exact' })
-          .order('pedido_criado_em', { ascending: false });
+        // Helper that creates a fresh base query with all non-product filters applied.
+        // Needed for the chunked-product-filter path where we spawn multiple queries.
+        const SELECT_FIELDS = `*, cliente_id, cliente_nome, cliente_criado_em, cliente_atualizado_em, pedido_id, id_externo, pedido_cliente_nome, contato, responsavel_id, plataforma_id, status_id, etiqueta_envio_id, urgente, pedido_criado_em, pedido_atualizado_em, frete_melhor_envio, tempo_ganho`;
 
-        // apply search term server-side so pagination is based on the query
+        const applyBaseFilters = (q: any) => {
+          q.order('pedido_criado_em', { ascending: false });
+
           if (searchTrim.length > 0) {
-          // use ilike (case-insensitive) for id_externo, cliente_nome and contato
-          // PostgREST OR syntax: "col.ilike.%term%,othercol.ilike.%term%"
-          const pattern = `%${searchTrim}%`;
-          try {
-            (query as any).or(`id_externo.ilike.${pattern},cliente_nome.ilike.${pattern},contato.ilike.${pattern},email.ilike.${pattern},cpf.ilike.${pattern},cnpj.ilike.${pattern}`);
-          } catch (e) {
-            // fallback: if .or fails, attempt adding single ilike on cliente_nome
-            (query as any).ilike('cliente_nome', pattern);
+            const pattern = `%${searchTrim}%`;
+            try {
+              q.or(`id_externo.ilike.${pattern},cliente_nome.ilike.${pattern},contato.ilike.${pattern},email.ilike.${pattern},cpf.ilike.${pattern},cnpj.ilike.${pattern}`);
+            } catch (_e) {
+              q.ilike('cliente_nome', pattern);
+            }
           }
-        }
 
-        // Exclude pedidos with 'Enviado' and 'Cancelado' status from the main Comercial list
-        // (those are shown in the dedicated PedidosEnviados page)
-        (query as any).neq('status_id', ENVIADO_STATUS_ID);
-        (query as any).neq('status_id', CANCELADO_STATUS_ID);
+          q.neq('status_id', ENVIADO_STATUS_ID);
+          q.neq('status_id', CANCELADO_STATUS_ID);
 
-        // apply pedido_liberado = FALSE filter when requested
-        if (filterNotLiberado) {
-          // only include pedidos where pedido_liberado is false
-          // cast to any to avoid TypeScript deep-instantiation error from the Postgrest query typings
-          (query as any).eq('pedido_liberado', false);
-        }
+          if (filterNotLiberado)        q.eq('pedido_liberado', false);
+          if (filterEtiquetaId)         q.eq('etiqueta_envio_id', filterEtiquetaId);
+          if (filterResponsavelId)      q.eq('responsavel_id', filterResponsavelId);
+          if (filterPlataformaId)       q.eq('plataforma_id', filterPlataformaId);
+          if (filterStatusId)           q.eq('status_id', filterStatusId);
+          if (filterClienteFormNotSent) q.eq('formulario_enviado', false);
+          if (filterDuplicados)         q.eq('duplicata', true);
 
-        // apply etiqueta_envio_id filter when requested
-        if (filterEtiquetaId) {
-          (query as any).eq('etiqueta_envio_id', filterEtiquetaId);
-        }
-
-        // apply responsavel_id filter when requested
-        if (filterResponsavelId) {
-          (query as any).eq('responsavel_id', filterResponsavelId);
-        }
-
-        // apply plataforma_id filter when requested
-        if (filterPlataformaId) {
-          (query as any).eq('plataforma_id', filterPlataformaId);
-        }
-
-        // apply status_id filter when requested
-        if (filterStatusId) {
-          (query as any).eq('status_id', filterStatusId);
-        }
-
-        // apply cliente formulario not sent filter (formulario_enviado = false)
-        if (filterClienteFormNotSent) {
-          (query as any).eq('formulario_enviado', false);
-        }
-
-        // apply duplicados filter
-        if (filterDuplicados) {
-          (query as any).eq('duplicata', true);
-        }
-
-        // apply data_inicio filter
-        if (filterDataInicio) {
-          const dataInicioISO = new Date(filterDataInicio).toISOString();
-          (query as any).gte('pedido_criado_em', dataInicioISO);
-        }
-
-        // apply data_fim filter
-        if (filterDataFim) {
-          const dataFimDate = new Date(filterDataFim);
-          dataFimDate.setHours(23, 59, 59, 999);
-          const dataFimISO = dataFimDate.toISOString();
-          (query as any).lte('pedido_criado_em', dataFimISO);
-        }
-
-        // apply envio_adiado filter (pedidos com tempo_ganho preenchido)
-        if (filterEnvioAdiado) {
-          if (filterEnvioAdiadoDate) {
-            // Filtrar pela data específica selecionada
-            const startOfDay = new Date(filterEnvioAdiadoDate);
-            startOfDay.setHours(0, 0, 0, 0);
-            const endOfDay = new Date(filterEnvioAdiadoDate);
-            endOfDay.setHours(23, 59, 59, 999);
-            (query as any).gte('tempo_ganho', startOfDay.toISOString());
-            (query as any).lte('tempo_ganho', endOfDay.toISOString());
-          } else {
-            // Filtrar apenas por tempo_ganho preenchido (qualquer data)
-            (query as any).not('tempo_ganho', 'is', null);
+          if (filterDataInicio) {
+            const dataInicioISO = new Date(filterDataInicio + 'T00:00:00').toISOString();
+            q.gte('pedido_criado_em', dataInicioISO);
           }
-        }
+          if (filterDataFim) {
+            const dataFimDate = new Date(filterDataFim + 'T00:00:00');
+            dataFimDate.setHours(23, 59, 59, 999);
+            q.lte('pedido_criado_em', dataFimDate.toISOString());
+          }
+
+          if (filterEnvioAdiado) {
+            if (filterEnvioAdiadoDate) {
+              const dateStr = format(filterEnvioAdiadoDate, 'yyyy-MM-dd');
+              q.gte('tempo_ganho', dateStr + 'T00:00:00.000Z');
+              q.lte('tempo_ganho', dateStr + 'T23:59:59.999Z');
+            } else {
+              q.not('tempo_ganho', 'is', null);
+            }
+          }
+
+          return q;
+        };
+
+        // Query the vw_clientes_pedidos view which flattens cliente+pedido fields
+        const query = applyBaseFilters(
+          (supabase as any)
+            .from('vw_clientes_pedidos')
+            .select(SELECT_FIELDS, { count: 'exact' })
+        );
 
         // apply produtos filter: buscar pedidos que contêm os produtos/variações selecionados
         if (selectedProdutos.length > 0) {
           const produtoIds = selectedProdutos.filter(p => p.tipo === 'produto').map(p => p.id);
           const variacaoIds = selectedProdutos.filter(p => p.tipo === 'variacao').map(p => p.id);
 
-          let itemsQuery = supabase.from('itens_pedido').select('pedido_id');
-          
+          let itemsQuery: any = (supabase as any).from('itens_pedido').select('pedido_id');
           if (produtoIds.length > 0 && variacaoIds.length > 0) {
             itemsQuery = itemsQuery.or(`produto_id.in.(${produtoIds.join(',')}),variacao_id.in.(${variacaoIds.join(',')})`);
           } else if (produtoIds.length > 0) {
             itemsQuery = itemsQuery.in('produto_id', produtoIds);
-          } else if (variacaoIds.length > 0) {
+          } else {
             itemsQuery = itemsQuery.in('variacao_id', variacaoIds);
           }
 
           const { data: itemsData, error: itemsError } = await itemsQuery;
           if (itemsError) throw itemsError;
 
-          const pedidoIds = [...new Set((itemsData || []).map((item: any) => item.pedido_id))];
-          
-          if (pedidoIds.length === 0) {
-            // Nenhum pedido encontrado com esses produtos
+          const allPedidoIds = [...new Set((itemsData || []).map((item: any) => item.pedido_id))] as string[];
+
+          if (allPedidoIds.length === 0) {
             if (!mounted) return;
             setPedidos([]);
             setTotal(0);
@@ -401,7 +366,128 @@ export function Comercial() {
             return;
           }
 
-          (query as any).in('pedido_id', pedidoIds);
+          // PostgREST URL has a size limit. When IDs exceed ~100, chunk the queries
+          // and do client-side pagination to avoid 400 Bad Request.
+          const CHUNK_SIZE = 100;
+
+          if (allPedidoIds.length <= CHUNK_SIZE) {
+            // Small set — normal server-side pagination
+            query.in('pedido_id', allPedidoIds);
+          } else {
+            // Large set — query in chunks, combine, sort, paginate manually
+            const chunks: string[][] = [];
+            for (let i = 0; i < allPedidoIds.length; i += CHUNK_SIZE) {
+              chunks.push(allPedidoIds.slice(i, i + CHUNK_SIZE));
+            }
+
+            const [lookupResults, ...chunkResults] = await Promise.all([
+              Promise.all([
+                supabase.from('plataformas').select('*'),
+                supabase.from('usuarios').select('id,nome,img_url'),
+                supabase.from('status').select('*'),
+                supabase.from('tipos_etiqueta').select('*'),
+              ]),
+              ...chunks.map(chunk =>
+                applyBaseFilters(
+                  (supabase as any).from('vw_clientes_pedidos').select(SELECT_FIELDS)
+                ).in('pedido_id', chunk)
+              ),
+            ]);
+
+            let allRows: any[] = [];
+            for (const result of chunkResults) {
+              if ((result as any).error) throw (result as any).error;
+              allRows = allRows.concat((result as any).data || []);
+            }
+
+            // Sort combined rows by pedido_criado_em desc (each chunk is already ordered,
+            // but merge may interleave them)
+            allRows.sort((a, b) =>
+              new Date(b.pedido_criado_em).getTime() - new Date(a.pedido_criado_em).getTime()
+            );
+
+            const totalCount = allRows.length;
+            const pageData   = allRows.slice(from, to + 1);
+
+            if (!mounted) return;
+
+            const [platResp, userResp, statusResp, etiquetaResp] = lookupResults as any[];
+            const plataformasMap = ((platResp as any).data || []).reduce((acc: any, p: any) => (acc[p.id] = p, acc), {});
+            const usuariosMap    = ((userResp as any).data || []).reduce((acc: any, u: any) => (acc[u.id] = u, acc), {});
+            const statusMap      = ((statusResp as any).data || []).reduce((acc: any, s: any) => (acc[s.id] = s, acc), {});
+            const etiquetaMap    = ((etiquetaResp as any).data || []).reduce((acc: any, t: any) => (acc[t.id] = t, acc), {});
+            const etiquetaRespData: any[] = (etiquetaResp as any)?.data || [];
+            if (etiquetaRespData.length) setEtiquetaOptions(etiquetaRespData.map((t: any) => ({ id: t.id, nome: t.nome, cor_hex: t.cor_hex, ordem: t.ordem ?? 0 })));
+
+            const pageIds = pageData.map((r: any) => r.pedido_id).filter(Boolean);
+            let corMap: Record<string, string | undefined>         = {};
+            let melhorEnvioMap: Record<string, string | undefined>  = {};
+            if (pageIds.length) {
+              try {
+                const { data: pedidosData, error: pedidosErr } = await supabase.from('pedidos').select('id, cor_do_pedido, id_melhor_envio').in('id', pageIds as any[]);
+                if (!pedidosErr && pedidosData) {
+                  corMap         = (pedidosData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.cor_do_pedido || undefined, acc), {});
+                  melhorEnvioMap = (pedidosData as any[]).reduce((acc: any, p: any) => (acc[p.id] = p.id_melhor_envio || undefined, acc), {});
+                }
+              } catch (_) {}
+            }
+
+            const normalizeEtiqueta = (nome?: string) => {
+              if (!nome) return 'NAO_LIBERADO' as const;
+              const key = nome.toUpperCase();
+              if (key.includes('PEND')) return 'PENDENTE' as const;
+              if (key.includes('DISP')) return 'DISPONIVEL' as const;
+              return 'NAO_LIBERADO' as const;
+            };
+
+            const mapped: Pedido[] = pageData.map((row: any) => {
+              const freteMe = row.frete_melhor_envio || null;
+              const plataformaRow = plataformasMap[row.plataforma_id];
+              const usuarioRow    = usuariosMap[row.responsavel_id];
+              const statusRow     = statusMap[row.status_id];
+              const etiquetaRow   = etiquetaMap[row.etiqueta_envio_id];
+              return {
+                id: row.pedido_id,
+                idExterno: row.id_externo,
+                clienteNome: row.cliente_nome || row.pedido_cliente_nome,
+                clienteEmail: row.email || undefined,
+                clienteCpf: row.cpf || undefined,
+                clienteCnpj: row.cnpj || undefined,
+                contato: row.contato || '',
+                formularioEnviado: !!row.formulario_enviado,
+                etiquetaEnvioId: row.etiqueta_envio_id || '',
+                responsavelId: row.responsavel_id,
+                plataformaId: row.plataforma_id,
+                statusId: row.status_id,
+                etiquetaEnvio: normalizeEtiqueta(etiquetaRow?.nome) || (row.etiqueta_envio_id ? 'PENDENTE' : 'NAO_LIBERADO'),
+                urgente: !!row.urgente,
+                dataPrevista: row.data_prevista || undefined,
+                observacoes: row.observacoes || '',
+                itens: [],
+                id_melhor_envio: melhorEnvioMap[row.pedido_id] || undefined,
+                responsavel: usuarioRow ? { id: usuarioRow.id, nome: usuarioRow.nome, email: '', papel: 'operador', avatar: usuarioRow.img_url || undefined, ativo: true, criadoEm: '', atualizadoEm: '' } : undefined,
+                plataforma: plataformaRow ? { id: plataformaRow.id, nome: plataformaRow.nome, cor: plataformaRow.cor, imagemUrl: plataformaRow.img_url || undefined, criadoEm: '', atualizadoEm: '' } : undefined,
+                transportadora: freteMe ? (() => {
+                  const raw = (freteMe.raw_response || freteMe.raw || freteMe);
+                  const company = raw?.company || freteMe.company || null;
+                  const nome = freteMe.transportadora || company?.name || raw?.company?.name || undefined;
+                  const imagem = company?.picture || company?.logo || company?.icon || undefined;
+                  return { id: undefined, nome, imagemUrl: imagem, raw };
+                })() : undefined,
+                status: statusRow ? { id: statusRow.id, nome: statusRow.nome, corHex: statusRow.cor_hex, ordem: statusRow.ordem ?? 0, criadoEm: '', atualizadoEm: '' } : undefined,
+                etiqueta: etiquetaRow ? { id: etiquetaRow.id, nome: etiquetaRow.nome, corHex: etiquetaRow.cor_hex, ordem: etiquetaRow.ordem ?? 0, criadoEm: etiquetaRow.criado_em || '', atualizadoEm: etiquetaRow.atualizado_em || '' } : undefined,
+                corDoPedido: (row.cor_do_pedido !== undefined ? row.cor_do_pedido : corMap[row.pedido_id]) || undefined,
+                foiDuplicado: !!row.foi_duplicado,
+                criadoEm: row.pedido_criado_em,
+                atualizadoEm: row.pedido_atualizado_em,
+              };
+            });
+
+            setPedidos(mapped);
+            setTotal(totalCount);
+            setLoading(false);
+            return; // skip the normal flow below
+          }
         }
 
         // fetch small lookup tables in parallel so we can map ids to display rows
@@ -668,8 +754,9 @@ export function Comercial() {
         const datas = new Set<string>();
         data?.forEach((pedido: any) => {
           if (pedido.tempo_ganho) {
-            const date = new Date(pedido.tempo_ganho);
-            datas.add(format(date, 'yyyy-MM-dd'));
+            // Pegar direto os primeiros 10 chars (yyyy-MM-dd) sem converter para Date
+            // new Date("yyyy-MM-dd") seria UTC midnight, causando desvio de -1 dia em BRT
+            datas.add(String(pedido.tempo_ganho).substring(0, 10));
           }
         });
         
@@ -743,17 +830,28 @@ export function Comercial() {
     try {
       const { data, error } = await supabase
         .from('produtos')
-        .select('id, nome, sku, variacoes_produto(id)')
+        .select('id, nome, sku')
         .ilike('nome', `%${termo}%`)
         .limit(20);
 
       if (error) throw error;
 
+      // Verificar quais produtos possuem variações em query separada
+      const produtoIds = (data || []).map((p: any) => p.id);
+      let produtosComVariacoes = new Set<string>();
+      if (produtoIds.length > 0) {
+        const { data: varData } = await (supabase as any)
+          .from('variacoes_produto')
+          .select('produto_id')
+          .in('produto_id', produtoIds);
+        produtosComVariacoes = new Set((varData || []).map((v: any) => v.produto_id));
+      }
+
       const produtos = (data || []).map((p: any) => ({
         id: p.id,
         nome: p.nome,
         sku: p.sku || '',
-        temVariacoes: (p.variacoes_produto && p.variacoes_produto.length > 0)
+        temVariacoes: produtosComVariacoes.has(p.id)
       }));
 
       setProdutosList(produtos);
@@ -770,7 +868,7 @@ export function Comercial() {
         .from('variacoes_produto')
         .select('id, nome')
         .eq('produto_id', produtoId)
-        .order('ordem');
+        .order('nome');
 
       if (error) throw error;
 
@@ -1715,6 +1813,7 @@ export function Comercial() {
                           <option key={et.id} value={et.id}>{et.nome}</option>
                         ))}
                       </select>
+                      
                     </div>
                     <div className="mb-3">
                       <label htmlFor="filter-produto" className="text-sm block mb-1">Filtrar por produto</label>
@@ -1771,7 +1870,7 @@ export function Comercial() {
                         if (tempFilterStatusId) next.set('status_id', tempFilterStatusId); else next.delete('status_id');
                         if (tempFilterDuplicados) next.set('duplicados', 'true'); else next.delete('duplicados');
                         if (tempFilterEtiquetaId) next.set('etiqueta_envio_id', tempFilterEtiquetaId); else next.delete('etiqueta_envio_id');
-                        // module query removed — navigation uses pathname now
+                        next.set('page', '1');
                         navigate({ pathname: location.pathname, search: next.toString() });
                         setShowFilters(false);
                       }}>Aplicar</Button>
@@ -1940,7 +2039,9 @@ export function Comercial() {
                           const dateStr = format(date, 'yyyy-MM-dd');
                           next.set('envio_adiado_date', dateStr);
                           navigate({ pathname: location.pathname, search: next.toString() });
-                          setFilterEnvioAdiadoDate(date);
+                          // Normalizar para meia-noite local para evitar desvio de timezone
+                          const localDate = new Date(dateStr + 'T00:00:00');
+                          setFilterEnvioAdiadoDate(localDate);
                           setShowEnvioAdiadoCalendar(false);
                           setPage(1);
                         }}
@@ -2571,16 +2672,6 @@ export function Comercial() {
                   </TableCell>
                   <TableCell className="text-center">
                     <div className="flex flex-col items-center">
-                      {((pedido as any).etiquetaEnvioId === ETIQUETA_FILTER_ID) && (
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="mb-1 bg-custom-600 text-white hover:bg-custom-700 px-2 py-0 h-6 rounded text-xs"
-                          onClick={(e) => { e.stopPropagation(); handleEnvioRapido(pedido.id); }}
-                        >
-                          {processingRapid[pedido.id] ? 'Processando...' : 'Envio Rápido'}
-                        </Button>
-                      )}
                       <div className="flex items-center justify-center">
                         <Badge 
                           variant="outline" 

@@ -192,6 +192,7 @@ export type Database = {
           tempo_ganho: string | null
           etiqueta_ml: boolean | null
           pedido_liberado: boolean | null
+          pacote_disponivel: boolean
         }
         Insert: {
           atualizado_em?: string
@@ -211,6 +212,7 @@ export type Database = {
           tempo_ganho?: string | null
           etiqueta_ml?: boolean | null
           pedido_liberado?: boolean | null
+          pacote_disponivel?: boolean
         }
         Update: {
           atualizado_em?: string
@@ -230,6 +232,7 @@ export type Database = {
           tempo_ganho?: string | null
           etiqueta_ml?: boolean | null
           pedido_liberado?: boolean | null
+          pacote_disponivel?: boolean
         }
         Relationships: [
           {

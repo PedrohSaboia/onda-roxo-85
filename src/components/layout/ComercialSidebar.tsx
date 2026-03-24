@@ -7,16 +7,18 @@ import { FaListUl } from 'react-icons/fa'
 import { TbTruckReturn } from 'react-icons/tb'
 import { BarChart3, Tags } from 'lucide-react'
 import IconDashboard from '@/components/icons/IconDashboard';
+import IconTipoDeLead from '@/components/icons/IconTipoDeLead';
+import PedidoRetornadoIcon from '../icons/PedidoRetornado'
 
 
 const items = [
   { id: 'pedidos', label: 'Lista de Pedidos', icon: FaListUl },
   { id: 'dashboard', label: 'Dashboard', icon: IconDashboard },
   { id: 'leads', label: 'Lista de Leads', icon: HiMiniUsers },
-  { id: 'tipos-lead', label: 'Tipos de Lead', icon: Tags },
+  { id: 'tipos-lead', label: 'Tipos de Lead', icon: IconTipoDeLead },
   { id: 'cancelados', label: 'Pedidos Cancelados', icon: GoXCircleFill },
   { id: 'enviados', label: 'Pedidos Enviados', icon: BsSendCheckFill },
-  { id: 'retornados', label: 'Pedidos Retornados', icon: TbTruckReturn },
+  { id: 'retornados', label: 'Pedidos Retornados', icon: PedidoRetornadoIcon },
 ]
 
 export function ComercialSidebar() {

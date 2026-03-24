@@ -9,7 +9,7 @@ interface MetricCardProps {
   trend?: 'up' | 'down' | 'neutral';
   trendValue?: string;
   icon?: React.ElementType;
-  color?: 'custom' | 'blue' | 'green' | 'orange' | 'red';
+  color?: 'custom' | 'blue' | 'green' | 'orange' | 'red' | 'teal' | 'indigo' | 'pink' | 'yellow';
 }
 
 const colorStyles = {
@@ -18,6 +18,10 @@ const colorStyles = {
   green: 'from-green-500 to-green-600',
   orange: 'from-orange-500 to-orange-600',
   red: 'from-red-500 to-red-600',
+  teal: 'from-teal-500 to-teal-600',
+  indigo: 'from-indigo-500 to-indigo-600',
+  pink: 'from-pink-500 to-pink-600',
+  yellow: 'from-yellow-500 to-yellow-600',
 };
 
 const borderStyles: Record<string, string> = {
@@ -26,6 +30,10 @@ const borderStyles: Record<string, string> = {
   green: 'border-green-600',
   orange: 'border-orange-600',
   red: 'border-red-600',
+  teal: 'border-teal-600',
+  indigo: 'border-indigo-600',
+  pink: 'border-pink-600',
+  yellow: 'border-yellow-600',
 };
 
 export function MetricCard({ 

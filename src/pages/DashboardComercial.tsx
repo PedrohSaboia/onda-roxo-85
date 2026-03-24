@@ -1,6 +1,6 @@
 ﻿import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Zap, CreditCard, RefreshCw, CheckCircle2, ShoppingCart, Mail, MessageCircle, Users, TrendingUp, DollarSign } from 'lucide-react';
+import { BarChart3, ChevronDown, ChevronLeft, ChevronRight, Zap, CreditCard, RefreshCw, CheckCircle2, ShoppingCart, Mail, MessageCircle, Users, TrendingUp, TrendingDown, DollarSign, AlertCircle, X, Truck } from 'lucide-react';
 import { FaCalendarAlt } from 'react-icons/fa';
 import { format, parseISO, startOfMonth, subMonths, isSameDay, isWithinInterval, differenceInDays, getDaysInMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -13,6 +13,7 @@ import ComercialSidebar from '@/components/layout/ComercialSidebar';
 import IconDashboard from '@/components/icons/IconDashboard';
 import IconYampi from '@/components/icons/IconYampi';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tooltip as UITooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { ResponsiveContainer, AreaChart, Area, LineChart, CartesianGrid, XAxis, YAxis, Tooltip, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
@@ -60,6 +61,15 @@ type PixConvertedByResponsavelRow = {
   total_convertidos: number;
   valor_total_convertido: number;
   ticket_medio_convertido: number;
+};
+
+type PixRecuperacaoYampiRow = {
+  total_leads: number;
+  total_recuperados: number;
+  total_nao_recuperados: number;
+  taxa_recuperacao_pct: number;
+  valor_total_recuperado: number;
+  ticket_medio_recuperado: number;
 };
 
 type YampiUpsellMetricsRow = {
@@ -116,7 +126,30 @@ type TopProdutosUpsellRow = {
   ticket_medio: number;
 };
 
+type ConversaoLeadsPorResponsavelRow = {
+  responsavel_id: string | null;
+  responsavel_nome: string;
+  total_leads: number;
+  total_convertidos: number;
+  total_nao_convertidos: number;
+  taxa_conversao_pct: number;
+  valor_total_convertido: number;
+  ticket_medio_convertido: number;
+};
+
 type DailyChartStyle = 'linha' | 'barras' | 'pizza';
+
+// Mapeamento id DB → chave local (fora do componente para evitar recriação)
+const DB_SECTION_MAP: Record<number, string> = {
+  1: 'painelHero',
+  2: 'upsellYampi',
+  3: 'recPix',
+  4: 'whatsappRedes',
+  5: 'typebots',
+  6: 'recCarrinho',
+  7: 'comparativoLeads',
+  8: 'spreadFrete',
+};
 
 export function DashboardComercial() {
   const navigate = useNavigate();
@@ -124,6 +157,7 @@ export function DashboardComercial() {
 
   const [pixMetrics, setPixMetrics] = useState<PixMetricsRow | null>(null);
   const [carrinhoMetrics, setCarrinhoMetrics] = useState<PixMetricsRow | null>(null);
+  const [spreadFreteData, setSpreadFreteData] = useState<{ receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number; totalPedidosComCusto: number } | null>(null);
   const [whatsappMetrics, setWhatsappMetrics] = useState<PixMetricsRow | null>(null);
   const [typebotsMetrics, setTypebotsMetrics] = useState<TypeBotMetricsRow[]>([]);
   const [pixDailySeries, setPixDailySeries] = useState<PixDailyRow[]>([]);
@@ -131,28 +165,100 @@ export function DashboardComercial() {
   const [whatsappDailySeries, setWhatsappDailySeries] = useState<PixDailyRow[]>([]);
   const [pixConvertedByResponsavel, setPixConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
   const [carrinhoConvertedByResponsavel, setCarrinhoConvertedByResponsavel] = useState<PixConvertedByResponsavelRow[]>([]);
+  const [pixRecuperacaoYampi, setPixRecuperacaoYampi] = useState<PixRecuperacaoYampiRow | null>(null);
   const [yampiUpsellMetrics, setYampiUpsellMetrics] = useState<YampiUpsellMetricsRow | null>(null);
   const [yampiUpsellIncrementoMetrics, setYampiUpsellIncrementoMetrics] = useState<YampiUpsellIncrementoRow | null>(null);
   const [entradaValoresUpsellMetrics, setEntradaValoresUpsellMetrics] = useState<EntradaValoresUpsellMetricsRow | null>(null);
   const [topProdutosUpsell, setTopProdutosUpsell] = useState<TopProdutosUpsellRow[]>([]);
   const [custoComercial, setCustoComercial] = useState<number>(0);
+  const [conversaoHoje, setConversaoHoje] = useState<ConversaoLeadsPorResponsavelRow[]>([]);
+  const [conversaoModalOpen, setConversaoModalOpen] = useState(false);
+  const [conversaoMeses, setConversaoMeses] = useState<{ label: string; dados: ConversaoLeadsPorResponsavelRow[] }[]>([]);
+  const [loadingConversaoModal, setLoadingConversaoModal] = useState(false);
   const [loadingPixDashboard, setLoadingPixDashboard] = useState(false);
   const [pixDashboardError, setPixDashboardError] = useState<string | null>(null);
   const [pixDailyChartStyle, setPixDailyChartStyle] = useState<DailyChartStyle>('linha');
   const [carrinhoDailyChartStyle, setCarrinhoDailyChartStyle] = useState<DailyChartStyle>('linha');
   const [whatsappDailyChartStyle, setWhatsappDailyChartStyle] = useState<DailyChartStyle>('linha');
-  const [dashboardDateStart, setDashboardDateStart] = useState<string>(() => format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [dashboardDateStart, setDashboardDateStart] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [dashboardDateEnd, setDashboardDateEnd] = useState<string>(() => format(new Date(), 'yyyy-MM-dd'));
   const [dashboardPickerOpen, setDashboardPickerOpen] = useState(false);
-  const [dashboardTempStartDate, setDashboardTempStartDate] = useState<Date | null>(() => startOfMonth(new Date()));
+  const [dashboardTempStartDate, setDashboardTempStartDate] = useState<Date | null>(() => new Date());
   const [dashboardTempEndDate, setDashboardTempEndDate] = useState<Date | null>(() => new Date());
   const [dashboardHoverDate, setDashboardHoverDate] = useState<Date | null>(null);
   const [dashboardCalendarMonth, setDashboardCalendarMonth] = useState<number>(() => new Date().getMonth());
   const [dashboardCalendarYear, setDashboardCalendarYear] = useState<number>(() => new Date().getFullYear());
   const [dashboardRangeApplied, setDashboardRangeApplied] = useState<{ start: string; end: string }>(() => ({
-    start: format(startOfMonth(new Date()), 'yyyy-MM-dd'),
+    start: format(new Date(), 'yyyy-MM-dd'),
     end: format(new Date(), 'yyyy-MM-dd'),
   }));
+
+  const [dashboardSections, setDashboardSections] = useState<Record<string, boolean>>(() => {
+    const defaults = { painelHero: true, upsellYampi: true, recPix: true, recCarrinho: true, whatsappRedes: true, typebots: true, comparativoLeads: true, spreadFrete: true };
+    try {
+      const saved = localStorage.getItem('dashboardComercialSections');
+      return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+    } catch {
+      return defaults;
+    }
+  });
+
+  // ordem de cada seção (id → ordem); id=1 (painelHero) é sempre o primeiro
+  const [sectionOrdemMap, setSectionOrdemMap] = useState<Record<number, number>>(
+    () => Object.fromEntries(Object.keys(DB_SECTION_MAP).map(id => [Number(id), Number(id)]))
+  );
+
+  useEffect(() => {
+    // Carrega estado inicial das seções
+    supabase
+      .from('secoes_dashboard_comercial')
+      .select('id, visivel, ordem')
+      .then(({ data, error }) => {
+        if (error || !data) return;
+        setDashboardSections(prev => {
+          const updated = { ...prev };
+          for (const row of data) {
+            const key = DB_SECTION_MAP[row.id as number];
+            if (key !== undefined) updated[key] = (row as any).visivel ?? true;
+          }
+          localStorage.setItem('dashboardComercialSections', JSON.stringify(updated));
+          return updated;
+        });
+        setSectionOrdemMap(prev => {
+          const updated = { ...prev };
+          for (const row of data) {
+            if (row.id !== 1 && (row as any).ordem != null) updated[row.id as number] = (row as any).ordem;
+          }
+          return updated;
+        });
+      });
+
+    // Subscription real-time: qualquer UPDATE na tabela reflete imediatamente
+    const channel = supabase
+      .channel('secoes_dashboard_comercial_rt')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'secoes_dashboard_comercial' },
+        (payload) => {
+          const row = payload.new as { id: number; visivel: boolean; ordem?: number };
+          const key = DB_SECTION_MAP[row.id];
+          if (!key) return;
+          setDashboardSections(prev => {
+            const updated = { ...prev, [key]: row.visivel ?? true };
+            localStorage.setItem('dashboardComercialSections', JSON.stringify(updated));
+            return updated;
+          });
+          if (row.id !== 1 && row.ordem != null) {
+            setSectionOrdemMap(prev => ({ ...prev, [row.id]: row.ordem! }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -161,8 +267,10 @@ export function DashboardComercial() {
       setLoadingPixDashboard(true);
       setPixDashboardError(null);
       try {
-        const startDate = new Date(`${dashboardRangeApplied.start}T00:00:00`);
-        const endDate = new Date(`${dashboardRangeApplied.end}T23:59:59.999`);
+        // Usa offset explícito -03:00 (Brasília) para garantir que o intervalo
+        // seja calculado corretamente independentemente do timezone do browser.
+        const startDate = new Date(`${dashboardRangeApplied.start}T00:00:00-03:00`);
+        const endDate   = new Date(`${dashboardRangeApplied.end}T23:59:59.999-03:00`);
         const intervaloDias = Math.max(1, Math.floor((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
         const [
@@ -180,6 +288,8 @@ export function DashboardComercial() {
           { data: entradaValoresUpsellData, error: entradaValoresUpsellError },
           { data: topProdutosData, error: topProdutosError },
           { data: metricasCarrinhoData, error: metricasCarrinhoError },
+          { data: spreadFreteRpcData, error: spreadFreteRpcError },
+          { data: pixRecuperacaoData, error: pixRecuperacaoError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -266,6 +376,17 @@ export function DashboardComercial() {
             p_data_fim: endDate.toISOString(),
             p_timezone: 'America/Sao_Paulo',
           }),
+          (supabase as any).rpc('get_spread_frete', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+          }),
+          (supabase as any).rpc('comercial_get_recuperacao_pix_yampi', {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: 'America/Sao_Paulo',
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -282,6 +403,8 @@ export function DashboardComercial() {
         if (entradaValoresUpsellError) console.warn('[EntradaValores] RPC error:', entradaValoresUpsellError);
         if (topProdutosError) console.warn('[TopProdutos] RPC error:', topProdutosError);
         if (metricasCarrinhoError) throw metricasCarrinhoError;
+        if (spreadFreteRpcError) console.warn('[SpreadFrete] RPC error:', spreadFreteRpcError);
+        if (pixRecuperacaoError) console.warn('[PixRecuperacaoYampi] RPC error:', pixRecuperacaoError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -298,6 +421,16 @@ export function DashboardComercial() {
         setEntradaValoresUpsellMetrics((entradaValoresUpsellData?.[0] || null) as EntradaValoresUpsellMetricsRow | null);
         setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
         setCarrinhoMetrics((metricasCarrinhoData?.[0] || null) as PixMetricsRow | null);
+        setPixRecuperacaoYampi((pixRecuperacaoData?.[0] || null) as PixRecuperacaoYampiRow | null);
+        const _sf = (spreadFreteRpcData as any)?.[0] ?? null;
+        setSpreadFreteData(_sf ? {
+          receitaFrete: Number(_sf.receita_frete),
+          custoFrete: Number(_sf.custo_frete),
+          spreadValor: Number(_sf.spread_valor),
+          spreadPercentual: Number(_sf.spread_percentual),
+          totalPedidosComFrete: Number(_sf.total_pedidos_com_frete),
+          totalPedidosComCusto: Number(_sf.total_pedidos_com_custo ?? 0),
+        } : null);
       } catch (err: any) {
         if (!mounted) return;
         setPixDashboardError(err?.message || String(err));
@@ -309,12 +442,14 @@ export function DashboardComercial() {
         setWhatsappDailySeries([]);
         setPixConvertedByResponsavel([]);
         setCarrinhoConvertedByResponsavel([]);
+        setPixRecuperacaoYampi(null);
         setYampiUpsellMetrics(null);
         setCustoComercial(0);
         setYampiUpsellIncrementoMetrics(null);
         setEntradaValoresUpsellMetrics(null);
         setTopProdutosUpsell([]);
         setCarrinhoMetrics(null);
+        setSpreadFreteData(null);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -326,6 +461,55 @@ export function DashboardComercial() {
       mounted = false;
     };
   }, [empresaId, dashboardRangeApplied]);
+
+  // Carrega conversão de leads por responsável sempre referenciando o dia atual
+  useEffect(() => {
+    if (!empresaId) return;
+    const hoje = new Date();
+    const inicio = new Date(`${format(hoje, 'yyyy-MM-dd')}T00:00:00`);
+    const fim = new Date(`${format(hoje, 'yyyy-MM-dd')}T23:59:59.999`);
+    (supabase as any)
+      .rpc('comercial_get_conversao_leads_por_responsavel', {
+        p_empresa_id: empresaId,
+        p_data_inicio: inicio.toISOString(),
+        p_data_fim: fim.toISOString(),
+        p_timezone: 'America/Sao_Paulo',
+      })
+      .then(({ data, error }: any) => {
+        if (!error && data) setConversaoHoje(data as ConversaoLeadsPorResponsavelRow[]);
+      });
+  }, [empresaId]);
+
+  const handleOpenConversaoModal = async () => {
+    setConversaoModalOpen(true);
+    if (conversaoMeses.length > 0) return;
+    setLoadingConversaoModal(true);
+    try {
+      const results = await Promise.all(
+        Array.from({ length: 6 }, (_, i) => {
+          const date = subMonths(new Date(), i);
+          const inicio = startOfMonth(date);
+          const fim = i === 0
+            ? new Date()
+            : new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+          return (supabase as any)
+            .rpc('comercial_get_conversao_leads_por_responsavel', {
+              p_empresa_id: empresaId ?? null,
+              p_data_inicio: inicio.toISOString(),
+              p_data_fim: fim.toISOString(),
+              p_timezone: 'America/Sao_Paulo',
+            })
+            .then(({ data }: any) => ({
+              label: format(date, 'MMM/yy', { locale: ptBR }),
+              dados: (data || []) as ConversaoLeadsPorResponsavelRow[],
+            }));
+        })
+      );
+      setConversaoMeses(results.reverse());
+    } finally {
+      setLoadingConversaoModal(false);
+    }
+  };
 
   const handleDashboardDateClick = (date: Date) => {
     if (!dashboardTempStartDate || (dashboardTempStartDate && dashboardTempEndDate)) {
@@ -634,6 +818,12 @@ export function DashboardComercial() {
 
                 const taxaUpsell           = Number(yampiUpsellMetrics?.taxa_inclusao_itens_pct ?? 0);
                 const totalPedidosYampi    = Number(yampiUpsellMetrics?.total_pedidos_yampi ?? 0);
+                // Taxa combinada: up-sell (upgrade) + incremento (novo item) + ambos
+                const _pedidosUpsell        = Number(yampiUpsellIncrementoMetrics?.pedidos_com_upsell ?? 0);
+                const _pedidosIncremento    = Number(yampiUpsellIncrementoMetrics?.pedidos_com_incremento ?? 0);
+                const _pedidosAmbos         = Number(yampiUpsellIncrementoMetrics?.pedidos_com_ambos ?? 0);
+                const pedidosComAlteracao   = _pedidosUpsell + _pedidosIncremento + _pedidosAmbos;
+                const taxaUpsellCombinada   = totalPedidosYampi > 0 ? (pedidosComAlteracao / totalPedidosYampi) * 100 : taxaUpsell;
                 // Financeiro de up-sell: apenas quando há upsell real (taxa > 0)
                 const _faturamentoUpsellRaw = Number(entradaValoresUpsellMetrics?.faturamento_acrescido ?? 0);
                 const faturamentoUpsell    = taxaUpsell > 0 ? _faturamentoUpsellRaw : 0;
@@ -652,9 +842,11 @@ export function DashboardComercial() {
                 ].filter(d => d.value > 0);
 
                 return (
-                  <>
-                    {/* ══ PAINEL HERO ═══════════════════════════════════════════ */}
-                    {(() => {
+                  <div className="flex flex-col gap-6">
+                    {/* ══ PAINEL HERO — sempre primeiro (order 0) ═══════════════ */}
+                    {dashboardSections.painelHero && (
+                      <div style={{ order: 0 }}>
+                      {(() => {
                       // ROI real: receita incremental ÷ custo proporcional ao período
                       // Rateio: custo mensal / dias do mês * dias do intervalo aplicado
                       const _inicio = parseISO(`${dashboardRangeApplied.start}T00:00:00`);
@@ -849,6 +1041,8 @@ export function DashboardComercial() {
                         </div>
                       );
                     })()}
+                      </div>
+                    )}
 
                     {/* ── RESUMO RECUPERAÇÃO: removido – mantido apenas o formato compacto abaixo ── */}
                     {false && (() => {
@@ -1145,7 +1339,9 @@ export function DashboardComercial() {
                     })()}
 
                     {/* ── UPSELL YAMPI ─────────────────────────────────────────── */}
-                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5">
+                    {dashboardSections.upsellYampi && (
+                      <div style={{ order: sectionOrdemMap[2] ?? 2 }}>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-5">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200 mb-4">Upsell Yampi</p>
 
                       <div className="flex gap-4 items-stretch">
@@ -1157,8 +1353,8 @@ export function DashboardComercial() {
                           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Taxa Upsell</p>
-                              <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsell)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{yampiUpsellMetrics?.pedidos_com_inclusao_itens ?? 0} de {totalPedidosYampi} pedidos</p>
+                              <p className="text-2xl font-bold text-white">{formatPercent(taxaUpsellCombinada)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{pedidosComAlteracao} de {totalPedidosYampi} pedidos</p>
                             </div>
                             <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Ticket Médio Upsell</p>
@@ -1168,7 +1364,7 @@ export function DashboardComercial() {
                             <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
                               <p className="text-[11px] text-custom-200 uppercase tracking-wide">Faturamento Upsell</p>
                               <p className="text-2xl font-bold text-white">{formatCurrency(faturamentoUpsell)}</p>
-                              <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsell)} × {formatCurrency(ticketUpsell)}</p>
+                              <p className="text-[12px] text-custom-200 mt-0.5">{totalPedidosYampi} × {formatPercent(taxaUpsellCombinada)} × {formatCurrency(ticketUpsell)}</p>
                             </div>
                           </div>
 
@@ -1250,19 +1446,20 @@ export function DashboardComercial() {
 
                       </div>
                     </div>
+                      </div>
+                    )}
 
                     {/* ── REC PIX: linha 5 cards ───────────────────────────────── */}
-                    {(() => {
-                      const _pixTotal   = Number(pixMetrics?.total_periodo ?? 0);
-                      const _pixRec2Raw = Number(pixMetrics?.total_vendidos_periodo ?? 0);
-                      // Se total_vendidos retornou 0 mas há faturamento, derivar qtd de pedidos pelo faturamento/ticket
-                      const _pixRec2    = _pixRec2Raw > 0
-                        ? _pixRec2Raw
-                        : (faturamentoPix > 0 && ticketPix > 0 ? Math.round(faturamentoPix / ticketPix) : 0);
+                    {dashboardSections.recPix && (
+                      <div style={{ order: sectionOrdemMap[3] ?? 3 }}>
+                      {(() => {
+                      const _pixTotal          = Number(pixRecuperacaoYampi?.total_leads ?? pixMetrics?.total_periodo ?? 0);
+                      // Recuperados: via id_yampi → pedidos.id_externo (function comercial_get_recuperacao_pix_yampi)
+                      const _pixRec2           = Number(pixRecuperacaoYampi?.total_recuperados ?? 0);
+                      const _faturamentoPixRec = Number(pixRecuperacaoYampi?.valor_total_recuperado ?? 0);
+                      const _ticketPixRec      = Number(pixRecuperacaoYampi?.ticket_medio_recuperado ?? 0);
                       // Taxa efetiva de recuperação PIX
-                      const _taxaPixEff = taxaPix > 0
-                        ? taxaPix
-                        : (_pixTotal > 0 && _pixRec2 > 0 ? (_pixRec2 / _pixTotal) * 100 : 0);
+                      const _taxaPixEff        = Number(pixRecuperacaoYampi?.taxa_recuperacao_pct ?? 0);
                       return (
                         <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                           <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC PIX</p>
@@ -1304,7 +1501,7 @@ export function DashboardComercial() {
                               </span>
                               <div className="min-w-0">
                                 <p className="text-[12px] text-custom-200 leading-tight">Ticket Médio</p>
-                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(ticketPix)}</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(_ticketPixRec)}</p>
                               </div>
                             </div>
                             {/* Faturamento Rec Pix */}
@@ -1314,16 +1511,20 @@ export function DashboardComercial() {
                               </span>
                               <div className="min-w-0">
                                 <p className="text-[12px] text-custom-200 leading-tight">Faturamento Rec Pix</p>
-                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(faturamentoPix)}</p>
+                                <p className="text-xl font-bold text-white leading-tight">{formatCurrency(_faturamentoPixRec)}</p>
                               </div>
                             </div>
                           </div>
                         </div>
                       );
                     })()}
+                      </div>
+                    )}
 
                     {/* ── REC CARRINHO: linha 5 cards ──────────────────────────── */}
-                    <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                    {dashboardSections.recCarrinho && (
+                      <div style={{ order: sectionOrdemMap[6] ?? 6 }}>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
                       <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">REC CARRINHO</p>
                       <div className="grid grid-cols-2 xl:grid-cols-5 gap-3">
                         {/* Carrinhos Abandonados */}
@@ -1378,9 +1579,13 @@ export function DashboardComercial() {
                         </div>
                       </div>
                     </div>
+                      </div>
+                    )}
 
                     {/* ── WHATSAPP + REDES SOCIAIS: linha 5 cards ──────────────── */}
-                    {(() => {
+                    {dashboardSections.whatsappRedes && (
+                      <div style={{ order: sectionOrdemMap[4] ?? 4 }}>
+                      {(() => {
                       const _leadsS2   = Number(whatsappMetrics?.total_periodo ?? 0);
                       const _vendS2    = Number(whatsappMetrics?.total_vendidos_periodo ?? 0);
                       const recPorLead = _leadsS2 > 0 ? faturamentoSocial / _leadsS2 : 0;
@@ -1442,9 +1647,217 @@ export function DashboardComercial() {
                         </div>
                       );
                     })()}
+                      </div>
+                    )}
+
+                    {/* ── CONVERSÃO DE LEADS POR RESPONSÁVEL (hoje) ────────────── */}
+                    {dashboardSections.comparativoLeads && (
+                      <div style={{ order: sectionOrdemMap[7] ?? 7 }}>
+                      {(() => {
+                      const hoje = format(new Date(), "dd 'de' MMMM 'de' yyyy", { locale: ptBR });
+                      // Coleta todos os responsáveis únicos para construir cabeçalho do modal
+                      const allResp = Array.from(
+                        new Map(
+                          conversaoMeses
+                            .flatMap(m => m.dados)
+                            .map(r => [r.responsavel_nome, r])
+                        ).values()
+                      ).map(r => r.responsavel_nome);
+
+                      return (
+                        <>
+                          {/* Seção principal — dados de hoje */}
+                          <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">CONVERSÃO DE LEADS POR RESPONSÁVEL</p>
+                                <span className="text-[10px] text-white/50">— hoje, {hoje}</span>
+                              </div>
+                              <button
+                                onClick={handleOpenConversaoModal}
+                                title="Ver comparativo mensal"
+                                className="flex items-center justify-center h-7 w-7 rounded-full bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/40 transition-colors"
+                              >
+                                <AlertCircle className="h-4 w-4 text-amber-400" />
+                              </button>
+                            </div>
+
+                            {conversaoHoje.length === 0 ? (
+                              <p className="text-sm text-white/50">Nenhum lead registrado hoje.</p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                                {conversaoHoje.map((r) => {
+                                  const pct = Number(r.taxa_conversao_pct);
+                                  const cor = pct >= 50 ? 'text-emerald-400' : pct >= 25 ? 'text-amber-400' : 'text-red-400';
+                                  const bgBarra = pct >= 50 ? 'bg-emerald-500' : pct >= 25 ? 'bg-amber-500' : 'bg-red-500';
+                                  return (
+                                    <div key={r.responsavel_id ?? r.responsavel_nome} className="rounded-xl bg-custom-700/50 border border-custom-600 px-4 py-3 space-y-2">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="flex items-center justify-center h-8 w-8 rounded-full bg-primary/20 flex-shrink-0">
+                                          <Users className="h-4 w-4 text-primary" />
+                                        </span>
+                                        <p className="flex-1 text-[13px] font-semibold text-white truncate">{r.responsavel_nome}</p>
+                                        <span className={`text-lg font-bold flex-shrink-0 ${cor}`}>{pct.toFixed(1)}%</span>
+                                      </div>
+                                      {/* Barra de progresso */}
+                                      <div className="w-full bg-custom-600 rounded-full h-1.5">
+                                        <div className={`${bgBarra} h-1.5 rounded-full transition-all`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                                      </div>
+                                      <div className="flex justify-between text-[11px] text-white/60">
+                                        <span>{r.total_convertidos} conv. / {r.total_leads} leads</span>
+                                        <span>{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Number(r.valor_total_convertido))}</span>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Modal — comparativo mensal */}
+                          <Dialog open={conversaoModalOpen} onOpenChange={setConversaoModalOpen}>
+                            <DialogContent className="max-w-5xl w-full bg-custom-800 border-custom-600 text-white">
+                              <DialogHeader>
+                                <DialogTitle className="text-white flex items-center gap-2">
+                                  <TrendingUp className="h-5 w-5 text-primary" />
+                                  Comparativo de Conversão por Responsável — Últimos 6 meses
+                                </DialogTitle>
+                              </DialogHeader>
+
+                              {loadingConversaoModal ? (
+                                <p className="text-sm text-white/50 py-6 text-center">Carregando dados mensais...</p>
+                              ) : conversaoMeses.length === 0 ? (
+                                <p className="text-sm text-white/50 py-6 text-center">Sem dados disponíveis.</p>
+                              ) : (() => {
+                                // Coleta responsáveis únicos em ordem decrescente de taxa no mês atual
+                                const mesAtual = conversaoMeses[conversaoMeses.length - 1];
+                                const respUnicos = Array.from(
+                                  new Map(
+                                    conversaoMeses
+                                      .flatMap(m => m.dados)
+                                      .map(r => [r.responsavel_nome, r.responsavel_nome])
+                                  ).keys()
+                                ).sort((a, b) => {
+                                  const tA = mesAtual.dados.find(r => r.responsavel_nome === a)?.taxa_conversao_pct ?? 0;
+                                  const tB = mesAtual.dados.find(r => r.responsavel_nome === b)?.taxa_conversao_pct ?? 0;
+                                  return Number(tB) - Number(tA);
+                                });
+
+                                return (
+                                  <div className="overflow-x-auto">
+                                    <table className="w-full text-sm border-collapse">
+                                      <thead>
+                                        <tr className="border-b border-custom-600">
+                                          <th className="text-left py-2 px-3 text-white/70 font-semibold min-w-[140px]">Responsável</th>
+                                          {conversaoMeses.map(m => (
+                                            <th key={m.label} className="text-center py-2 px-3 text-white/70 font-semibold capitalize min-w-[90px]">{m.label}</th>
+                                          ))}
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {respUnicos.map((nome) => (
+                                          <tr key={nome} className="border-b border-custom-700/50 hover:bg-custom-700/30 transition-colors">
+                                            <td className="py-2 px-3 text-white font-medium">{nome}</td>
+                                            {conversaoMeses.map(m => {
+                                              const dado = m.dados.find(r => r.responsavel_nome === nome);
+                                              const pct = dado ? Number(dado.taxa_conversao_pct) : null;
+                                              const conv = dado?.total_convertidos ?? 0;
+                                              const total = dado?.total_leads ?? 0;
+                                              const cor = pct === null ? 'text-white/30'
+                                                : pct >= 50 ? 'text-emerald-400'
+                                                : pct >= 25 ? 'text-amber-400'
+                                                : 'text-red-400';
+                                              return (
+                                                <td key={m.label} className="py-2 px-3 text-center">
+                                                  {pct === null ? (
+                                                    <span className="text-white/30 text-xs">—</span>
+                                                  ) : (
+                                                    <div>
+                                                      <span className={`font-bold ${cor}`}>{pct.toFixed(1)}%</span>
+                                                      <p className="text-[10px] text-white/50">{conv}/{total}</p>
+                                                    </div>
+                                                  )}
+                                                </td>
+                                              );
+                                            })}
+                                          </tr>
+                                        ))}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                );
+                              })()}
+                            </DialogContent>
+                          </Dialog>
+                        </>
+                      );
+                    })()}
+                      </div>
+                    )}
+
+                    {/* ── SPREAD DE FRETE ─────────────────────────────────────── */}
+                    {dashboardSections.spreadFrete && spreadFreteData && (
+                      <div style={{ order: sectionOrdemMap[8] ?? 8 }}>
+                      <div className="rounded-xl bg-custom-800 border-2 border-custom-600 p-4 space-y-3">
+                        <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Spread de Frete</p>
+                        <div className="grid grid-cols-2 xl:grid-cols-4 gap-3">
+                          {/* Receita de Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <Truck className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Receita de Frete</p>
+                              <p className="text-xl font-bold text-white leading-tight">{formatCurrency(spreadFreteData.receitaFrete)}</p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">{spreadFreteData.totalPedidosComFrete} pedidos com frete</p>
+                            </div>
+                          </div>
+                          {/* Custo de Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <TrendingDown className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Custo de Frete</p>
+                              <p className="text-xl font-bold text-white leading-tight">{formatCurrency(spreadFreteData.custoFrete)}</p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">{spreadFreteData.totalPedidosComCusto} pedidos via MelhorEnvio</p>
+                            </div>
+                          </div>
+                          {/* Resultado do Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <TrendingUp className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Resultado do Frete</p>
+                              <p className={`text-xl font-bold leading-tight ${spreadFreteData.spreadValor >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {formatCurrency(spreadFreteData.spreadValor)}
+                              </p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">Frete cobrado menos frete pago</p>
+                            </div>
+                          </div>
+                          {/* Margem de Frete */}
+                          <div className="rounded-xl bg-custom-800 border border-custom-600 px-4 py-3 flex items-start gap-3">
+                            <span className="flex items-center justify-center h-9 w-9 rounded-full bg-primary/20 flex-shrink-0 mt-0.5">
+                              <BarChart3 className="h-4 w-4 text-primary" />
+                            </span>
+                            <div className="min-w-0">
+                              <p className="text-[12px] text-white leading-tight">Margem de Frete</p>
+                              <p className={`text-xl font-bold leading-tight ${spreadFreteData.spreadPercentual >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                {spreadFreteData.spreadPercentual.toFixed(1)}%
+                              </p>
+                              <p className="text-[11px] text-custom-200 mt-0.5">Spread sobre a receita de frete</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      </div>
+                    )}
 
                     {/* ── TYPEBOTS (dinâmico) ───────────────────────────────────── */}
-                    {typebotsMetrics.length > 0 && typebotsMetrics.map((tbMetric) => {
+                    {dashboardSections.typebots && typebotsMetrics.length > 0 && (
+                      <div style={{ order: sectionOrdemMap[5] ?? 5 }}>
+                      {typebotsMetrics.map((tbMetric) => {
                       const leadsTypeBot = Number(tbMetric.total_periodo ?? 0);
                       const vendidosTypeBot = Number(tbMetric.total_vendidos_periodo ?? 0);
                       const taxaTypeBot = Number(tbMetric.taxa_conversao_periodo ?? 0);
@@ -1526,7 +1939,9 @@ export function DashboardComercial() {
                         </div>
                       );
                     })}
-                  </>
+                      </div>
+                    )}
+                  </div>
                 );
               })()}
             </>

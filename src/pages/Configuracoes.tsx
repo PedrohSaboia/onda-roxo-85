@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, Fragment } from 'react';
-import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, CreditCard, AlertCircle, History } from 'lucide-react';
+import { Settings, Users, Tag, Palette, Building, Lock, Trash, GripVertical, Plus, ChevronDown, ChevronUp, CreditCard, AlertCircle, History, BarChart3, Eye, EyeOff, Truck } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -215,13 +215,161 @@ function HistoricoTab() {
   );
 }
 
+const DASHBOARD_COMERCIAL_SECTIONS_KEY = 'dashboardComercialSections';
+
+const defaultDashboardSections = {
+  painelHero: true,
+  upsellYampi: true,
+  recPix: true,
+  recCarrinho: true,
+  whatsappRedes: true,
+  typebots: true,
+  comparativoLeads: true,
+  spreadFrete: true,
+};
+
+// Mapeamento entre chave local e id na tabela secoes_dashboard_comercial
+const SECTION_DB_IDS: Partial<Record<keyof typeof defaultDashboardSections, number>> = {
+  painelHero: 1,
+  upsellYampi: 2,
+  recPix: 3,
+  whatsappRedes: 4,
+  typebots: 5,
+  recCarrinho: 6,
+  comparativoLeads: 7,
+  spreadFrete: 8,
+};
+
+// Configuração descritiva de cada seção (usada no render)
+const SECTION_CONFIG: { key: keyof typeof defaultDashboardSections; dbId: number; label: string; desc: string; fixedFirst?: boolean }[] = [
+  { key: 'painelHero',       dbId: 1, label: 'Painel Hero',              desc: 'Resumo geral: faturamento total, participação comercial e receita incremental por origem', fixedFirst: true },
+  { key: 'upsellYampi',     dbId: 2, label: 'Upsell Yampi',             desc: 'Taxa de upsell, ticket médio, top produtos e detalhamento de incremento por pedido' },
+  { key: 'recPix',          dbId: 3, label: 'Recuperação PIX',          desc: 'Cards com PIX cancelados, recuperados, taxa de recuperação, ticket médio e faturamento' },
+  { key: 'whatsappRedes',   dbId: 4, label: 'WhatsApp + Redes Sociais', desc: 'Leads captados, taxa de conversão, ticket médio, faturamento e receita por lead' },
+  { key: 'typebots',        dbId: 5, label: 'Typebots',                 desc: 'Métricas individuais por typebot: leads, taxa de conversão, ticket médio e faturamento' },
+  { key: 'recCarrinho',     dbId: 6, label: 'Recuperação Carrinho',     desc: 'Carrinhos abandonados, recuperados, taxa de recuperação, ticket médio e faturamento' },
+  { key: 'comparativoLeads',dbId: 7, label: 'Comparativo Leads',        desc: 'Conversão de leads por responsável no dia atual, com comparativo mensal' },
+  { key: 'spreadFrete',     dbId: 8, label: 'Spread de Frete',          desc: 'Receita de frete, custo via MelhorEnvio, resultado e margem percentual de frete' },
+];
+
 export function Configuracoes() {
+  const { toast } = useToast();
+
   const [darkMode, setDarkMode] = useState(() => {
     // Load dark mode preference from localStorage
     const stored = localStorage.getItem('darkMode');
     return stored === 'true';
   });
-  const { toast } = useToast();
+
+  const [dashboardSections, setDashboardSections] = useState<typeof defaultDashboardSections>(() => {
+    try {
+      const saved = localStorage.getItem(DASHBOARD_COMERCIAL_SECTIONS_KEY);
+      return saved ? { ...defaultDashboardSections, ...JSON.parse(saved) } : defaultDashboardSections;
+    } catch {
+      return defaultDashboardSections;
+    }
+  });
+  const [loadingDashboardSections, setLoadingDashboardSections] = useState(false);
+  // ordem de cada seção (id → valor da coluna `ordem`)
+  const [sectionOrdems, setSectionOrdems] = useState<Record<number, number>>(
+    () => Object.fromEntries(SECTION_CONFIG.map(s => [s.dbId, s.dbId]))
+  );
+
+  const fetchDashboardSectionsFromDB = async () => {
+    setLoadingDashboardSections(true);
+    try {
+      const { data, error } = await supabase
+        .from('secoes_dashboard_comercial')
+        .select('id, visivel, ordem');
+      if (error) throw error;
+      if (!data) return;
+      const updated = { ...defaultDashboardSections };
+      const newOrdems: Record<number, number> = {};
+      for (const row of data) {
+        const entry = Object.entries(SECTION_DB_IDS).find(([, dbId]) => dbId === row.id);
+        if (entry) {
+          updated[entry[0] as keyof typeof defaultDashboardSections] = (row as any).visivel ?? true;
+        }
+        if ((row as any).ordem != null) newOrdems[row.id as number] = (row as any).ordem;
+      }
+      setDashboardSections(updated);
+      setSectionOrdems(prev => ({ ...prev, ...newOrdems }));
+      localStorage.setItem(DASHBOARD_COMERCIAL_SECTIONS_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.error('Erro ao buscar seções do dashboard:', err);
+    } finally {
+      setLoadingDashboardSections(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardSectionsFromDB();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggleDashboardSection = async (key: keyof typeof defaultDashboardSections) => {
+    const newValue = !dashboardSections[key];
+
+    // 1. Atualiza o front-end imediatamente
+    setDashboardSections(prev => {
+      const updated = { ...prev, [key]: newValue };
+      localStorage.setItem(DASHBOARD_COMERCIAL_SECTIONS_KEY, JSON.stringify(updated));
+      return updated;
+    });
+
+    // 2. Persiste no banco
+    const dbId = SECTION_DB_IDS[key];
+    if (dbId === undefined) return;
+
+    const { error } = await supabase
+      .from('secoes_dashboard_comercial')
+      .update({ visivel: newValue })
+      .eq('id', dbId);
+
+    if (error) {
+      console.error('Erro ao atualizar seção no banco:', error);
+      // Apenas informa o erro — NÃO reverte o estado para não travar a UI
+      toast({
+        title: 'Erro ao salvar no banco',
+        description: `Não foi possível persistir a alteração (${error.message})`,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const moveSectionOrdem = async (dbId: number, direction: 'up' | 'down') => {
+    // Pega só seções não fixas, sorted pela ordem atual
+    const sortable = SECTION_CONFIG
+      .filter(s => !s.fixedFirst)
+      .slice()
+      .sort((a, b) => (sectionOrdems[a.dbId] ?? a.dbId) - (sectionOrdems[b.dbId] ?? b.dbId));
+
+    const idx = sortable.findIndex(s => s.dbId === dbId);
+    if (idx === -1) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sortable.length) return;
+
+    const sA = sortable[idx];
+    const sB = sortable[swapIdx];
+    const ordemA = sectionOrdems[sA.dbId] ?? sA.dbId;
+    const ordemB = sectionOrdems[sB.dbId] ?? sB.dbId;
+
+    // Atualiza localmente de imediato
+    setSectionOrdems(prev => ({ ...prev, [sA.dbId]: ordemB, [sB.dbId]: ordemA }));
+
+    // Persiste no banco
+    const [r1, r2] = await Promise.all([
+      (supabase as any).from('secoes_dashboard_comercial').update({ ordem: ordemB }).eq('id', sA.dbId),
+      (supabase as any).from('secoes_dashboard_comercial').update({ ordem: ordemA }).eq('id', sB.dbId),
+    ]);
+    if (r1.error || r2.error) {
+      console.error('Erro ao atualizar ordem:', r1.error || r2.error);
+      // Reverte
+      setSectionOrdems(prev => ({ ...prev, [sA.dbId]: ordemA, [sB.dbId]: ordemB }));
+      toast({ title: 'Erro ao salvar ordem', variant: 'destructive' });
+    }
+  };
+
   const { empresaId, user: currentUser, permissoes, hasPermissao, isLoading } = useAuth();
 
   // permissões por usuário (dialog)
@@ -1018,7 +1166,7 @@ export function Configuracoes() {
       </div>
 
       <Tabs defaultValue="usuarios" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="usuarios">
             <Users className="h-4 w-4 mr-2" />
             Usuários
@@ -1043,6 +1191,10 @@ export function Configuracoes() {
           <TabsTrigger value="preferencias">
             <Palette className="h-4 w-4 mr-2" />
             Preferências
+          </TabsTrigger>
+          <TabsTrigger value="dashboard-comercial">
+            <BarChart3 className="h-4 w-4 mr-2" />
+            Dashboard Comercial
           </TabsTrigger>
         </TabsList>
 
@@ -2539,6 +2691,103 @@ export function Configuracoes() {
               </Card>
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="dashboard-comercial">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5" />
+                Personalizar Dashboard Comercial
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Ative ou desative seções e arranje a ordem de exibição. O Painel Hero é sempre o primeiro e não pode ser movido.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {loadingDashboardSections ? (
+                <p className="text-sm text-muted-foreground py-4">Carregando...</p>
+              ) : (() => {
+                // Separa hero (fixo) das demais ordenadas
+                const hero = SECTION_CONFIG.find(s => s.fixedFirst)!;
+                const sortable = SECTION_CONFIG
+                  .filter(s => !s.fixedFirst)
+                  .slice()
+                  .sort((a, b) => (sectionOrdems[a.dbId] ?? a.dbId) - (sectionOrdems[b.dbId] ?? b.dbId));
+                const all = [hero, ...sortable];
+                return (
+                  <div className="space-y-3">
+                    {all.map((section, idx) => {
+                      const isFirst = idx === 0; // painelHero
+                      const sortableIdx = isFirst ? -1 : sortable.findIndex(s => s.dbId === section.dbId);
+                      const canMoveUp   = !isFirst && sortableIdx > 0;
+                      const canMoveDown = !isFirst && sortableIdx < sortable.length - 1;
+                      return (
+                        <div key={section.dbId} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div className="flex items-center gap-3">
+                            {/* Botões de ordem */}
+                            {!isFirst ? (
+                              <div className="flex flex-col gap-0.5">
+                                <button
+                                  type="button"
+                                  disabled={!canMoveUp}
+                                  onClick={() => moveSectionOrdem(section.dbId, 'up')}
+                                  className={`rounded p-0.5 transition-colors ${canMoveUp ? 'hover:bg-muted text-foreground' : 'text-muted-foreground/30 cursor-not-allowed'}`}
+                                  title="Mover para cima"
+                                >
+                                  <ChevronUp className="h-4 w-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={!canMoveDown}
+                                  onClick={() => moveSectionOrdem(section.dbId, 'down')}
+                                  className={`rounded p-0.5 transition-colors ${canMoveDown ? 'hover:bg-muted text-foreground' : 'text-muted-foreground/30 cursor-not-allowed'}`}
+                                  title="Mover para baixo"
+                                >
+                                  <ChevronDown className="h-4 w-4" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="w-[22px]" />
+                            )}
+                            <div className={`flex items-center justify-center h-9 w-9 rounded-full ${
+                              dashboardSections[section.key] ? 'bg-custom-600' : 'bg-muted'
+                            }`}>
+                              {section.dbId === 8 ? (
+                                <Truck className={`h-4 w-4 ${dashboardSections[section.key] ? 'text-white' : 'text-muted-foreground'}`} />
+                              ) : (
+                                <BarChart3 className={`h-4 w-4 ${dashboardSections[section.key] ? 'text-white' : 'text-muted-foreground'}`} />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <p className="font-medium text-sm">{section.label}</p>
+                                {isFirst && (
+                                  <span className="text-[10px] bg-muted text-muted-foreground px-1.5 py-0.5 rounded font-medium uppercase tracking-wide">fixo</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-muted-foreground">{section.desc}</p>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {dashboardSections[section.key] ? (
+                              <Eye className="h-4 w-4 text-custom-600" />
+                            ) : (
+                              <EyeOff className="h-4 w-4 text-muted-foreground" />
+                            )}
+                            <Switch
+                              checked={dashboardSections[section.key]}
+                              onCheckedChange={() => toggleDashboardSection(section.key)}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* Edit Empresa Dialog */}

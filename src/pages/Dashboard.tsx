@@ -1,4 +1,6 @@
-import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Package, TrendingUp, Users, Truck, Calendar as CalendarIcon, DollarSign, ShoppingCart, TrendingDown, BarChart3, AlertCircle, ChevronDown, ChevronLeft, ChevronRight, List, BookOpen, Loader2, Eye } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { MetricCard } from '@/components/dashboard/MetricCard';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -25,7 +27,10 @@ interface DashboardMetrics {
   vendasTotal: number;
   ticketMedio: number;
   pedidosHoje: number;
+  pedidosMesAtual: number;
   pedidosEnviados: number;
+  pedidosEnviadosHoje: number;
+  pedidosEnviadosMesAtual: number;
   topProdutos: { nome: string; quantidade: number; receita: number; img_url: string | null }[];
   produtosMaiorTicket: { nome: string; quantidade: number; ticketMedio: number; receita: number; img_url: string | null }[];
   vendasPorPlataforma: { nome: string; total: number; pedidos: number; cor: string }[];
@@ -35,6 +40,7 @@ interface DashboardMetrics {
   enviosPorPlataforma: { nome: string; quantidade: number; cor: string }[];
   enviosPorDia: { data: string; quantidade: number }[];
   isPeriodoCurto: boolean;
+  spreadFrete: { receitaFrete: number; custoFrete: number; spreadValor: number; spreadPercentual: number; totalPedidosComFrete: number; idsReceitaFrete: string[]; idsCustoFrete: string[] } | null;
 }
 
 export function Dashboard() {
@@ -48,6 +54,33 @@ export function Dashboard() {
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const [pedidosModal, setPedidosModal] = useState<{
+    open: boolean;
+    loading: boolean;
+    data: Array<{
+      id: string;
+      id_externo: string | null;
+      criado_em: string;
+      valor_total: number;
+      plataforma: string;
+      plataformaCor: string;
+      status: string;
+      statusCor: string;
+      itens: Array<{ nome: string; quantidade: number; img_url: string | null }>;
+      temLivraria: boolean;
+    }>;
+  }>({ open: false, loading: false, data: [] });
+  const [freteModal, setFreteModal] = useState<{
+    open: boolean;
+    loading: boolean;
+    data: Array<{
+      id_externo: string;
+      receita: number;
+      custo: number;
+      margem: number;
+      margemPct: number;
+    }>;
+  }>({ open: false, loading: false, data: [] });
   const [tempStartDate, setTempStartDate] = useState<Date | null>(null);
   const [tempEndDate, setTempEndDate] = useState<Date | null>(null);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
@@ -59,7 +92,7 @@ export function Dashboard() {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
-    
+    //aa
     abortControllerRef.current = new AbortController();
     const signal = abortControllerRef.current.signal;
     
@@ -80,6 +113,7 @@ export function Dashboard() {
         `)
         .gte('criado_em', startISO)
         .lte('criado_em', endISO)
+        .or('duplicata.is.null,duplicata.eq.false')
         .order('criado_em', { ascending: false })
         .abortSignal(signal);
 
@@ -88,26 +122,101 @@ export function Dashboard() {
         throw pedidosError;
       }
       
-      // Buscar pedidos com status "Enviado" atualizados no período
+      // Buscar pedidos enviados no período: detalhes (gráficos) + métricas via RPC (paralelo)
       const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
-      const { data: pedidosEnviadosData, error: pedidosEnviadosError } = await supabase
-        .from('pedidos')
-        .select('id, atualizado_em, plataformas(nome, cor)')
-        .eq('status_id', ENVIADO_STATUS_ID)
-        .gte('atualizado_em', startISO)
-        .lte('atualizado_em', endISO)
-        .abortSignal(signal);
+      const [
+        { data: pedidosEnviadosData, error: pedidosEnviadosError },
+        { data: metricasEnviadosRpc, error: metricasEnviadosError },
+        { data: metricasTotalRpc, error: metricasTotalError },
+        { data: vendasPlataformaRpc, error: vendasPlataformaError },
+        { data: enviosPlataformaRpc, error: enviosPlataformaError },
+        { data: pedidosStatusRpc, error: pedidosStatusError },
+        { data: topProdutosRpc, error: topProdutosError },
+        { data: maiorTicketRpc, error: maiorTicketError },
+        { data: spreadFreteRpc, error: spreadFreteError },
+      ] =
+        await Promise.all([
+          supabase
+            .from('pedidos')
+            .select('id, atualizado_em, plataformas(nome, cor)')
+            .eq('status_id', ENVIADO_STATUS_ID)
+            .gte('atualizado_em', startISO)
+            .lte('atualizado_em', endISO)
+            .or('duplicata.is.null,duplicata.eq.false')
+            .abortSignal(signal),
+          (supabase as any).rpc('get_metricas_enviados', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_total_pedidos', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_vendas_por_plataforma', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_envios_por_plataforma', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_pedidos_por_status', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_top_produtos_mais_vendidos', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_top_produtos_maior_ticket', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+          (supabase as any).rpc('get_spread_frete', {
+            p_data_inicio: startISO,
+            p_data_fim: endISO,
+          }),
+        ]);
 
       if (pedidosEnviadosError) {
-        if (pedidosEnviadosError.message.includes('aborted')) return;
+        if (pedidosEnviadosError.message?.includes('aborted')) return;
         throw pedidosEnviadosError;
       }
-      
+      if (metricasEnviadosError) {
+        console.warn('[get_metricas_enviados] RPC error:', metricasEnviadosError);
+      }
+      if (metricasTotalError) {
+        console.warn('[get_total_pedidos] RPC error:', metricasTotalError);
+      }
+      if (vendasPlataformaError) {
+        console.warn('[get_vendas_por_plataforma] RPC error:', vendasPlataformaError);
+      }
+      if (enviosPlataformaError) {
+        console.warn('[get_envios_por_plataforma] RPC error:', enviosPlataformaError);
+      }
+      if (pedidosStatusError) {
+        console.warn('[get_pedidos_por_status] RPC error:', pedidosStatusError);
+      }
+      if (topProdutosError) {
+        console.warn('[get_top_produtos_mais_vendidos] RPC error:', topProdutosError);
+      }
+      if (maiorTicketError) {
+        console.warn('[get_top_produtos_maior_ticket] RPC error:', maiorTicketError);
+      }
+      if (spreadFreteError) {
+        console.warn('[get_spread_frete] RPC error:', spreadFreteError);
+      }
+
       if (signal.aborted) return;
 
         const pedidosData = (pedidos || []) as any[];
         const pedidosEnviadosArray = (pedidosEnviadosData || []) as any[];
-        const pedidosEnviadosCount = pedidosEnviadosArray.length;
+        const rpcEnviados = (metricasEnviadosRpc as any[])?.[0] ?? null;
+        const rpcTotal = (metricasTotalRpc as any[])?.[0] ?? null;
+        const rpcVendasPlataforma = (vendasPlataformaRpc as any[]) ?? null;
+        const rpcEnviosPlataforma = (enviosPlataformaRpc as any[]) ?? null;
+        // Preferir contagem da RPC (exclui duplicatas no banco); fallback para array local
+        const pedidosEnviadosCount = rpcEnviados ? Number(rpcEnviados.total_enviados) : pedidosEnviadosArray.length;
 
         // Calcular envios por plataforma
         const enviosPlataformaMap: Record<string, { quantidade: number; cor: string }> = {};
@@ -119,7 +228,9 @@ export function Dashboard() {
           }
           enviosPlataformaMap[nome].quantidade += 1;
         });
-        const enviosPorPlataforma = Object.entries(enviosPlataformaMap).map(([nome, data]) => ({ nome, ...data }));
+        const enviosPorPlataforma = rpcEnviosPlataforma
+          ? rpcEnviosPlataforma.map((r: any) => ({ nome: r.nome, quantidade: Number(r.quantidade), cor: r.cor || '#cccccc' }))
+          : Object.entries(enviosPlataformaMap).map(([nome, data]) => ({ nome, ...data }));
 
         // Calcular envios por dia
         const enviosPorDiaMap: Record<string, number> = {};
@@ -135,21 +246,40 @@ export function Dashboard() {
           .sort((a, b) => a.data.localeCompare(b.data));
 
         // Calcular métricas
-        const totalPedidos = pedidosData.length;
-        const vendasTotal = pedidosData.reduce((sum, p) => sum + (Number(p.valor_total) || 0), 0);
-        const ticketMedio = totalPedidos > 0 ? vendasTotal / totalPedidos : 0;
+        // Preferir RPC para total_pedidos (exclui duplicatas no banco); fallback para array local
+        const totalPedidos = rpcTotal ? Number(rpcTotal.total_pedidos) : pedidosData.length;
+        const vendasTotal = rpcTotal ? Number(rpcTotal.valor_total) : pedidosData.reduce((sum, p) => sum + (Number(p.valor_total) || 0), 0);
+        const ticketMedio = rpcTotal ? Number(rpcTotal.ticket_medio) : (totalPedidos > 0 ? vendasTotal / totalPedidos : 0);
+        const pedidosHojeRpc = rpcTotal ? Number(rpcTotal.total_hoje) : 0;
+        const pedidosMesAtualRpc = rpcTotal ? Number(rpcTotal.total_mes_atual) : 0;
 
         const hoje = new Date().toDateString();
-        const pedidosHoje = pedidosData.filter(p => new Date(p.criado_em).toDateString() === hoje).length;
+        const pedidosHoje = pedidosHojeRpc || pedidosData.filter(p => new Date(p.criado_em).toDateString() === hoje).length;
 
         // Usar contagem da query separada de pedidos enviados no período
         const pedidosEnviados = pedidosEnviadosCount;
+        const pedidosEnviadosHoje = rpcEnviados ? Number(rpcEnviados.total_hoje) : 0;
+        const pedidosEnviadosMesAtual = rpcEnviados ? Number(rpcEnviados.total_mes_atual) : 0;
 
         // Determinar se é período curto (dia ou semana - até 7 dias)
         const diffDays = Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / (1000 * 3600 * 24)) + 1;
         const isPeriodoCurto = diffDays <= 7;
 
         // Top produtos e produtos com maior ticket médio
+        const rpcTopProdutos = (topProdutosRpc as any[]) ?? null;
+        const rpcMaiorTicket = (maiorTicketRpc as any[]) ?? null;
+        const rpcSpreadFreteData = (spreadFreteRpc as any[])?.[0] ?? null;
+        const spreadFrete = rpcSpreadFreteData ? {
+          receitaFrete: Number(rpcSpreadFreteData.receita_frete),
+          custoFrete: Number(rpcSpreadFreteData.custo_frete),
+          spreadValor: Number(rpcSpreadFreteData.spread_valor),
+          spreadPercentual: Number(rpcSpreadFreteData.spread_percentual),
+          totalPedidosComFrete: Number(rpcSpreadFreteData.total_pedidos_com_frete),
+          totalPedidosComCusto: Number(rpcSpreadFreteData.total_pedidos_com_custo ?? 0),
+          idsReceitaFrete: (rpcSpreadFreteData.ids_receita_frete as string[]) ?? [],
+          idsCustoFrete: (rpcSpreadFreteData.ids_custo_frete as string[]) ?? [],
+        } : null;
+
         const produtosMap: Record<string, { quantidade: number; receita: number; img_url: string | null }> = {};
         pedidosData.forEach(p => {
           (p.itens_pedido || []).forEach((item: any) => {
@@ -167,20 +297,18 @@ export function Dashboard() {
         });
 
         const produtosArray = Object.entries(produtosMap).map(([nome, data]) => ({ nome, ...data }));
-        const topProdutos = produtosArray.sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
+        const topProdutos = rpcTopProdutos
+          ? rpcTopProdutos.map((r: any) => ({ nome: r.nome, quantidade: Number(r.quantidade), receita: Number(r.receita), img_url: r.img_url || null }))
+          : produtosArray.sort((a, b) => b.quantidade - a.quantidade).slice(0, 5);
         
         // Produtos com maior ticket médio
-        const produtosMaiorTicket = produtosArray
-          .filter(p => p.quantidade > 0)
-          .map(p => ({
-            nome: p.nome,
-            quantidade: p.quantidade,
-            receita: p.receita,
-            ticketMedio: p.receita / p.quantidade,
-            img_url: p.img_url
-          }))
-          .sort((a, b) => b.ticketMedio - a.ticketMedio)
-          .slice(0, 5);
+        const produtosMaiorTicket = rpcMaiorTicket
+          ? rpcMaiorTicket.map((r: any) => ({ nome: r.nome, quantidade: Number(r.quantidade), receita: Number(r.receita), ticketMedio: Number(r.ticket_medio), img_url: r.img_url || null }))
+          : produtosArray
+              .filter(p => p.quantidade > 0)
+              .map(p => ({ nome: p.nome, quantidade: p.quantidade, receita: p.receita, ticketMedio: p.receita / p.quantidade, img_url: p.img_url }))
+              .sort((a, b) => b.ticketMedio - a.ticketMedio)
+              .slice(0, 5);
 
         // Vendas por plataforma (total)
         const plataformasMap: Record<string, { total: number; pedidos: number; cor: string }> = {};
@@ -193,7 +321,9 @@ export function Dashboard() {
           plataformasMap[nome].total += Number(p.valor_total) || 0;
           plataformasMap[nome].pedidos += 1;
         });
-        const vendasPorPlataforma = Object.entries(plataformasMap).map(([nome, data]) => ({ nome, ...data }));
+        const vendasPorPlataforma = rpcVendasPlataforma
+          ? rpcVendasPlataforma.map((r: any) => ({ nome: r.nome, total: Number(r.valor_total), pedidos: Number(r.total_pedidos), cor: r.cor || '#cccccc' }))
+          : Object.entries(plataformasMap).map(([nome, data]) => ({ nome, ...data }));
 
         // Vendas por plataforma por período (para período curto)
         let vendasPorPlataformaPorPeriodo: { periodo: string; plataformas: { nome: string; valor: number; cor: string }[] }[] = [];
@@ -219,7 +349,8 @@ export function Dashboard() {
             .sort((a, b) => a.periodo.localeCompare(b.periodo));
         }
 
-        // Vendas por status
+        // Pedidos por status
+        const rpcPedidosStatus = (pedidosStatusRpc as any[]) ?? null;
         const statusMap: Record<string, { pedidos: number; cor: string }> = {};
         pedidosData.forEach(p => {
           const nome = (p.status as any)?.nome || 'Sem Status';
@@ -229,7 +360,9 @@ export function Dashboard() {
           }
           statusMap[nome].pedidos += 1;
         });
-        const vendasPorStatus = Object.entries(statusMap).map(([nome, data]) => ({ nome, ...data }));
+        const vendasPorStatus = rpcPedidosStatus
+          ? rpcPedidosStatus.map((r: any) => ({ nome: r.nome, pedidos: Number(r.pedidos), cor: r.cor || '#cccccc' }))
+          : Object.entries(statusMap).map(([nome, data]) => ({ nome, ...data }));
 
         // Vendas totais por dia (para gráfico de linha)
         const vendasPorDiaMap: Record<string, number> = {};
@@ -249,7 +382,10 @@ export function Dashboard() {
           vendasTotal,
           ticketMedio,
           pedidosHoje,
+          pedidosMesAtual: pedidosMesAtualRpc,
           pedidosEnviados,
+          pedidosEnviadosHoje,
+          pedidosEnviadosMesAtual,
           topProdutos,
           produtosMaiorTicket,
           vendasPorPlataforma,
@@ -259,6 +395,7 @@ export function Dashboard() {
           enviosPorPlataforma,
           enviosPorDia,
           isPeriodoCurto,
+          spreadFrete,
         });
 
       } catch (err: any) {
@@ -300,6 +437,102 @@ export function Dashboard() {
       }
     };
   }, [startDate, endDate, fetchMetrics, hasAccess]);
+
+  const fetchPedidosModal = async () => {
+    setPedidosModal(prev => ({ ...prev, open: true, loading: true }));
+    try {
+      const startISO = new Date(startDate + 'T00:00:00').toISOString();
+      const endISO = new Date(endDate + 'T23:59:59').toISOString();
+      const { data, error } = await (supabase as any)
+        .from('pedidos')
+        .select('id, id_externo, criado_em, valor_total, plataformas(nome, cor), status(nome, cor_hex), itens_pedido(quantidade, produto:produtos(nome, img_url))')
+        .gte('criado_em', startISO)
+        .lte('criado_em', endISO)
+        .or('duplicata.is.null,duplicata.eq.false')
+        .order('criado_em', { ascending: false });
+      if (error) throw error;
+      const rows = (data || []).map((p: any) => {
+        const itens = (p.itens_pedido || []).map((it: any) => ({
+          nome: it?.produto?.nome || '',
+          quantidade: Number(it?.quantidade || 1),
+          img_url: it?.produto?.img_url || null,
+        }));
+        const temLivraria = itens.some((it: any) =>
+          it.nome.toLowerCase().includes('livraria')
+        );
+        return {
+          id: p.id,
+          id_externo: p.id_externo,
+          criado_em: p.criado_em,
+          valor_total: Number(p.valor_total || 0),
+          plataforma: (p.plataformas as any)?.nome || '—',
+          plataformaCor: (p.plataformas as any)?.cor || '#888',
+          status: (p.status as any)?.nome || '—',
+          statusCor: (p.status as any)?.cor_hex || '#888',
+          itens,
+          temLivraria,
+        };
+      });
+      // Ordenar: pedidos com livraria primeiro
+      rows.sort((a: any, b: any) => Number(b.temLivraria) - Number(a.temLivraria));
+      setPedidosModal({ open: true, loading: false, data: rows });
+    } catch (err) {
+      console.error('Erro ao buscar pedidos:', err);
+      setPedidosModal(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const fetchFreteModal = async () => {
+    if (!metrics?.spreadFrete) return;
+    setFreteModal(prev => ({ ...prev, open: true, loading: true }));
+    try {
+      const allIds = [...new Set([
+        ...(metrics.spreadFrete.idsReceitaFrete || []),
+        ...(metrics.spreadFrete.idsCustoFrete || []),
+      ])];
+      if (allIds.length === 0) {
+        setFreteModal({ open: true, loading: false, data: [] });
+        return;
+      }
+      const { data, error } = await (supabase as any)
+        .from('pedidos')
+        .select('id_externo, valor_frete_yampi, frete_venda, frete_melhor_envio')
+        .in('id_externo', allIds);
+      if (error) throw error;
+      const rows = (data || []).map((p: any) => {
+        const receita = Number(
+          (p.valor_frete_yampi != null && Number(p.valor_frete_yampi) !== 0
+            ? p.valor_frete_yampi
+            : p.frete_venda) ?? 0
+        );
+        let freteME = p.frete_melhor_envio;
+        if (typeof freteME === 'string') {
+          try { freteME = JSON.parse(freteME); } catch { freteME = null; }
+        }
+        const custo = Number(
+          (freteME?.preco && Number(freteME.preco) !== 0 ? freteME.preco : null) ??
+          (freteME?.price && Number(freteME.price) !== 0 ? freteME.price : null) ??
+          (freteME?.raw_response?.custom_price && Number(freteME.raw_response.custom_price) !== 0 ? freteME.raw_response.custom_price : null) ??
+          (freteME?.raw_response?.price && Number(freteME.raw_response.price) !== 0 ? freteME.raw_response.price : null) ??
+          0
+        );
+        const margem = receita - custo;
+        const margemPct = receita > 0 ? (margem / receita) * 100 : 0;
+        return {
+          id_externo: p.id_externo || '—',
+          receita,
+          custo,
+          margem,
+          margemPct,
+        };
+      });
+      rows.sort((a: any, b: any) => a.margem - b.margem);
+      setFreteModal({ open: true, loading: false, data: rows });
+    } catch (err) {
+      console.error('Erro ao buscar detalhes de frete:', err);
+      setFreteModal(prev => ({ ...prev, loading: false }));
+    }
+  };
 
   const formatCurrency = useCallback((value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
@@ -576,13 +809,23 @@ export function Dashboard() {
         <>
           {/* Métricas Principais */}
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <MetricCard
-              title="Total de Pedidos"
-              value={metrics.totalPedidos.toString()}
-              description={`${metrics.pedidosHoje} pedidos hoje`}
-              icon={BiSolidPurchaseTag }
-              color="custom"
-            />
+            <div className="relative group">
+              <MetricCard
+                title="Total de Pedidos"
+                value={metrics.totalPedidos.toString()}
+                description={`${metrics.pedidosHoje} hoje • ${metrics.pedidosMesAtual} no mês`}
+                icon={BiSolidPurchaseTag}
+                color="custom"
+              />
+              <button
+                onClick={fetchPedidosModal}
+                className="absolute bottom-3 right-3 flex items-center gap-1 text-[11px] font-medium text-custom-600 bg-custom-50 hover:bg-custom-100 border border-custom-200 rounded-md px-2 py-1 shadow-sm transition-colors"
+                title="Ver relação de pedidos"
+              >
+                <List className="h-3 w-3" />
+                Ver pedidos
+              </button>
+            </div>
             <MetricCard
               title="Receita Total"
               value={formatCurrency(metrics.vendasTotal)}
@@ -600,11 +843,55 @@ export function Dashboard() {
             <MetricCard
               title="Pedidos Enviados"
               value={metrics.pedidosEnviados.toString()}
-              description={`${((metrics.pedidosEnviados / metrics.totalPedidos) * 100).toFixed(1)}% dos pedidos`}
+              description={`${metrics.pedidosEnviadosHoje} hoje • ${metrics.pedidosEnviadosMesAtual} no mês`}
               icon={BsSendCheckFill}
               color="orange"
             />
           </div>
+
+          {/* Métricas de Spread de Frete */}
+          {metrics.spreadFrete && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <MetricCard
+                title="Receita de Frete"
+                value={formatCurrency(metrics.spreadFrete.receitaFrete)}
+                description={`${metrics.spreadFrete.totalPedidosComFrete} pedidos com frete`}
+                icon={Truck}
+                color="teal"
+              />
+              <MetricCard
+                title="Custo de Frete"
+                value={formatCurrency(metrics.spreadFrete.custoFrete)}
+                description={`${metrics.spreadFrete.totalPedidosComCusto} pedidos via MelhorEnvio`}
+                icon={TrendingDown}
+                color="pink"
+              />
+              <MetricCard
+                title="Resultado do Frete"
+                value={formatCurrency(metrics.spreadFrete.spreadValor)}
+                description="Frete cobrado menos frete pago"
+                icon={TrendingUp}
+                color="indigo"
+              />
+              <div className="relative group">
+                <MetricCard
+                  title="Margem de Frete"
+                  value={`${metrics.spreadFrete.spreadPercentual.toFixed(1)}%`}
+                  description="Percentual do spread sobre a receita"
+                  icon={BarChart3}
+                  color="yellow"
+                />
+                <button
+                  onClick={fetchFreteModal}
+                  className="absolute bottom-3 right-3 flex items-center gap-1 text-[11px] font-medium text-yellow-700 bg-yellow-50 hover:bg-yellow-100 border border-yellow-300 rounded-md px-2 py-1 shadow-sm transition-colors"
+                  title="Ver detalhes de frete por pedido"
+                >
+                  <Eye className="h-3 w-3" />
+                  Ver detalhes
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Gráficos de Vendas por Plataforma, Envios e Pedidos por Status */}
           {/* Layout unificado - gráficos lado a lado */}
@@ -626,6 +913,13 @@ export function Dashboard() {
                   </CardHeader>
                   <CardContent className="pt-6">
                     <TabsContent value="plataformas" className="mt-0">
+                      {metrics.vendasPorPlataforma.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
+                      <>
                       <ResponsiveContainer width="100%" height={300}>
                         <BarChart 
                           data={metrics.vendasPorPlataforma.map(p => ({
@@ -689,8 +983,16 @@ export function Dashboard() {
                           </div>
                         ))}
                       </div>
+                      </>
+                      )}
                     </TabsContent>
                     <TabsContent value="total" className="mt-0">
+                      {metrics.vendasTotaisPorDia.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart 
                           data={metrics.vendasTotaisPorDia}
@@ -744,6 +1046,7 @@ export function Dashboard() {
                           />
                         </LineChart>
                       </ResponsiveContainer>
+                      )}
                     </TabsContent>
                   </CardContent>
                 </Tabs>
@@ -766,6 +1069,13 @@ export function Dashboard() {
                   </CardHeader>
                   <CardContent className="pt-6">
                     <TabsContent value="plataformas" className="mt-0">
+                      {metrics.enviosPorPlataforma.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
+                      <>
                       <ResponsiveContainer width="100%" height={300}>
                         <BarChart 
                           data={metrics.enviosPorPlataforma.map(p => ({
@@ -823,8 +1133,16 @@ export function Dashboard() {
                           </div>
                         ))}
                       </div>
+                      </>
+                      )}
                     </TabsContent>
                     <TabsContent value="total" className="mt-0">
+                      {metrics.enviosPorDia.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
+                          <BarChart3 className="h-12 w-12 opacity-20" />
+                          <p className="text-sm">Nenhum dado para o período selecionado</p>
+                        </div>
+                      ) : (
                       <ResponsiveContainer width="100%" height={300}>
                         <LineChart 
                           data={metrics.enviosPorDia}
@@ -878,6 +1196,7 @@ export function Dashboard() {
                           />
                         </LineChart>
                       </ResponsiveContainer>
+                      )}
                     </TabsContent>
                   </CardContent>
                 </Tabs>
@@ -891,6 +1210,13 @@ export function Dashboard() {
                 <CardDescription>Distribuição atual dos pedidos criados no período</CardDescription>
               </CardHeader>
               <CardContent className="pt-6">
+                {metrics.vendasPorStatus.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center h-[320px] text-muted-foreground gap-2">
+                    <BarChart3 className="h-12 w-12 opacity-20" />
+                    <p className="text-sm">Nenhum dado para o período selecionado</p>
+                  </div>
+                ) : (
+                <>
                 <ResponsiveContainer width="100%" height={320}>
                   <BarChart 
                     data={metrics.vendasPorStatus.map(s => ({
@@ -947,6 +1273,8 @@ export function Dashboard() {
                     </div>
                   ))}
                 </div>
+                </>
+                )}
               </CardContent>
             </Card>
             </>
@@ -1053,7 +1381,7 @@ export function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
-                  <div className="text-3xl font-bold">{metrics.totalPedidos - metrics.pedidosEnviados}</div>
+                  <div className="text-3xl font-bold">{Math.max(0, metrics.totalPedidos - metrics.pedidosEnviados)}</div>
                   <p className="text-sm text-muted-foreground">Aguardando envio</p>
                 </div>
               </CardContent>
@@ -1062,6 +1390,120 @@ export function Dashboard() {
           </div>
         </>
       )}
+
+      {/* Modal: detalhes de frete por pedido */}
+      <Dialog open={freteModal.open} onOpenChange={(v) => setFreteModal(prev => ({ ...prev, open: v }))}>
+        <DialogContent className="max-w-2xl w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-yellow-600" />
+              Detalhes de Frete por Pedido
+            </DialogTitle>
+            <DialogDescription>Receita, custo e margem individual de cada pedido no período.</DialogDescription>
+          </DialogHeader>
+
+          {freteModal.loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-yellow-600" />
+            </div>
+          ) : freteModal.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum pedido encontrado.</p>
+          ) : (() => {
+            const totalReceita = freteModal.data.reduce((s, r) => s + r.receita, 0);
+            const totalCusto   = freteModal.data.reduce((s, r) => s + r.custo,   0);
+            const totalMargem  = totalReceita - totalCusto;
+            const totalPct     = totalReceita > 0 ? (totalMargem / totalReceita) * 100 : 0;
+            return (
+              <>
+                {/* Totais resumidos */}
+                <div className="grid grid-cols-4 gap-2 mb-3">
+                  {[
+                    { label: 'Receita total',  value: formatCurrency(totalReceita), cls: 'border-teal-300 bg-teal-50 text-teal-800' },
+                    { label: 'Custo total',    value: formatCurrency(totalCusto),   cls: 'border-pink-300 bg-pink-50 text-pink-800' },
+                    { label: 'Margem total',   value: formatCurrency(totalMargem),  cls: totalMargem >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800' },
+                    { label: '% Margem',       value: `${totalPct.toFixed(1)}%`,    cls: totalPct    >= 0 ? 'border-green-300 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800' },
+                  ].map(c => (
+                    <div key={c.label} className={`rounded-lg border p-3 flex flex-col items-center gap-0.5 ${c.cls}`}>
+                      <span className="text-[11px] font-medium opacity-70 text-center">{c.label}</span>
+                      <span className="text-sm font-bold">{c.value}</span>
+                    </div>
+                  ))}
+                </div>
+                {/* Tabela */}
+                <ScrollArea className="h-[340px] rounded-md border">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-muted/80 backdrop-blur-sm">
+                      <tr>
+                        <th className="text-left px-3 py-2 font-semibold text-muted-foreground">Pedido</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Receita</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Custo</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">Margem</th>
+                        <th className="text-right px-3 py-2 font-semibold text-muted-foreground">%</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {freteModal.data.map((row, i) => (
+                        <tr key={row.id_externo + i} className="border-t hover:bg-muted/30 transition-colors">
+                          <td className="px-3 py-2 font-mono text-[11px]">{row.id_externo}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.receita)}</td>
+                          <td className="px-3 py-2 text-right tabular-nums">{formatCurrency(row.custo)}</td>
+                          <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margem >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                            {formatCurrency(row.margem)}
+                          </td>
+                          <td className={`px-3 py-2 text-right font-semibold tabular-nums ${row.margemPct >= 0 ? 'text-green-700' : 'text-red-600'}`}>
+                            {row.margemPct.toFixed(1)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </ScrollArea>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: relação de pedidos com destaque de livrarias */}
+      <Dialog open={pedidosModal.open} onOpenChange={(v) => setPedidosModal(prev => ({ ...prev, open: v }))}>
+        <DialogContent className="max-w-sm w-full">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <List className="h-5 w-5 text-custom-600" />
+              Relação de Pedidos
+            </DialogTitle>
+            <DialogDescription>Resumo do período selecionado.</DialogDescription>
+          </DialogHeader>
+
+          {pedidosModal.loading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-custom-600" />
+            </div>
+          ) : pedidosModal.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">Nenhum pedido encontrado no período.</p>
+          ) : (() => {
+            const comLiv = pedidosModal.data.filter(p => p.temLivraria);
+            const semLiv = pedidosModal.data.filter(p => !p.temLivraria);
+            return (
+              <div className="grid grid-cols-2 gap-3 py-2">
+                <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex flex-col items-center gap-1">
+                  <BookOpen className="h-5 w-5 text-amber-600" />
+                  <span className="text-2xl font-bold text-amber-800">{comLiv.length}</span>
+                  <span className="text-xs text-amber-700 font-medium text-center">Com livraria</span>
+                  <span className="text-xs text-amber-600">{formatCurrency(comLiv.reduce((s, p) => s + p.valor_total, 0))}</span>
+                </div>
+                <div className="rounded-lg border border-border bg-muted/30 p-4 flex flex-col items-center gap-1">
+                  <List className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-2xl font-bold text-foreground">{semLiv.length}</span>
+                  <span className="text-xs text-muted-foreground font-medium text-center">Sem livraria</span>
+                  <span className="text-xs text-muted-foreground">{formatCurrency(semLiv.reduce((s, p) => s + p.valor_total, 0))}</span>
+                </div>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }

@@ -538,7 +538,8 @@ export function Logistica() {
         .select(selectQuery)
         .eq('plataforma_id', plataformaId)
         .eq('status_id', LOGISTICA_STATUS_ID)
-        .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID);
+        .eq('etiqueta_envio_id', ETIQUETA_DISPONIVEL_ID)
+        .eq('pacote_disponivel', true);
 
       if (pedidoIdsFiltroProduto && pedidoIdsFiltroProduto.length > 0) {
         query = query.in('id', pedidoIdsFiltroProduto);
@@ -1108,7 +1109,7 @@ export function Logistica() {
     setLoadingPedidosFiltrados(true);
     try {
       const ids = produtoPedidosModal.pedidos.map((p: any) => p.id).filter(Boolean);
-      const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+      const fullList = sortPedidos(await fetchPedidosPorIds(ids)).filter((p: any) => p.pacote_disponivel === true);
 
       setProdutoPedidosModal((prev) => ({ ...prev, open: false }));
       setOpenPlatformId(null);
@@ -3543,6 +3544,7 @@ export function Logistica() {
                               <Button
                                 type="button"
                                 size="sm"
+                                disabled={(pc.pedidos || []).filter((p: any) => p.pacote_disponivel === true).length === 0}
                                 onClick={async (e) => {
                                   e.stopPropagation();
                                   setOpenPlatformId(null);
@@ -3551,7 +3553,7 @@ export function Logistica() {
                                     setLoadingPedidosFiltrados(true);
                                     try {
                                       const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                      const fullList = sortPedidos(await fetchPedidosPorIds(ids));
+                                      const fullList = sortPedidos(await fetchPedidosPorIds(ids)).filter((p: any) => p.pacote_disponivel === true);
                                       setModoListaPorPlataforma(true);
                                       setFilterPlataformaId('');
                                       setPedidosFiltrados(fullList);
@@ -3730,18 +3732,18 @@ export function Logistica() {
 
                         {isOpen && (
                           <CardContent className="pt-0">
-                            <div className="rounded-lg border bg-white/70 p-2" onClick={(e) => e.stopPropagation()}>
+                            <div className="rounded-xl border bg-white/80 p-3 shadow-sm" onClick={(e) => e.stopPropagation()}>
                               {totalPages > 1 && (
                                 <div className="flex items-center justify-between mb-3 pb-3 border-b">
-                                  <span className="text-sm text-muted-foreground">
+                                  <span className="text-sm font-medium text-muted-foreground">
                                     {pc.pedidos.length} pedidos • {currentPage}/{totalPages}
                                   </span>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1">
                                     <button
                                       type="button"
                                       disabled={currentPage <= 1}
                                       onClick={(e) => handleGoToPage(e, currentPage - 1)}
-                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                      className="h-8 w-8 flex items-center justify-center text-base border rounded-lg disabled:opacity-30 hover:bg-muted transition-colors"
                                     >
                                       ‹
                                     </button>
@@ -3749,7 +3751,7 @@ export function Logistica() {
                                       type="button"
                                       disabled={currentPage >= totalPages}
                                       onClick={(e) => handleGoToPage(e, currentPage + 1)}
-                                      className="px-4 py-2 text-lg border rounded disabled:opacity-40 hover:bg-muted"
+                                      className="h-8 w-8 flex items-center justify-center text-base border rounded-lg disabled:opacity-30 hover:bg-muted transition-colors"
                                     >
                                       ›
                                     </button>
@@ -3759,82 +3761,93 @@ export function Logistica() {
                               {pedidosPagina.length === 0 ? (
                                 <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>
                               ) : (
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                   {pedidosPagina.map((p: any) => {
                                     const items = platformOrderItems[p.id] || [];
                                     const pacoteOk = p.pacote_disponivel === true;
                                     const pacoteInfo = pacoteOk ? p.pacotes : null;
                                     return (
-                                      <div key={p.id} className={`rounded border px-2.5 py-2 bg-white transition-opacity ${!pacoteOk ? 'opacity-40 pointer-events-none' : ''}`}>
-                                        <div className="flex items-center justify-between gap-1">
-                                          <div className="flex items-center gap-2 min-w-0">
-                                            <span className="text-xs font-medium truncate max-w-[8rem]">{p.id_externo || p.id}</span>
-                                            <span className="rounded-full bg-muted/60 px-1.5 py-0.5 text-[10px] text-muted-foreground">{items.length} itens</span>
-                                            {!pacoteOk && <span className="rounded-full bg-orange-100 text-orange-700 px-1.5 py-0.5 text-[10px] font-semibold">Aguardando pacote</span>}
+                                      <div
+                                        key={p.id}
+                                        className={`rounded-xl border-2 p-3 bg-white shadow-sm transition-all ${
+                                          !pacoteOk
+                                            ? 'border-orange-200 bg-orange-50/40 opacity-60 pointer-events-none'
+                                            : 'border-green-200 bg-green-50/30 hover:shadow-md'
+                                        }`}
+                                      >
+                                        {/* Cabeçalho */}
+                                        <div className="flex items-center justify-between gap-2">
+                                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                                            <div className={`h-2 w-2 rounded-full shrink-0 ${pacoteOk ? 'bg-green-500' : 'bg-orange-400'}`} />
+                                            <span className="text-sm font-semibold truncate text-gray-800">{p.id_externo || p.id}</span>
+                                            <span className="rounded-full bg-gray-100 border border-gray-200 px-2 py-0.5 text-[10px] font-medium text-gray-500 shrink-0">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
                                           </div>
-                                          <button
-                                            type="button"
-                                            className="text-xs text-primary underline-offset-4 hover:underline shrink-0"
-                                            onClick={async (e) => {
-                                              e.preventDefault();
-                                              e.stopPropagation();
-                                              setOpenPlatformId(null);
-                                              if (isSyntheticCard) {
-                                                try {
-                                                  const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                                  const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                                                  const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
-                                                  setModoListaPorPlataforma(true);
-                                                  setFilterPlataformaId('');
-                                                  setPedidosFiltrados(fullList);
-                                                  setPedidoAtualIndex(startIdx);
-                                                  setFoundPedido(fullList[startIdx] || null);
-                                                  setFoundItemScans({});
-                                                  setItemInputs({});
-                                                  setItemStatus({});
-                                                  setTimeout(() => barcodeRef.current?.focus(), 50);
-                                                } catch (err) {
-                                                  console.error('Erro ao buscar pedidos do card:', err);
+                                          {pacoteOk ? (
+                                            <button
+                                              type="button"
+                                              className="shrink-0 text-[11px] font-semibold bg-primary text-white px-3 py-1 rounded-full hover:bg-primary/90 transition-colors"
+                                              onClick={async (e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setOpenPlatformId(null);
+                                                if (isSyntheticCard) {
+                                                  try {
+                                                    const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
+                                                    const fullList = sortPedidos(await fetchPedidosPorIds(ids)).filter((p: any) => p.pacote_disponivel === true);
+                                                    const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
+                                                    setModoListaPorPlataforma(true);
+                                                    setFilterPlataformaId('');
+                                                    setPedidosFiltrados(fullList);
+                                                    setPedidoAtualIndex(startIdx);
+                                                    setFoundPedido(fullList[startIdx] || null);
+                                                    setFoundItemScans({});
+                                                    setItemInputs({});
+                                                    setItemStatus({});
+                                                    setTimeout(() => barcodeRef.current?.focus(), 50);
+                                                  } catch (err) {
+                                                    console.error('Erro ao buscar pedidos do card:', err);
+                                                  }
+                                                } else {
+                                                  targetPedidoIdRef.current = p.id;
+                                                  setFilterPlataformaId(pc.id);
                                                 }
-                                              } else {
-                                                targetPedidoIdRef.current = p.id;
-                                                setFilterPlataformaId(pc.id);
-                                              }
-                                            }}
-                                          >
-                                            Abrir
-                                          </button>
+                                              }}
+                                            >
+                                              Abrir
+                                            </button>
+                                          ) : (
+                                            <span className="shrink-0 rounded-full bg-orange-100 border border-orange-300 text-orange-700 px-2.5 py-0.5 text-[10px] font-semibold">Aguardando pacote</span>
+                                          )}
                                         </div>
-                                        {(items.length > 0 || pacoteInfo) && (
-                                          <div className="flex items-start gap-2 border-t mt-2 pt-2">
-                                            {/* Imagens dos itens */}
-                                            <div className="flex flex-wrap gap-1.5 flex-1">
-                                            {items.map((item: any, itemIdx: number) => (
-                                              <div key={itemIdx} className="flex flex-col items-center gap-0.5 max-w-[48px]">
-                                                {item.img_url ? (
-                                                  <img src={item.img_url} alt={item.nome || ''} className="h-9 w-9 rounded object-cover border" />
-                                                ) : (
-                                                  <div className="h-9 w-9 rounded border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
-                                                )}
-                                                <span className="text-[9px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
-                                                {(item.quantidade ?? 1) > 1 && (
-                                                  <span className="text-[9px] font-semibold text-muted-foreground">×{item.quantidade}</span>
-                                                )}
-                                              </div>
-                                            ))}
-                                            </div>{/* fim itens */}
 
-                                            {/* Pacote vinculado à direita */}
-                                            {pacoteInfo && (
-                                              <div className="shrink-0 flex flex-col items-end gap-0.5 min-w-[90px] max-w-[120px] self-center">
-                                                <div className="flex items-center gap-1 rounded-md bg-green-50 border border-green-200 px-1.5 py-0.5 w-full">
-                                                  <PackageCheck className="h-3 w-3 text-green-600 shrink-0" />
-                                                  <span className="text-[9px] text-green-800 font-medium leading-tight line-clamp-2">{pacoteInfo.rotulo}</span>
+                                        {/* Itens + Pacote */}
+                                        {(items.length > 0 || pacoteInfo) && (
+                                          <div className="flex items-start gap-3 mt-3 pt-3 border-t border-gray-100">
+                                            {/* Imagens dos itens */}
+                                            <div className="flex flex-wrap gap-2 flex-1">
+                                              {items.map((item: any, itemIdx: number) => (
+                                                <div key={itemIdx} className="flex flex-col items-center gap-1 max-w-[52px]">
+                                                  {item.img_url ? (
+                                                    <img src={item.img_url} alt={item.nome || ''} className="h-11 w-11 rounded-lg object-cover border-2 border-white shadow-sm" />
+                                                  ) : (
+                                                    <div className="h-11 w-11 rounded-lg border-2 border-gray-100 bg-gray-50 flex items-center justify-center text-[8px] text-gray-400 shadow-sm">sem foto</div>
+                                                  )}
+                                                  <span className="text-[9px] text-center leading-tight line-clamp-2 w-full text-gray-600 font-medium">{item.nome || '—'}</span>
+                                                  {(item.quantidade ?? 1) > 1 && (
+                                                    <span className="text-[9px] font-bold text-primary bg-primary/10 rounded-full px-1.5">×{item.quantidade}</span>
+                                                  )}
                                                 </div>
-                                                <span className="text-[9px] text-muted-foreground">
-                                                  Vinculado em {new Date(pacoteInfo.criado_em).toLocaleDateString('pt-BR')}
-                                                </span>
-                                                <span className="text-[9px] rounded-full bg-green-100 text-green-700 border border-green-200 px-1.5 py-0.5">{pacoteInfo.tipo}</span>
+                                              ))}
+                                            </div>
+
+                                            {/* Pacote vinculado */}
+                                            {pacoteInfo && (
+                                              <div className="shrink-0 flex flex-col gap-1 min-w-[96px] max-w-[120px] self-start">
+                                                <div className="flex items-center gap-1.5 rounded-lg bg-green-100 border border-green-300 px-2 py-1.5 w-full">
+                                                  <PackageCheck className="h-3.5 w-3.5 text-green-600 shrink-0" />
+                                                  <span className="text-[10px] text-green-800 font-semibold leading-tight line-clamp-2">{pacoteInfo.rotulo}</span>
+                                                </div>
+                                                <span className="text-[9px] rounded-full bg-green-200 text-green-700 font-medium text-center px-2 py-0.5">{pacoteInfo.tipo}</span>
                                               </div>
                                             )}
                                           </div>
