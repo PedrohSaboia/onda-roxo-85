@@ -1255,6 +1255,7 @@ export default function Pedido() {
         .from('pedidos')
         .update({ 
           status_id: '3473cae9-47c8-4b85-96af-b41fe0e15fa9',
+          etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f',
           atualizado_em: new Date().toISOString()
         } as any)
         .eq('id', pedido.id);
