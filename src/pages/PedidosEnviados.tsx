@@ -882,6 +882,7 @@ export function PedidosEnviados() {
                 <TableRow>
                   <TableHead>Informações do Pedido</TableHead>
                   <TableHead className="text-center"></TableHead>
+                  <TableHead className="text-center w-[120px] px-1">Data Criado</TableHead>
                   <TableHead className="text-center w-[120px] px-1">Data Enviado</TableHead>
                   <TableHead className="text-center w-[100px] px-1">Resp. Pedido</TableHead>
                   <TableHead className="text-center w-[80px] px-1">Plataf.</TableHead>
@@ -966,7 +967,11 @@ export function PedidosEnviados() {
                       {/* TAG QUANTAS VEZES FOI REENVIADO */}
                     </TableCell>
 
-                    <TableCell className="text-center">
+                    <TableCell className="text-center w-[120px] px-1">
+                      {pedido.criadoEm ? new Date(pedido.criadoEm).toLocaleDateString('pt-BR') : '—'}
+                    </TableCell>
+
+                    <TableCell className="text-center w-[120px] px-1">
                       {(pedido as any).dataEnviado ? new Date((pedido as any).dataEnviado).toLocaleDateString('pt-BR') : '—'}
                     </TableCell>
                     
