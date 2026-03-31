@@ -103,6 +103,7 @@ export function Dashboard() {
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
   const [calendarMonth, setCalendarMonth] = useState<number>(() => new Date().getMonth());
   const [calendarYear, setCalendarYear] = useState<number>(() => new Date().getFullYear());
+  const EXCLUDED_STATUS_ID = '09ddb68a-cff3-4a69-a120-7459642cca6f';
 
   const fetchMetrics = useCallback(async () => {
     // Cancelar requisição anterior se existir
@@ -130,6 +131,7 @@ export function Dashboard() {
         `)
         .gte('criado_em', startISO)
         .lte('criado_em', endISO)
+        .neq('status_id', EXCLUDED_STATUS_ID)
         .or('duplicata.is.null,duplicata.eq.false')
         .order('criado_em', { ascending: false })
         .abortSignal(signal);
@@ -460,11 +462,39 @@ export function Dashboard() {
     try {
       const startISO = new Date(startDate + 'T00:00:00').toISOString();
       const endISO = new Date(endDate + 'T23:59:59').toISOString();
+      // Use RPC to get pedidos that contain livraria products
+      const { data: livrariaIds, error: livrariaErr } = await (supabase as any).rpc('get_pedidos_com_livraria', {
+        p_data_inicio: startISO,
+        p_data_fim: endISO,
+      });
+
+      const livrariaSet = new Set<string>();
+      if (!livrariaErr && Array.isArray(livrariaIds)) {
+        for (const r of livrariaIds as any[]) {
+          if (r && (r.pedido_id || r.id)) livrariaSet.add(String(r.pedido_id || r.id));
+        }
+      }
+
+      // Also fetch total pedidos count via RPC (keeps same logic as dashboard metrics)
+      let totalPedidosRpcCount: number | null = null;
+      try {
+        const { data: totalRpc, error: totalErr } = await (supabase as any).rpc('get_total_pedidos', {
+          p_data_inicio: startISO,
+          p_data_fim: endISO,
+        });
+        if (!totalErr && Array.isArray(totalRpc) && totalRpc[0]) {
+          totalPedidosRpcCount = Number((totalRpc as any[])[0].total_pedidos || 0);
+        }
+      } catch (e) {
+        // ignore
+      }
+
       const { data, error } = await (supabase as any)
         .from('pedidos')
         .select('id, id_externo, criado_em, valor_total, plataformas(nome, cor), status(nome, cor_hex), itens_pedido(quantidade, produto:produtos(nome, img_url))')
         .gte('criado_em', startISO)
         .lte('criado_em', endISO)
+        .neq('status_id', EXCLUDED_STATUS_ID)
         .or('duplicata.is.null,duplicata.eq.false')
         .order('criado_em', { ascending: false });
       if (error) throw error;
@@ -474,7 +504,8 @@ export function Dashboard() {
           quantidade: Number(it?.quantidade || 1),
           img_url: it?.produto?.img_url || null,
         }));
-        const temLivraria = itens.some((it: any) =>
+        // Prefer RPC result; fallback to name-based detection
+        const temLivraria = livrariaSet.size > 0 ? livrariaSet.has(String(p.id)) : itens.some((it: any) =>
           it.nome.toLowerCase().includes('livraria')
         );
         return {
@@ -492,7 +523,9 @@ export function Dashboard() {
       });
       // Ordenar: pedidos com livraria primeiro
       rows.sort((a: any, b: any) => Number(b.temLivraria) - Number(a.temLivraria));
-      setPedidosModal({ open: true, loading: false, data: rows });
+      // calcular receita total (para uso no cálculo de sem livraria)
+      const totalRevenue = rows.reduce((s: number, r: any) => s + Number(r.valor_total || 0), 0);
+      setPedidosModal({ open: true, loading: false, data: rows, totalCount: totalPedidosRpcCount ?? rows.length, livrariaCount: livrariaSet.size, totalRevenue });
     } catch (err) {
       console.error('Erro ao buscar pedidos:', err);
       setPedidosModal(prev => ({ ...prev, loading: false }));
@@ -1619,20 +1652,27 @@ export function Dashboard() {
             <p className="text-sm text-muted-foreground text-center py-8">Nenhum pedido encontrado no período.</p>
           ) : (() => {
             const comLiv = pedidosModal.data.filter(p => p.temLivraria);
-            const semLiv = pedidosModal.data.filter(p => !p.temLivraria);
+            const comCount = (pedidosModal as any).livrariaCount ?? comLiv.length;
+            const totalCount = (pedidosModal as any).totalCount ?? pedidosModal.data.length;
+            const semCount = Math.max(0, totalCount - comCount);
+
+            const comRevenue = comLiv.reduce((s, p) => s + p.valor_total, 0);
+            const totalRevenue = (pedidosModal as any).totalRevenue ?? pedidosModal.data.reduce((s, p) => s + p.valor_total, 0);
+            const semRevenue = Math.max(0, totalRevenue - comRevenue);
+
             return (
               <div className="grid grid-cols-2 gap-3 py-2">
                 <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 flex flex-col items-center gap-1">
                   <BookOpen className="h-5 w-5 text-amber-600" />
-                  <span className="text-2xl font-bold text-amber-800">{comLiv.length}</span>
+                  <span className="text-2xl font-bold text-amber-800">{comCount}</span>
                   <span className="text-xs text-amber-700 font-medium text-center">Com livraria</span>
-                  <span className="text-xs text-amber-600">{formatCurrency(comLiv.reduce((s, p) => s + p.valor_total, 0))}</span>
+                  <span className="text-xs text-amber-600">{formatCurrency(comRevenue)}</span>
                 </div>
                 <div className="rounded-lg border border-border bg-muted/30 p-4 flex flex-col items-center gap-1">
                   <List className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-2xl font-bold text-foreground">{semLiv.length}</span>
+                  <span className="text-2xl font-bold text-foreground">{semCount}</span>
                   <span className="text-xs text-muted-foreground font-medium text-center">Sem livraria</span>
-                  <span className="text-xs text-muted-foreground">{formatCurrency(semLiv.reduce((s, p) => s + p.valor_total, 0))}</span>
+                  <span className="text-xs text-muted-foreground">{formatCurrency(semRevenue)}</span>
                 </div>
               </div>
             );
