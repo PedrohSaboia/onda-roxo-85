@@ -1,65 +1,109 @@
-import { useEffect, useState, useRef } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Trash, Copy, Edit, CalendarIcon, Pencil, History, Search, Download, Calendar as CalendarDays, User, FileText, Package, RefreshCw, UserCircle } from 'lucide-react';
-import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import EmbalagensManager from '@/components/shipping/EmbalagensManager';
-import RemetentesManager from '@/components/shipping/RemetentesManager';
-import CotacaoFreteModal from '@/components/shipping/CotacaoFreteModal';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import EditSelectModal from '@/components/modals/EditSelectModal';
-import ClientEditModal from '@/components/modals/ClientEditModal';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
-import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
-import { buscarHistoricoMovimentacoes, type HistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { useEffect, useState, useRef } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Trash,
+  Copy,
+  Edit,
+  CalendarIcon,
+  Pencil,
+  History,
+  Search,
+  Download,
+  Calendar as CalendarDays,
+  User,
+  FileText,
+  Package,
+  RefreshCw,
+  UserCircle,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import EmbalagensManager from "@/components/shipping/EmbalagensManager";
+import RemetentesManager from "@/components/shipping/RemetentesManager";
+import CotacaoFreteModal from "@/components/shipping/CotacaoFreteModal";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import EditSelectModal from "@/components/modals/EditSelectModal";
+import ClientEditModal from "@/components/modals/ClientEditModal";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { useAuth } from "@/hooks/useAuth";
+import { registrarHistoricoMovimentacao } from "@/lib/historicoMovimentacoes";
+import {
+  buscarHistoricoMovimentacoes,
+  type HistoricoMovimentacao,
+} from "@/lib/historicoMovimentacoes";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 function formatAddress(cliente: any) {
-  if (!cliente) return '-';
+  if (!cliente) return "-";
   const parts = [] as string[];
-  if (cliente.endereco) parts.push(cliente.endereco + (cliente.numero ? `, ${cliente.numero}` : ''));
+  if (cliente.endereco)
+    parts.push(
+      cliente.endereco + (cliente.numero ? `, ${cliente.numero}` : ""),
+    );
   if (cliente.complemento) parts.push(cliente.complemento);
   const cityParts = [] as string[];
   if (cliente.bairro) cityParts.push(cliente.bairro);
   if (cliente.cidade) cityParts.push(cliente.cidade);
   if (cliente.estado) cityParts.push(cliente.estado);
-  if (cityParts.length) parts.push(cityParts.join(' / '));
+  if (cityParts.length) parts.push(cityParts.join(" / "));
   if (cliente.cep) parts.push(`CEP: ${cliente.cep}`);
-  return parts.join(' • ');
+  return parts.join(" • ");
 }
 
 // Componente de Histórico do Pedido
 function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
   const [searchTerm, setSearchTerm] = useState("");
-  const [movimentacoes, setMovimentacoes] = useState<HistoricoMovimentacao[]>([]);
+  const [movimentacoes, setMovimentacoes] = useState<HistoricoMovimentacao[]>(
+    [],
+  );
   const [loading, setLoading] = useState(true);
-  const [filteredMovimentacoes, setFilteredMovimentacoes] = useState<HistoricoMovimentacao[]>([]);
+  const [filteredMovimentacoes, setFilteredMovimentacoes] = useState<
+    HistoricoMovimentacao[]
+  >([]);
   const { toast } = useToast();
 
   const carregarMovimentacoes = async () => {
     if (!pedidoId) return;
-    
+
     setLoading(true);
     try {
-      const { data, error } = await buscarHistoricoMovimentacoes({ pedidoId: pedidoId });
-      
+      const { data, error } = await buscarHistoricoMovimentacoes({
+        pedidoId: pedidoId,
+      });
+
       if (error) {
         toast({
           title: "Erro ao carregar histórico",
           description: "Não foi possível carregar o histórico do pedido",
-          variant: "destructive"
+          variant: "destructive",
         });
         return;
       }
@@ -71,7 +115,7 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
       toast({
         title: "Erro ao carregar histórico",
         description: "Ocorreu um erro inesperado",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setLoading(false);
@@ -101,22 +145,22 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
   }, [searchTerm, movimentacoes]);
 
   const exportarCSV = () => {
-    const headers = ['Data/Hora', 'Usuário', 'Alteração'];
-    const rows = filteredMovimentacoes.map(mov => [
-      format(new Date(mov.created_at), 'dd/MM/yyyy HH:mm:ss'),
-      mov.usuario?.nome || 'Automático do Banco de Dados',
-      mov.alteracao || '-'
+    const headers = ["Data/Hora", "Usuário", "Alteração"];
+    const rows = filteredMovimentacoes.map((mov) => [
+      format(new Date(mov.created_at), "dd/MM/yyyy HH:mm:ss"),
+      mov.usuario?.nome || "Automático do Banco de Dados",
+      mov.alteracao || "-",
     ]);
 
     const csv = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\\n');
+      headers.join(","),
+      ...rows.map((row) => row.map((cell) => `"${cell}"`).join(",")),
+    ].join("\\n");
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = `historico_pedido_${pedidoId}_${format(new Date(), 'yyyy-MM-dd_HHmmss')}.csv`;
+    link.download = `historico_pedido_${pedidoId}_${format(new Date(), "yyyy-MM-dd_HHmmss")}.csv`;
     link.click();
   };
 
@@ -135,7 +179,12 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
               <RefreshCw className="h-4 w-4 mr-2" />
               Atualizar
             </Button>
-            <Button variant="outline" size="sm" onClick={exportarCSV} disabled={filteredMovimentacoes.length === 0}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportarCSV}
+              disabled={filteredMovimentacoes.length === 0}
+            >
               <Download className="h-4 w-4 mr-2" />
               Exportar CSV
             </Button>
@@ -159,7 +208,7 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
             {filteredMovimentacoes.length} resultado(s) encontrado(s)
           </p>
         )}
-        
+
         {loading ? (
           <div className="space-y-2">
             {[...Array(5)].map((_, i) => (
@@ -194,15 +243,24 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
                 {filteredMovimentacoes.map((mov) => (
                   <TableRow key={mov.id}>
                     <TableCell className="font-mono text-sm">
-                      {format(new Date(mov.created_at), "dd/MM/yyyy HH:mm:ss", { locale: ptBR })}
+                      {format(new Date(mov.created_at), "dd/MM/yyyy HH:mm:ss", {
+                        locale: ptBR,
+                      })}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-3">
                         {mov.usuario ? (
                           <Avatar className="h-8 w-8">
-                            <AvatarImage src={mov.usuario.img_url || undefined} />
+                            <AvatarImage
+                              src={mov.usuario.img_url || undefined}
+                            />
                             <AvatarFallback className="bg-primary/10 text-primary">
-                              {mov.usuario.nome?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) || 'U'}
+                              {mov.usuario.nome
+                                ?.split(" ")
+                                .map((n) => n[0])
+                                .join("")
+                                .toUpperCase()
+                                .slice(0, 2) || "U"}
                             </AvatarFallback>
                           </Avatar>
                         ) : (
@@ -212,7 +270,9 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
                             </AvatarFallback>
                           </Avatar>
                         )}
-                        <span className="font-medium text-sm">{mov.usuario?.nome || 'Automático do Banco de Dados'}</span>
+                        <span className="font-medium text-sm">
+                          {mov.usuario?.nome || "Automático do Banco de Dados"}
+                        </span>
                       </div>
                     </TableCell>
                     <TableCell>
@@ -230,16 +290,17 @@ function HistoricoTabPedido({ pedidoId }: { pedidoId: string | undefined }) {
 }
 
 export default function Pedido() {
-  const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
-  const ETIQUETA_DISPONIVEL_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
-  const ETIQUETA_PENDENTE_ID = '0c0ff1fc-1c3b-4eff-9dec-a505d33f3e18';
-  const SHOPEE_PLATAFORMA_ID = 'c22b2def-47fc-4fbb-aab1-660c951734c7';
+  const LOGISTICA_STATUS_ID = "3473cae9-47c8-4b85-96af-b41fe0e15fa9";
+  const ETIQUETA_DISPONIVEL_ID = "466958dd-e525-4e8d-95f1-067124a5ea7f";
+  const ETIQUETA_PENDENTE_ID = "0c0ff1fc-1c3b-4eff-9dec-a505d33f3e18";
+  const SHOPEE_PLATAFORMA_ID = "c22b2def-47fc-4fbb-aab1-660c951734c7";
 
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
   const params = new URLSearchParams(location.search);
-  const readonly = params.get('readonly') === '1' || params.get('readonly') === 'true';
+  const readonly =
+    params.get("readonly") === "1" || params.get("readonly") === "true";
   const { user, empresaId, permissoes, hasPermissao } = useAuth();
   const [pedido, setPedido] = useState<any | null>(null);
   const [loading, setLoading] = useState(false);
@@ -248,12 +309,16 @@ export default function Pedido() {
   const [plataformas, setPlataformas] = useState<any[]>([]);
   const [etiquetas, setEtiquetas] = useState<any[]>([]);
   const [editFieldOpen, setEditFieldOpen] = useState(false);
-  const [editFieldKey, setEditFieldKey] = useState<'status' | 'plataforma' | 'responsavel' | 'etiqueta' | null>(null);
-  const [editOptions, setEditOptions] = useState<{ id: string; nome: string }[]>([]);
+  const [editFieldKey, setEditFieldKey] = useState<
+    "status" | "plataforma" | "responsavel" | "etiqueta" | null
+  >(null);
+  const [editOptions, setEditOptions] = useState<
+    { id: string; nome: string }[]
+  >([]);
   const [editValue, setEditValue] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [etiquetaText, setEtiquetaText] = useState('');
-  const [linkEtiqueta, setLinkEtiqueta] = useState('');
+  const [etiquetaText, setEtiquetaText] = useState("");
+  const [linkEtiqueta, setLinkEtiqueta] = useState("");
   const [savingLink, setSavingLink] = useState(false);
   const [calculandoFrete, setCalculandoFrete] = useState(false);
   const [cotacaoModal, setCotacaoModal] = useState(false);
@@ -264,55 +329,83 @@ export default function Pedido() {
   const [gerandoEtiquetaML, setGerandoEtiquetaML] = useState(false);
   const [etiquetaMLModalOpen, setEtiquetaMLModalOpen] = useState(false);
   const [etiquetaMLPdfUrl, setEtiquetaMLPdfUrl] = useState<string | null>(null);
-  const [paymentMethods, setPaymentMethods] = useState<Record<number, string> | null>(null);
+  const [paymentMethods, setPaymentMethods] = useState<Record<
+    number,
+    string
+  > | null>(null);
   const [temProdutoEntregueML, setTemProdutoEntregueML] = useState(false);
-  
+
   // Estados para gerenciar embalagem/remetente selecionados
   const [embalagens, setEmbalagens] = useState<Embalagem[]>([]);
   const [remetentes, setRemetentes] = useState<Remetente[]>([]);
   const [embalagensVisible, setEmbalagensVisible] = useState(false);
   const [remetentesVisible, setRemetentesVisible] = useState(false);
-  const [selectedEmbalagem, setSelectedEmbalagem] = useState<Embalagem | null>(null);
-  const [selectedRemetente, setSelectedRemetente] = useState<Remetente | null>(null);
+  const [selectedEmbalagem, setSelectedEmbalagem] = useState<Embalagem | null>(
+    null,
+  );
+  const [selectedRemetente, setSelectedRemetente] = useState<Remetente | null>(
+    null,
+  );
 
   const { toast } = useToast();
-  const canManageRemetentes = hasPermissao ? hasPermissao(46) : ((permissoes || []).includes(46));
+  const canManageRemetentes = hasPermissao
+    ? hasPermissao(46)
+    : (permissoes || []).includes(46);
 
   // Modal: adicionar produtos
   const [addProductsVisible, setAddProductsVisible] = useState(false);
   const [produtosListModal, setProdutosListModal] = useState<any[]>([]);
   const [loadingProdutosModal, setLoadingProdutosModal] = useState(false);
-  const [produtosErrorModal, setProdutosErrorModal] = useState<string | null>(null);
-  const [searchModal, setSearchModal] = useState('');
+  const [produtosErrorModal, setProdutosErrorModal] = useState<string | null>(
+    null,
+  );
+  const [searchModal, setSearchModal] = useState("");
   const [modalPage, setModalPage] = useState(1);
   const [modalPageSize] = useState(5);
-  const [variationSelectionsModal, setVariationSelectionsModal] = useState<Record<string, string>>({});
-  const [brindeSelectionsModal, setBrindeSelectionsModal] = useState<Record<string, boolean>>({});
+  const [variationSelectionsModal, setVariationSelectionsModal] = useState<
+    Record<string, string>
+  >({});
+  const [brindeSelectionsModal, setBrindeSelectionsModal] = useState<
+    Record<string, boolean>
+  >({});
   const [modalCart, setModalCart] = useState<any[]>([]);
   const [savingModal, setSavingModal] = useState(false);
   const [clientEditOpen, setClientEditOpen] = useState(false);
   const [editValorTotalOpen, setEditValorTotalOpen] = useState(false);
-  const [tempValorTotal, setTempValorTotal] = useState<string>('');
-  const [tempValoresPagamentos, setTempValoresPagamentos] = useState<Record<string, string>>({});
+  const [tempValorTotal, setTempValorTotal] = useState<string>("");
+  const [tempValoresPagamentos, setTempValoresPagamentos] = useState<
+    Record<string, string>
+  >({});
   // Remove item modal state
   const [productToRemove, setProductToRemove] = useState<any | null>(null);
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
-  const [removeValueStr, setRemoveValueStr] = useState('');
+  const [removeValueStr, setRemoveValueStr] = useState("");
   const [removingItem, setRemovingItem] = useState(false);
   const [savingUrgente, setSavingUrgente] = useState(false);
   // Wizard for adding sale details when confirming modal cart
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
-  const [wizardDate, setWizardDate] = useState<string>(new Date().toISOString().slice(0,10));
+  const [wizardDate, setWizardDate] = useState<string>(
+    new Date().toISOString().slice(0, 10),
+  );
   const [wizardPayments, setWizardPayments] = useState<any[]>([]);
-  const [formasPagamentosWizard, setFormasPagamentosWizard] = useState<any[]>([]);
-  const [loadingFormasPagamentosWizard, setLoadingFormasPagamentosWizard] = useState(false);
+  const [formasPagamentosWizard, setFormasPagamentosWizard] = useState<any[]>(
+    [],
+  );
+  const [loadingFormasPagamentosWizard, setLoadingFormasPagamentosWizard] =
+    useState(false);
   const [selectedPaymentIds, setSelectedPaymentIds] = useState<string[]>([]);
-  const [showCartaoDropdownWizard, setShowCartaoDropdownWizard] = useState(false);
-  const [wizardPaymentValues, setWizardPaymentValues] = useState<Record<string, string>>({});
+  const [showCartaoDropdownWizard, setShowCartaoDropdownWizard] =
+    useState(false);
+  const [wizardPaymentValues, setWizardPaymentValues] = useState<
+    Record<string, string>
+  >({});
   const [wizardSaving, setWizardSaving] = useState(false);
   const wizardSubmitLockRef = useRef(false);
-  const lastWizardSubmitRef = useRef<{ fingerprint: string; at: number } | null>(null);
+  const lastWizardSubmitRef = useRef<{
+    fingerprint: string;
+    at: number;
+  } | null>(null);
   const [tempoGanho, setTempoGanho] = useState<Date | undefined>(undefined);
   const [savingTempoGanho, setSavingTempoGanho] = useState(false);
   // Ref para o dropdown de cartões
@@ -322,20 +415,26 @@ export default function Pedido() {
   const [upSellSourceItem, setUpSellSourceItem] = useState<any | null>(null);
   const [upSellProducts, setUpSellProducts] = useState<any[]>([]);
   const [loadingUpSell, setLoadingUpSell] = useState(false);
-  const [selectedVariations, setSelectedVariations] = useState<Record<string, string>>({});
+  const [selectedVariations, setSelectedVariations] = useState<
+    Record<string, string>
+  >({});
   const [confirmManterOpen, setConfirmManterOpen] = useState(false);
   const [itemToKeep, setItemToKeep] = useState<any | null>(null);
   // Up-sell wizard states
   const [upSellWizardOpen, setUpSellWizardOpen] = useState(false);
   const [upSellWizardStep, setUpSellWizardStep] = useState(1);
-  const [upSellDate, setUpSellDate] = useState<string>(new Date().toISOString().slice(0,10));
-  const [upSellPayment, setUpSellPayment] = useState<string>('Pix');
-  const [upSellValueStr, setUpSellValueStr] = useState<string>('');
-  const [upSellStatus, setUpSellStatus] = useState<string>('');
+  const [upSellDate, setUpSellDate] = useState<string>(
+    new Date().toISOString().slice(0, 10),
+  );
+  const [upSellPayment, setUpSellPayment] = useState<string>("Pix");
+  const [upSellValueStr, setUpSellValueStr] = useState<string>("");
+  const [upSellStatus, setUpSellStatus] = useState<string>("");
   const [statusUpSellOptions, setStatusUpSellOptions] = useState<any[]>([]);
   const [selectedUpSellProduct, setSelectedUpSellProduct] = useState<any>(null);
   const [savingUpSell, setSavingUpSell] = useState(false);
-  const [statusUpSellMap, setStatusUpSellMap] = useState<Record<number, string>>({});
+  const [statusUpSellMap, setStatusUpSellMap] = useState<
+    Record<number, string>
+  >({});
   const [isAumentoGratis, setIsAumentoGratis] = useState(false);
   const [isNormalFlow, setIsNormalFlow] = useState(false);
   const [pendingUpSellAlertOpen, setPendingUpSellAlertOpen] = useState(false);
@@ -346,47 +445,53 @@ export default function Pedido() {
   const [revertendoStatus, setRevertendoStatus] = useState(false);
   // Upload de etiqueta states
   const [uploadingLabel, setUploadingLabel] = useState(false);
-  const [selectedLabelFiles, setSelectedLabelFiles] = useState<Array<{ file: File; customName: string }>>([]);
+  const [selectedLabelFiles, setSelectedLabelFiles] = useState<
+    Array<{ file: File; customName: string }>
+  >([]);
+  const [isDraggingLabel, setIsDraggingLabel] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const formatCurrencyBR = (n: number) => {
-    if (isNaN(n) || !isFinite(n)) return '0,00';
-    return n.toFixed(2).replace('.', ',');
+    if (isNaN(n) || !isFinite(n)) return "0,00";
+    return n.toFixed(2).replace(".", ",");
   };
   const parseCurrencyBR = (s: string) => {
     if (!s) return 0;
-    const cleaned = String(s).replace(/R\$|\s/g, '').replace(/\./g, '').replace(/,/g, '.');
+    const cleaned = String(s)
+      .replace(/R\$|\s/g, "")
+      .replace(/\./g, "")
+      .replace(/,/g, ".");
     const v = Number(cleaned);
     return isNaN(v) ? 0 : v;
   };
 
   const normalizeAndFormatCurrencyInput = (raw: string) => {
     // keep only digits
-    const digits = String(raw || '').replace(/\D/g, '');
-    if (!digits) return '0,00';
+    const digits = String(raw || "").replace(/\D/g, "");
+    if (!digits) return "0,00";
     // cents are last 2 digits
-    const cents = digits.slice(-2).padStart(2, '0');
-    const intPart = digits.slice(0, -2) || '0';
+    const cents = digits.slice(-2).padStart(2, "0");
+    const intPart = digits.slice(0, -2) || "0";
     // format integer part with thousand separators
-    const intFormatted = Number(intPart).toLocaleString('pt-BR');
+    const intFormatted = Number(intPart).toLocaleString("pt-BR");
     return `${intFormatted},${cents}`;
   };
 
   const buildWizardSubmissionFingerprint = () => {
     const cartSignature = (modalCart || [])
       .map((it: any) => {
-        const [produtoId, variacaoId] = String(it.id || '').split(':');
-        return `${it.produtoId || produtoId}:${variacaoId || 'null'}:${Number(it.quantidade || 1)}:${Number(it.preco || 0)}`;
+        const [produtoId, variacaoId] = String(it.id || "").split(":");
+        return `${it.produtoId || produtoId}:${variacaoId || "null"}:${Number(it.quantidade || 1)}:${Number(it.preco || 0)}`;
       })
       .sort()
-      .join('|');
+      .join("|");
 
     const paymentsSignature = (selectedPaymentIds || [])
-      .map((id) => `${id}:${wizardPaymentValues[id] || '0,00'}`)
+      .map((id) => `${id}:${wizardPaymentValues[id] || "0,00"}`)
       .sort()
-      .join('|');
+      .join("|");
 
-    return `${pedido?.id || 'no-pedido'}::${wizardDate}::${cartSignature}::${paymentsSignature}`;
+    return `${pedido?.id || "no-pedido"}::${wizardDate}::${cartSignature}::${paymentsSignature}`;
   };
 
   // Function to check if all up_cell products are resolved and auto-liberate the order
@@ -396,54 +501,64 @@ export default function Pedido() {
   // 3. Special case: If there's ONLY 1 product with up_cell (no other products) -> auto-liberate when it exits status 1
   const checkAndAutoLiberatePedido = async (excludeItemId?: string) => {
     if (!pedido || pedido.pedido_liberado) return;
-    
+
     try {
       // Get count of items in this order
       const totalItens = (pedido.itens || []).length;
-      
+
       // Special case: If there's only 1 item total and it's being processed, liberate directly
       if (totalItens === 1 && excludeItemId) {
         const singleItem = pedido.itens[0];
-        if (singleItem.produto?.up_cell && (singleItem.id === excludeItemId || singleItem._sourceIds?.includes(excludeItemId))) {
+        if (
+          singleItem.produto?.up_cell &&
+          (singleItem.id === excludeItemId ||
+            singleItem._sourceIds?.includes(excludeItemId))
+        ) {
           // Only 1 up_cell product and it's being resolved - liberate now
           const { error } = await supabase
-            .from('pedidos')
+            .from("pedidos")
             .update({
               pedido_liberado: true,
               status_id: LOGISTICA_STATUS_ID,
               etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
-              atualizado_em: new Date().toISOString()
+              atualizado_em: new Date().toISOString(),
             })
-            .eq('id', pedido.id);
-          
+            .eq("id", pedido.id);
+
           if (error) throw error;
 
-          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (up-sell resolvido), enviado para Logística e etiqueta Pendente');
-          toast({ title: 'Pedido liberado automaticamente', description: 'Produto de up-sell foi resolvido' });
+          await registrarHistoricoMovimentacao(
+            pedido.id,
+            "Pedido liberado automaticamente (up-sell resolvido), enviado para Logística e etiqueta Pendente",
+          );
+          toast({
+            title: "Pedido liberado automaticamente",
+            description: "Produto de up-sell foi resolvido",
+          });
           return;
         }
       }
-      
+
       // Get fresh itens_pedido data from database
       const { data: itensData, error: itensError } = await supabase
-        .from('itens_pedido')
-        .select('id, status_up_sell, produto:produtos(id, up_cell)')
-        .eq('pedido_id', pedido.id);
-      
+        .from("itens_pedido")
+        .select("id, status_up_sell, produto:produtos(id, up_cell)")
+        .eq("pedido_id", pedido.id);
+
       if (itensError) throw itensError;
-      
+
       const itens = itensData || [];
-      
+
       // Count up_cell products and non-up_cell products
       const upCellProducts = itens.filter((it: any) => it.produto?.up_cell);
       const nonUpCellProducts = itens.filter((it: any) => !it.produto?.up_cell);
-      
+
       // Rule 1: If there's at least 1 product WITHOUT up_cell -> DO NOT auto-liberate
       // The button will be shown for the user to click manually
       if (nonUpCellProducts.length > 0) {
         return; // Don't auto-liberate, button will handle it
       }
-      
+
       // Rule 2 & 3: ALL products are up_cell (including special case of just 1)
       // Check if all up_cell products are resolved (status !== 1)
       if (upCellProducts.length > 0) {
@@ -454,27 +569,33 @@ export default function Pedido() {
           }
           return it.status_up_sell && it.status_up_sell !== 1;
         });
-        
+
         if (allUpCellResolved) {
           // Auto-liberate the order
           const { error } = await supabase
-            .from('pedidos')
+            .from("pedidos")
             .update({
               pedido_liberado: true,
               status_id: LOGISTICA_STATUS_ID,
               etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
-              atualizado_em: new Date().toISOString()
+              atualizado_em: new Date().toISOString(),
             })
-            .eq('id', pedido.id);
-          
+            .eq("id", pedido.id);
+
           if (error) throw error;
 
-          await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado automaticamente (todos up-sell resolvidos), enviado para Logística e etiqueta Pendente');
-          toast({ title: 'Pedido liberado automaticamente', description: 'Todos os produtos de up-sell foram resolvidos' });
+          await registrarHistoricoMovimentacao(
+            pedido.id,
+            "Pedido liberado automaticamente (todos up-sell resolvidos), enviado para Logística e etiqueta Pendente",
+          );
+          toast({
+            title: "Pedido liberado automaticamente",
+            description: "Todos os produtos de up-sell foram resolvidos",
+          });
         }
       }
     } catch (err: any) {
-      console.error('Erro ao verificar auto-liberação:', err);
+      console.error("Erro ao verificar auto-liberação:", err);
     }
   };
 
@@ -487,10 +608,12 @@ export default function Pedido() {
       setProdutosErrorModal(null);
       try {
         const { data, error } = await supabase
-          .from('produtos')
-          .select('id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em,up_cell,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)')
-          .order('contagem', { ascending: false, nullsFirst: false })
-          .order('criado_em', { ascending: false });
+          .from("produtos")
+          .select(
+            "id,nome,sku,preco,unidade,categoria,img_url,qntd,nome_variacao,codigo_barras,criado_em,atualizado_em,up_cell,contagem, variacoes_produto(id,nome,sku,valor,qntd,img_url,codigo_barras_v)",
+          )
+          .order("contagem", { ascending: false, nullsFirst: false })
+          .order("criado_em", { ascending: false });
 
         if (error) throw error;
         if (!mounted) return;
@@ -500,12 +623,20 @@ export default function Pedido() {
           nome: p.nome,
           sku: p.sku,
           preco: Number(p.preco || 0),
-          unidade: p.unidade || 'un',
-          categoria: p.categoria || '',
+          unidade: p.unidade || "un",
+          categoria: p.categoria || "",
           imagemUrl: p.img_url || undefined,
           codigo_barras: p.codigo_barras || null,
           up_cell: p.up_cell || false,
-          variacoes: (p.variacoes_produto || []).map((v: any) => ({ id: v.id, nome: v.nome, sku: v.sku, valor: Number(v.valor || 0), qntd: v.qntd ?? 0, img_url: v.img_url || null, codigo_barras_v: v.codigo_barras_v || null })),
+          variacoes: (p.variacoes_produto || []).map((v: any) => ({
+            id: v.id,
+            nome: v.nome,
+            sku: v.sku,
+            valor: Number(v.valor || 0),
+            qntd: v.qntd ?? 0,
+            img_url: v.img_url || null,
+            codigo_barras_v: v.codigo_barras_v || null,
+          })),
           nomeVariacao: p.nome_variacao || null,
           qntd: p.qntd ?? 0,
           criadoEm: p.criado_em,
@@ -518,13 +649,14 @@ export default function Pedido() {
         const defaults: Record<string, string> = {};
         const brindeDefaults: Record<string, boolean> = {};
         mapped.forEach((pr) => {
-          if (pr.variacoes && pr.variacoes.length) defaults[pr.id] = pr.variacoes[0].id;
+          if (pr.variacoes && pr.variacoes.length)
+            defaults[pr.id] = pr.variacoes[0].id;
           brindeDefaults[pr.id] = false;
         });
         setVariationSelectionsModal(defaults);
         setBrindeSelectionsModal(brindeDefaults);
       } catch (err: any) {
-        console.error('Erro ao carregar produtos para modal:', err);
+        console.error("Erro ao carregar produtos para modal:", err);
         setProdutosErrorModal(err?.message || String(err));
       } finally {
         setLoadingProdutosModal(false);
@@ -532,7 +664,9 @@ export default function Pedido() {
     };
 
     loadProdutosModal();
-    return () => { mounted = false };
+    return () => {
+      mounted = false;
+    };
   }, [addProductsVisible]);
 
   // Load up-sell products when modal opens
@@ -544,47 +678,51 @@ export default function Pedido() {
       try {
         const productId = upSellSourceItem.produto?.id;
         if (!productId) return;
-        
+
         // Get the product to access lista_id_upsell
         const { data: prodData, error: prodError } = await supabase
-          .from('produtos')
-          .select('lista_id_upsell')
-          .eq('id', productId)
+          .from("produtos")
+          .select("lista_id_upsell")
+          .eq("id", productId)
           .single();
-        
+
         if (prodError) throw prodError;
         if (!mounted) return;
-        
+
         const upSellIds = prodData?.lista_id_upsell || [];
         if (upSellIds.length === 0) {
           setUpSellProducts([]);
           return;
         }
-        
+
         // Load the up-sell products
         const { data: upSellData, error: upSellError } = await supabase
-          .from('produtos')
-          .select('id, nome, sku, preco, img_url, variacoes_produto(id, nome, sku, valor, img_url)')
-          .in('id', upSellIds);
-        
+          .from("produtos")
+          .select(
+            "id, nome, sku, preco, img_url, variacoes_produto(id, nome, sku, valor, img_url)",
+          )
+          .in("id", upSellIds);
+
         if (upSellError) throw upSellError;
         if (!mounted) return;
-        
+
         setUpSellProducts(upSellData || []);
       } catch (err) {
-        console.error('Erro ao carregar produtos up-sell:', err);
+        console.error("Erro ao carregar produtos up-sell:", err);
         toast({
-          title: 'Erro',
-          description: 'Não foi possível carregar os produtos up-sell',
-          variant: 'destructive'
+          title: "Erro",
+          description: "Não foi possível carregar os produtos up-sell",
+          variant: "destructive",
         });
       } finally {
         setLoadingUpSell(false);
       }
     };
-    
+
     loadUpSellProducts();
-    return () => { mounted = false };
+    return () => {
+      mounted = false;
+    };
   }, [upSellModalOpen, upSellSourceItem]);
 
   // Load status up-sell options and map
@@ -593,32 +731,34 @@ export default function Pedido() {
     const loadStatusUpSell = async () => {
       try {
         const { data, error } = await supabase
-          .from('status_upsell')
-          .select('*')
-          .order('id');
-        
+          .from("status_upsell")
+          .select("*")
+          .order("id");
+
         if (error) throw error;
         if (!mounted) return;
-        
+
         setStatusUpSellOptions(data || []);
-        
+
         // Create map for quick lookup
         const map: Record<number, string> = {};
         (data || []).forEach((status: any) => {
           map[status.id] = status.status;
         });
         setStatusUpSellMap(map);
-        
+
         if (data && data.length > 0) {
           setUpSellStatus(String(data[0].id));
         }
       } catch (err) {
-        console.error('Erro ao carregar status up-sell:', err);
+        console.error("Erro ao carregar status up-sell:", err);
       }
     };
-    
+
     loadStatusUpSell();
-    return () => { mounted = false };
+    return () => {
+      mounted = false;
+    };
   }, []); // Load once on mount
 
   // Load formas de pagamento
@@ -627,21 +767,23 @@ export default function Pedido() {
     const loadFormasPagamento = async () => {
       try {
         const { data, error } = await (supabase as any)
-          .from('formas_pagamentos')
-          .select('*')
-          .order('id');
-        
+          .from("formas_pagamentos")
+          .select("*")
+          .order("id");
+
         if (error) throw error;
         if (!mounted) return;
-        
+
         setFormasPagamentos(data || []);
       } catch (err) {
-        console.error('Erro ao carregar formas de pagamento:', err);
+        console.error("Erro ao carregar formas de pagamento:", err);
       }
     };
-    
+
     loadFormasPagamento();
-    return () => { mounted = false };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Tipos
@@ -687,16 +829,16 @@ export default function Pedido() {
   useEffect(() => {
     if (!id) return;
     let mounted = true;
-    
+
     // Carregar dados de embalagens e remetentes
     const loadData = async () => {
       try {
         const [
           { data: embalagensData, error: embalagensError },
-          { data: remetentesData, error: remetentesError }
+          { data: remetentesData, error: remetentesError },
         ] = await Promise.all([
-          supabase.from('embalagens').select('*').order('nome'),
-          supabase.from('remetentes').select('*').order('nome')
+          supabase.from("embalagens").select("*").order("nome"),
+          supabase.from("remetentes").select("*").order("nome"),
         ]);
 
         if (embalagensError) throw embalagensError;
@@ -707,30 +849,34 @@ export default function Pedido() {
 
         // Auto-selecionar primeira embalagem
         if (embalagensData?.length) setSelectedEmbalagem(embalagensData[0]);
-        
+
         // Nota: remetente será definido após carregar o pedido, baseado no pedido.remetente_id
         // if (remetentesData?.length) setSelectedRemetente(remetentesData[0]);
-        
+
         // try to load payment methods table if exists
         (async () => {
           try {
-            const { data: pmData, error: pmError } = await (supabase as any).from('formas_pagamentos').select('id,nome');
+            const { data: pmData, error: pmError } = await (supabase as any)
+              .from("formas_pagamentos")
+              .select("id,nome");
             if (!pmError && pmData) {
               const map: Record<number, string> = {};
-              pmData.forEach((r: any) => { map[r.id] = r.nome; });
+              pmData.forEach((r: any) => {
+                map[r.id] = r.nome;
+              });
               setPaymentMethods(map);
             }
           } catch (e) {
             // ignore if table doesn't exist
           }
         })();
-        
+
         // Load status up-sell for display in table
         (async () => {
           try {
             const { data: statusData, error: statusError } = await supabase
-              .from('status_upsell')
-              .select('*');
+              .from("status_upsell")
+              .select("*");
             if (!statusError && statusData) {
               const map: Record<number, string> = {};
               statusData.forEach((status: any) => {
@@ -743,11 +889,11 @@ export default function Pedido() {
           }
         })();
       } catch (err) {
-        console.error('Erro ao carregar dados:', err);
-        toast({ 
-          title: 'Erro', 
-          description: 'Não foi possível carregar alguns dados',
-          variant: 'destructive'
+        console.error("Erro ao carregar dados:", err);
+        toast({
+          title: "Erro",
+          description: "Não foi possível carregar alguns dados",
+          variant: "destructive",
         });
       }
     };
@@ -757,16 +903,30 @@ export default function Pedido() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [{ data: pedidoData, error: pedidoError }, { data: plataformasData, error: plataformasError }, { data: statusesData, error: statusesError }, { data: usuariosData, error: usuariosError }, { data: etiquetasData, error: etiquetasError }] = await Promise.all([
+        const [
+          { data: pedidoData, error: pedidoError },
+          { data: plataformasData, error: plataformasError },
+          { data: statusesData, error: statusesError },
+          { data: usuariosData, error: usuariosError },
+          { data: etiquetasData, error: etiquetasError },
+        ] = await Promise.all([
           supabase
-            .from('pedidos')
-            .select(`*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, status_up_sell, pintado, produto:produtos(id,nome,sku,img_url,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,img_url,valor)), lista_pagamentos(formas_pagamentos_id, valor, formas_pagamentos(id, nome, img_url))`)
-            .eq('id', id)
+            .from("pedidos")
+            .select(
+              `*, clientes(*), usuarios(id,nome,img_url), plataformas(id,nome,cor,img_url), status(id,nome,cor_hex,ordem), tipos_etiqueta(id,nome,cor_hex,ordem), itens_pedido(id,quantidade,preco_unitario, criado_em, status_up_sell, pintado, produto:produtos(id,nome,sku,img_url,preco,up_cell,lista_id_upsell), variacao:variacoes_produto(id,nome,sku,img_url,valor)), lista_pagamentos(formas_pagamentos_id, valor, formas_pagamentos(id, nome, img_url))`,
+            )
+            .eq("id", id)
             .single(),
-          supabase.from('plataformas').select('*').order('nome'),
-          supabase.from('status').select('*').order('ordem', { ascending: true }),
-          supabase.from('usuarios').select('*'),
-          supabase.from('tipos_etiqueta').select('*').order('ordem', { ascending: true }),
+          supabase.from("plataformas").select("*").order("nome"),
+          supabase
+            .from("status")
+            .select("*")
+            .order("ordem", { ascending: true }),
+          supabase.from("usuarios").select("*"),
+          supabase
+            .from("tipos_etiqueta")
+            .select("*")
+            .order("ordem", { ascending: true }),
         ]);
 
         if (pedidoError) throw pedidoError;
@@ -777,18 +937,21 @@ export default function Pedido() {
         if (!mounted) return;
 
         // normalize related shapes
-        const pick = (val: any) => Array.isArray(val) ? val[0] : val;
+        const pick = (val: any) => (Array.isArray(val) ? val[0] : val);
         const pedidoRow = pedidoData;
         // Get payment info from lista_pagamentos join
         const listaPagamento = pick(pedidoRow.lista_pagamentos);
-        const formaPagamento = (listaPagamento && listaPagamento.formas_pagamentos) ? pick(listaPagamento.formas_pagamentos) : null;
+        const formaPagamento =
+          listaPagamento && listaPagamento.formas_pagamentos
+            ? pick(listaPagamento.formas_pagamentos)
+            : null;
         // Prefer explicit cliente linked by pedido_id in clientes table
         let cliente: any = pick(pedidoRow.clientes);
         try {
           const res: any = await (supabase as any)
-            .from('clientes')
-            .select('*')
-            .eq('pedido_id', id)
+            .from("clientes")
+            .select("*")
+            .eq("pedido_id", id)
             .maybeSingle();
           if (!res.error && res.data) cliente = res.data;
         } catch (e) {
@@ -816,47 +979,59 @@ export default function Pedido() {
             pintado: it.pintado || false,
           };
         });
-        
+
         // Check if any product has entregue_ml = true in produtos_sku_plataformas
         // ONLY for Mercado Livre platform - otherwise use default buttons
         let hasEntregueML = false;
-        const isMercadoLivre = plataforma?.nome?.toLowerCase().includes('mercado livre');
-        
+        const isMercadoLivre = plataforma?.nome
+          ?.toLowerCase()
+          .includes("mercado livre");
+
         if (isMercadoLivre) {
           // The relationship is through SKU field (check both product and variation SKU)
           const allSkus: string[] = [];
-          
+
           // Collect all SKUs from products and variations
           itens.forEach((it: any) => {
             if (it.produto?.sku) allSkus.push(it.produto.sku);
             if (it.variacao?.sku) allSkus.push(it.variacao.sku);
           });
-          
+
           const uniqueSkus = [...new Set(allSkus)].filter(Boolean);
-          
-          console.log('SKUs do pedido:', uniqueSkus);
-          
+
+          console.log("SKUs do pedido:", uniqueSkus);
+
           if (uniqueSkus.length > 0) {
             try {
-              const { data: skuPlataformasData, error: skuError } = await (supabase as any)
-                .from('produtos_sku_plataformas')
-                .select('sku, entregue_ml')
-                .in('sku', uniqueSkus);
-              
-              console.log('Dados de produtos_sku_plataformas:', skuPlataformasData);
-              console.log('Erro ao buscar produtos_sku_plataformas:', skuError);
-              
+              const { data: skuPlataformasData, error: skuError } = await (
+                supabase as any
+              )
+                .from("produtos_sku_plataformas")
+                .select("sku, entregue_ml")
+                .in("sku", uniqueSkus);
+
+              console.log(
+                "Dados de produtos_sku_plataformas:",
+                skuPlataformasData,
+              );
+              console.log("Erro ao buscar produtos_sku_plataformas:", skuError);
+
               if (!skuError && skuPlataformasData) {
                 // Check if any of the returned records has entregue_ml = true
-                hasEntregueML = skuPlataformasData.some((item: any) => item.entregue_ml === true);
-                console.log('Tem produto com entregue_ml = true?', hasEntregueML);
+                hasEntregueML = skuPlataformasData.some(
+                  (item: any) => item.entregue_ml === true,
+                );
+                console.log(
+                  "Tem produto com entregue_ml = true?",
+                  hasEntregueML,
+                );
               }
             } catch (err) {
-              console.error('Erro ao verificar produtos_sku_plataformas:', err);
+              console.error("Erro ao verificar produtos_sku_plataformas:", err);
             }
           }
         }
-        
+
         // Update state to control button visibility (only for Mercado Livre)
         setTemProdutoEntregueML(isMercadoLivre && hasEntregueML);
 
@@ -865,11 +1040,29 @@ export default function Pedido() {
           cliente,
           plataforma,
           responsavel,
-          status: statusRow ? { id: statusRow.id, nome: statusRow.nome, corHex: statusRow.cor_hex } : null,
-          etiqueta: etiquetaRow ? { id: etiquetaRow.id, nome: etiquetaRow.nome, corHex: etiquetaRow.cor_hex } : null,
-          forma_pagamento: formaPagamento ? { id: formaPagamento.id, nome: formaPagamento.nome, img_url: formaPagamento.img_url } : null,
+          status: statusRow
+            ? {
+                id: statusRow.id,
+                nome: statusRow.nome,
+                corHex: statusRow.cor_hex,
+              }
+            : null,
+          etiqueta: etiquetaRow
+            ? {
+                id: etiquetaRow.id,
+                nome: etiquetaRow.nome,
+                corHex: etiquetaRow.cor_hex,
+              }
+            : null,
+          forma_pagamento: formaPagamento
+            ? {
+                id: formaPagamento.id,
+                nome: formaPagamento.nome,
+                img_url: formaPagamento.img_url,
+              }
+            : null,
           valor_pagamento: listaPagamento?.valor || null,
-          itens
+          itens,
         });
 
         // Inicializar tempo_ganho se existir
@@ -877,31 +1070,55 @@ export default function Pedido() {
           setTempoGanho(new Date(pedidoRow.tempo_ganho));
         }
 
-    // init etiqueta input
-  setEtiquetaText(etiquetaRow?.nome || '');
-    // init link etiqueta input from pedido row (link_etiqueta is the field on pedidos)
-    setLinkEtiqueta((pedidoRow as any)?.link_etiqueta ?? (pedidoRow as any)?.link_formulario ?? '');
+        // init etiqueta input
+        setEtiquetaText(etiquetaRow?.nome || "");
+        // init link etiqueta input from pedido row (link_etiqueta is the field on pedidos)
+        setLinkEtiqueta(
+          (pedidoRow as any)?.link_etiqueta ??
+            (pedidoRow as any)?.link_formulario ??
+            "",
+        );
 
-  setPlataformas(plataformasData || []);
-  setStatuses((statusesData || []).map((s: any) => ({ id: s.id, nome: s.nome, corHex: s.cor_hex })));
-  setUsuarios(usuariosData || []);
-  setEtiquetas((etiquetasData || []).map((t: any) => ({ id: t.id, nome: t.nome, corHex: t.cor_hex })));
+        setPlataformas(plataformasData || []);
+        setStatuses(
+          (statusesData || []).map((s: any) => ({
+            id: s.id,
+            nome: s.nome,
+            corHex: s.cor_hex,
+          })),
+        );
+        setUsuarios(usuariosData || []);
+        setEtiquetas(
+          (etiquetasData || []).map((t: any) => ({
+            id: t.id,
+            nome: t.nome,
+            corHex: t.cor_hex,
+          })),
+        );
       } catch (err: any) {
-        console.error('Erro ao buscar pedido', err);
-        toast({ title: 'Erro', description: err.message || String(err), variant: 'destructive' });
+        console.error("Erro ao buscar pedido", err);
+        toast({
+          title: "Erro",
+          description: err.message || String(err),
+          variant: "destructive",
+        });
       } finally {
         setLoading(false);
       }
     };
 
     fetchData();
-    return () => { mounted = false };
+    return () => {
+      mounted = false;
+    };
   }, [id]);
 
   // Definir remetente selecionado quando pedido e remetentes forem carregados
   useEffect(() => {
     if (pedido && pedido.remetente_id && remetentes.length > 0) {
-      const remetenteEncontrado = remetentes.find(r => r.id === pedido.remetente_id);
+      const remetenteEncontrado = remetentes.find(
+        (r) => r.id === pedido.remetente_id,
+      );
       if (remetenteEncontrado) {
         setSelectedRemetente(remetenteEncontrado);
       }
@@ -911,30 +1128,35 @@ export default function Pedido() {
   // Load formas de pagamento when wizard opens
   useEffect(() => {
     if (!wizardOpen) return;
-    
+
     // Reset wizard states when opening
     setWizardStep(1);
     setSelectedPaymentIds([]);
     setWizardPaymentValues({});
     setShowCartaoDropdownWizard(false);
-    
+
     let mounted = true;
     const loadFormasPagamentos = async () => {
       setLoadingFormasPagamentosWizard(true);
       try {
-        const { data, error } = await (supabase as any).from('formas_pagamentos').select('*').order('id');
+        const { data, error } = await (supabase as any)
+          .from("formas_pagamentos")
+          .select("*")
+          .order("id");
         if (error) throw error;
         if (!mounted) return;
         setFormasPagamentosWizard(data || []);
       } catch (err: any) {
-        console.error('Erro ao carregar formas de pagamento:', err);
+        console.error("Erro ao carregar formas de pagamento:", err);
       } finally {
         setLoadingFormasPagamentosWizard(false);
       }
     };
-    
+
     loadFormasPagamentos();
-    return () => { mounted = false };
+    return () => {
+      mounted = false;
+    };
   }, [wizardOpen]);
 
   // Close cartão dropdown when wizard step changes
@@ -945,15 +1167,18 @@ export default function Pedido() {
   // Close cartão dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (cartaoDropdownRef.current && !cartaoDropdownRef.current.contains(event.target as Node)) {
+      if (
+        cartaoDropdownRef.current &&
+        !cartaoDropdownRef.current.contains(event.target as Node)
+      ) {
         setShowCartaoDropdownWizard(false);
       }
     };
 
     if (showCartaoDropdownWizard) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
       return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
+        document.removeEventListener("mousedown", handleClickOutside);
       };
     }
   }, [showCartaoDropdownWizard]);
@@ -963,7 +1188,7 @@ export default function Pedido() {
     setSaving(true);
     try {
       const { error } = await supabase
-        .from('pedidos')
+        .from("pedidos")
         .update({
           status_id: pedido.status?.id || null,
           responsavel_id: pedido.responsavel?.id || null,
@@ -971,17 +1196,27 @@ export default function Pedido() {
           link_etiqueta: linkEtiqueta || null,
           atualizado_em: new Date().toISOString(),
         } as any)
-        .eq('id', pedido.id);
+        .eq("id", pedido.id);
 
       if (error) throw error;
 
-      await registrarHistoricoMovimentacao(pedido.id, 'Pedido salvo (status, responsável, observações, link etiqueta)');
-      toast({ title: 'Pedido atualizado', description: 'Alterações salvas com sucesso' });
+      await registrarHistoricoMovimentacao(
+        pedido.id,
+        "Pedido salvo (status, responsável, observações, link etiqueta)",
+      );
+      toast({
+        title: "Pedido atualizado",
+        description: "Alterações salvas com sucesso",
+      });
       // refresh
       navigate(0);
     } catch (err: any) {
-      console.error('Erro ao salvar pedido', err);
-      toast({ title: 'Erro', description: err.message || String(err), variant: 'destructive' });
+      console.error("Erro ao salvar pedido", err);
+      toast({
+        title: "Erro",
+        description: err.message || String(err),
+        variant: "destructive",
+      });
     } finally {
       setSaving(false);
     }
@@ -991,7 +1226,7 @@ export default function Pedido() {
     if (!id) return;
     setSavingLink(true);
     try {
-      const linkNormalizado = (linkEtiqueta || '').trim();
+      const linkNormalizado = (linkEtiqueta || "").trim();
       const updateData: any = {
         link_etiqueta: linkNormalizado || null,
         atualizado_em: new Date().toISOString(),
@@ -1003,14 +1238,18 @@ export default function Pedido() {
       }
 
       const { error } = await supabase
-        .from('pedidos')
+        .from("pedidos")
         .update(updateData)
-        .eq('id', id);
+        .eq("id", id);
 
       if (error) throw error;
 
-      const statusLogistica = statuses.find((status: any) => status.id === LOGISTICA_STATUS_ID);
-      const etiquetaDisponivel = etiquetas.find((etiqueta: any) => etiqueta.id === ETIQUETA_DISPONIVEL_ID);
+      const statusLogistica = statuses.find(
+        (status: any) => status.id === LOGISTICA_STATUS_ID,
+      );
+      const etiquetaDisponivel = etiquetas.find(
+        (etiqueta: any) => etiqueta.id === ETIQUETA_DISPONIVEL_ID,
+      );
 
       setPedido((prev: any) => {
         if (!prev) return prev;
@@ -1031,19 +1270,27 @@ export default function Pedido() {
       if (linkNormalizado) {
         await registrarHistoricoMovimentacao(
           id,
-          'Link da etiqueta salvo e pedido movido para Logística com etiqueta Disponível'
+          "Link da etiqueta salvo e pedido movido para Logística com etiqueta Disponível",
         );
         toast({
-          title: 'Etiqueta gerada',
-          description: 'Link salvo, status alterado para Logística e etiqueta para Disponível',
+          title: "Etiqueta gerada",
+          description:
+            "Link salvo, status alterado para Logística e etiqueta para Disponível",
         });
       } else {
-        await registrarHistoricoMovimentacao(id, 'Link da etiqueta removido');
-        toast({ title: 'Link atualizado', description: 'Link da etiqueta atualizado com sucesso' });
+        await registrarHistoricoMovimentacao(id, "Link da etiqueta removido");
+        toast({
+          title: "Link atualizado",
+          description: "Link da etiqueta atualizado com sucesso",
+        });
       }
     } catch (err) {
-      console.error('Erro ao salvar link_etiqueta:', err);
-      toast({ title: 'Erro', description: 'Não foi possível salvar o link da etiqueta', variant: 'destructive' });
+      console.error("Erro ao salvar link_etiqueta:", err);
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar o link da etiqueta",
+        variant: "destructive",
+      });
     } finally {
       setSavingLink(false);
     }
@@ -1052,71 +1299,81 @@ export default function Pedido() {
   const handleCalcularFrete = async () => {
     // Validar CEP do cliente
     if (!pedido?.cliente?.cep) {
-      toast({ 
-        title: 'Erro', 
-        description: 'O CEP do cliente não está preenchido',
-        variant: 'destructive'
+      toast({
+        title: "Erro",
+        description: "O CEP do cliente não está preenchido",
+        variant: "destructive",
       });
       return;
     }
 
-    const cepLimpo = pedido.cliente.cep.replace(/\D/g, '');
+    const cepLimpo = pedido.cliente.cep.replace(/\D/g, "");
     if (!/^\d{8}$/.test(cepLimpo)) {
-      toast({ 
-        title: 'Erro', 
-        description: 'O CEP do cliente é inválido. Atualize os dados antes de prosseguir.',
-        variant: 'destructive'
+      toast({
+        title: "Erro",
+        description:
+          "O CEP do cliente é inválido. Atualize os dados antes de prosseguir.",
+        variant: "destructive",
       });
       return;
     }
 
     if (!selectedRemetente || !selectedEmbalagem) {
-      toast({ 
-        title: 'Erro', 
-        description: 'Selecione um remetente e uma embalagem',
-        variant: 'destructive'
+      toast({
+        title: "Erro",
+        description: "Selecione um remetente e uma embalagem",
+        variant: "destructive",
       });
       return;
     }
 
-  setCalculandoFrete(true);
-  setCotacaoModal(true);
+    setCalculandoFrete(true);
+    setCotacaoModal(true);
 
-    console.log('Dados do remetente sendo enviados:', selectedRemetente);
+    console.log("Dados do remetente sendo enviados:", selectedRemetente);
 
     try {
       // calcular valor dos itens como seguro
-      const itemsValue = (pedido?.itens || []).reduce((s: number, it: any) => s + (Number(it.preco_unitario || it.preco || 0) * Number(it.quantidade || 1)), 0);
+      const itemsValue = (pedido?.itens || []).reduce(
+        (s: number, it: any) =>
+          s +
+          Number(it.preco_unitario || it.preco || 0) *
+            Number(it.quantidade || 1),
+        0,
+      );
 
       const payload = {
-        origem: { 
-          postal_code: selectedRemetente.cep.replace(/\D/g,''),
+        origem: {
+          postal_code: selectedRemetente.cep.replace(/\D/g, ""),
           contact: selectedRemetente.contato || selectedRemetente.nome,
-          email: selectedRemetente.email || 'contato@empresa.com'
+          email: selectedRemetente.email || "contato@empresa.com",
         },
         destino: { postal_code: cepLimpo },
-        pacote: [{
-          weight: selectedEmbalagem.peso,
-          insurance_value: itemsValue || 1,
-          length: selectedEmbalagem.comprimento,
-          height: selectedEmbalagem.altura,
-          width: selectedEmbalagem.largura,
-          id: "1",
-          quantity: 1
-        }]
+        pacote: [
+          {
+            weight: selectedEmbalagem.peso,
+            insurance_value: itemsValue || 1,
+            length: selectedEmbalagem.comprimento,
+            height: selectedEmbalagem.altura,
+            width: selectedEmbalagem.largura,
+            id: "1",
+            quantity: 1,
+          },
+        ],
         // Opcionalmente incluir services se houver seleção
       };
 
-      const { data: resp, error: functionError } = await supabase.functions.invoke('calculo-frete-melhorenvio', {
-        body: payload
-      });
+      const { data: resp, error: functionError } =
+        await supabase.functions.invoke("calculo-frete-melhorenvio", {
+          body: payload,
+        });
 
       if (functionError) {
-        throw new Error(functionError.message || 'Erro ao calcular frete');
+        throw new Error(functionError.message || "Erro ao calcular frete");
       }
 
       if (!resp?.cotacoes) {
-        throw new Error('Resposta inválida do serviço de frete');
+        throw new Error("Resposta inválida do serviço de frete");
       }
       // Filtra cotações com erro e mapeia apenas as válidas
       const cotacoesValidas = resp.cotacoes
@@ -1127,20 +1384,23 @@ export default function Pedido() {
           modalidade: quote.name,
           prazo: `${quote.delivery_time} dias úteis`,
           preco: Number(quote.price),
-          raw_response: quote
+          raw_response: quote,
         }));
 
       if (cotacoesValidas.length === 0) {
-        throw new Error('Nenhuma opção de frete disponível para este endereço');
+        throw new Error("Nenhuma opção de frete disponível para este endereço");
       }
 
       setCotacoes(cotacoesValidas);
     } catch (err) {
-      console.error('Erro ao calcular frete:', err);
-      toast({ 
-        title: 'Erro', 
-        description: err instanceof Error ? err.message : 'Não foi possível calcular o frete. Tente novamente.',
-        variant: 'destructive'
+      console.error("Erro ao calcular frete:", err);
+      toast({
+        title: "Erro",
+        description:
+          err instanceof Error
+            ? err.message
+            : "Não foi possível calcular o frete. Tente novamente.",
+        variant: "destructive",
       });
       setCotacaoModal(false);
     } finally {
@@ -1157,8 +1417,8 @@ export default function Pedido() {
           prazo: cotacao.prazo,
           preco: cotacao.preco,
           service_id: cotacao.service_id,
-          raw_response: cotacao.raw_response
-        }
+          raw_response: cotacao.raw_response,
+        },
       };
 
       // Se vier o melhorEnvioId, adicionar ao update
@@ -1168,31 +1428,41 @@ export default function Pedido() {
       }
 
       const { error } = await supabase
-        .from('pedidos')
+        .from("pedidos")
         .update(updateData)
-        .eq('id', id);
-      
+        .eq("id", id);
+
       if (error) throw error;
 
-      await registrarHistoricoMovimentacao(id, `Frete selecionado: ${cotacao?.transportadora || 'N/A'} - ${cotacao?.modalidade || ''} - R$ ${cotacao?.preco || '0'}`);
-      toast({ title: 'Sucesso', description: 'Frete selecionado e salvo no pedido' });
+      await registrarHistoricoMovimentacao(
+        id,
+        `Frete selecionado: ${cotacao?.transportadora || "N/A"} - ${cotacao?.modalidade || ""} - R$ ${cotacao?.preco || "0"}`,
+      );
+      toast({
+        title: "Sucesso",
+        description: "Frete selecionado e salvo no pedido",
+      });
       setCotacaoModal(false);
-      
+
       // Recarregar página para atualizar dados
       navigate(0);
     } catch (err) {
-      console.error('Erro ao salvar frete:', err);
-      toast({ 
-        title: 'Erro', 
-        description: 'Não foi possível salvar o frete selecionado',
-        variant: 'destructive'
+      console.error("Erro ao salvar frete:", err);
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar o frete selecionado",
+        variant: "destructive",
       });
     }
   };
 
   const handleEnviarMaisBarato = async () => {
     if (!pedido) {
-      toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
+      toast({
+        title: "Erro",
+        description: "Pedido não carregado",
+        variant: "destructive",
+      });
       return;
     }
 
@@ -1200,23 +1470,32 @@ export default function Pedido() {
       setCalculandoFrete(true);
 
       // 1️⃣ VERIFICAR SALDO DO MELHOR ENVIO PRIMEIRO
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session) {
-        throw new Error('Usuário não autenticado');
+        throw new Error("Usuário não autenticado");
       }
 
-      const saldoResponse = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+      const saldoResponse = await fetch(
+        "https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
         },
-      });
+      );
 
       if (!saldoResponse.ok) {
-        const errorData = await saldoResponse.json().catch(() => ({ message: 'Erro ao verificar saldo' }));
-        throw new Error(errorData.message || 'Erro ao verificar saldo do Melhor Envio');
+        const errorData = await saldoResponse
+          .json()
+          .catch(() => ({ message: "Erro ao verificar saldo" }));
+        throw new Error(
+          errorData.message || "Erro ao verificar saldo do Melhor Envio",
+        );
       }
 
       const saldoData = await saldoResponse.json();
@@ -1225,9 +1504,9 @@ export default function Pedido() {
       // Verificar se o saldo é suficiente (mínimo R$ 50)
       if (saldoAtual < 50) {
         toast({
-          title: '⚠️ Saldo Insuficiente',
+          title: "⚠️ Saldo Insuficiente",
           description: `Saldo atual: R$ ${saldoAtual.toFixed(2)}. Mínimo necessário: R$ 50,00. Por favor, recarregue sua conta no Melhor Envio.`,
-          variant: 'destructive',
+          variant: "destructive",
           duration: 8000,
         });
         return; // Interromper o fluxo
@@ -1235,47 +1514,55 @@ export default function Pedido() {
 
       // 2️⃣ SALDO OK - PROSSEGUIR COM A GERAÇÃO DA ETIQUETA
       // Usar remetente do pedido se existir, caso contrário usar o padrão
-      const remetenteId = pedido.remetente_id || '128a7de7-d649-43e1-8ba3-2b54c3496b14';
+      const remetenteId =
+        pedido.remetente_id || "128a7de7-d649-43e1-8ba3-2b54c3496b14";
 
       // Chamar a edge function processar_etiqueta_em_envio_de_pedido
-      const { data: response, error: functionError } = await supabase.functions.invoke('processar_etiqueta_em_envio_de_pedido', {
-        body: { 
-          pedido_id: pedido.id, 
-          empresa_id: empresaId,
-          remetente_id: remetenteId
-        }
-      });
+      const { data: response, error: functionError } =
+        await supabase.functions.invoke(
+          "processar_etiqueta_em_envio_de_pedido",
+          {
+            body: {
+              pedido_id: pedido.id,
+              empresa_id: empresaId,
+              remetente_id: remetenteId,
+            },
+          },
+        );
 
       if (functionError) {
-        throw new Error(functionError.message || 'Erro ao processar etiqueta');
+        throw new Error(functionError.message || "Erro ao processar etiqueta");
       }
 
       // Atualizar o status_id do pedido para 3473cae9-47c8-4b85-96af-b41fe0e15fa9
       const { error: updateError } = await supabase
-        .from('pedidos')
-        .update({ 
-          status_id: '3473cae9-47c8-4b85-96af-b41fe0e15fa9',
-          etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f',
-          atualizado_em: new Date().toISOString()
+        .from("pedidos")
+        .update({
+          status_id: "3473cae9-47c8-4b85-96af-b41fe0e15fa9",
+          etiqueta_envio_id: "466958dd-e525-4e8d-95f1-067124a5ea7f",
+          atualizado_em: new Date().toISOString(),
         } as any)
-        .eq('id', pedido.id);
+        .eq("id", pedido.id);
 
       if (updateError) throw updateError;
 
-      await registrarHistoricoMovimentacao(pedido.id, 'Etiqueta comprada pelo Melhor Envio - Enviado para Logística');
-      toast({ 
-        title: 'Sucesso', 
-        description: 'Etiqueta processada e pedido atualizado com sucesso' 
+      await registrarHistoricoMovimentacao(
+        pedido.id,
+        "Etiqueta comprada pelo Melhor Envio - Enviado para Logística",
+      );
+      toast({
+        title: "Sucesso",
+        description: "Etiqueta processada e pedido atualizado com sucesso",
       });
-      
+
       // Recarregar a página para atualizar os dados
       navigate(0);
     } catch (err: any) {
-      console.error('Erro ao processar etiqueta:', err);
-      toast({ 
-        title: 'Erro', 
-        description: err?.message || String(err), 
-        variant: 'destructive' 
+      console.error("Erro ao processar etiqueta:", err);
+      toast({
+        title: "Erro",
+        description: err?.message || String(err),
+        variant: "destructive",
       });
     } finally {
       setCalculandoFrete(false);
@@ -1284,10 +1571,10 @@ export default function Pedido() {
 
   const handleGerarEtiquetaML = async () => {
     if (!pedido?.id) {
-      toast({ 
-        title: 'Erro', 
-        description: 'O pedido não possui id primário definido',
-        variant: 'destructive'
+      toast({
+        title: "Erro",
+        description: "O pedido não possui id primário definido",
+        variant: "destructive",
       });
       return;
     }
@@ -1295,26 +1582,27 @@ export default function Pedido() {
     setGerandoEtiquetaML(true);
 
     try {
-      const EDGE_FUNCTION_URL = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/gerar-etiqueta-ml';
+      const EDGE_FUNCTION_URL =
+        "https://rllypkctvckeaczjesht.supabase.co/functions/v1/gerar-etiqueta-ml";
 
       const response = await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ pedido_id: pedido.id }),
       });
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.error || 'Erro desconhecido ao gerar etiqueta');
+        throw new Error(err.error || "Erro desconhecido ao gerar etiqueta");
       }
 
       const data = await response.json();
       const pdfBase64 = data.pdf_base64;
 
       if (!pdfBase64) {
-        throw new Error('O Base64 do PDF não foi retornado.');
+        throw new Error("O Base64 do PDF não foi retornado.");
       }
 
       // Converte Base64 para Blob
@@ -1324,20 +1612,23 @@ export default function Pedido() {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
       const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/pdf' });
-      
+      const blob = new Blob([byteArray], { type: "application/pdf" });
+
       // Cria URL do Blob e abre o modal
       const blobUrl = URL.createObjectURL(blob);
       setEtiquetaMLPdfUrl(blobUrl);
       setEtiquetaMLModalOpen(true);
 
-      toast({ title: 'Sucesso', description: 'Etiqueta gerada! Visualize e imprima.' });
+      toast({
+        title: "Sucesso",
+        description: "Etiqueta gerada! Visualize e imprima.",
+      });
     } catch (error: any) {
-      console.error('Erro ao processar a etiqueta:', error);
-      toast({ 
-        title: 'Erro', 
+      console.error("Erro ao processar a etiqueta:", error);
+      toast({
+        title: "Erro",
         description: `Erro ao processar a etiqueta: ${error.message}`,
-        variant: 'destructive'
+        variant: "destructive",
       });
     } finally {
       setGerandoEtiquetaML(false);
@@ -1346,9 +1637,9 @@ export default function Pedido() {
 
   const handleImprimirEtiquetaML = () => {
     if (!etiquetaMLPdfUrl) return;
-    
+
     // Abre o PDF em nova janela e imprime
-    const printWindow = window.open(etiquetaMLPdfUrl, '_blank');
+    const printWindow = window.open(etiquetaMLPdfUrl, "_blank");
     if (printWindow) {
       printWindow.onload = () => {
         setTimeout(() => {
@@ -1369,9 +1660,9 @@ export default function Pedido() {
   const handleUploadLabel = async () => {
     if (selectedLabelFiles.length === 0 || !pedido) {
       toast({
-        title: 'Erro',
-        description: 'Selecione pelo menos um arquivo PDF para fazer upload',
-        variant: 'destructive'
+        title: "Erro",
+        description: "Selecione pelo menos um arquivo PDF para fazer upload",
+        variant: "destructive",
       });
       return;
     }
@@ -1389,21 +1680,21 @@ export default function Pedido() {
 
         // Upload para o Supabase Storage
         const { error: uploadError } = await supabase.storage
-          .from('documentos')
+          .from("documentos")
           .upload(filePath, item.file, {
-            contentType: 'application/pdf',
-            upsert: false
+            contentType: "application/pdf",
+            upsert: false,
           });
 
         if (uploadError) throw uploadError;
 
         // Obter URL pública
         const { data: urlData } = supabase.storage
-          .from('documentos')
+          .from("documentos")
           .getPublicUrl(filePath);
 
         if (!urlData?.publicUrl) {
-          throw new Error('Não foi possível obter URL do arquivo');
+          throw new Error("Não foi possível obter URL do arquivo");
         }
 
         uploadedUrls.push(urlData.publicUrl);
@@ -1411,24 +1702,27 @@ export default function Pedido() {
 
       // Buscar etiquetas existentes
       const { data: pedidoData } = await (supabase as any)
-        .from('pedidos')
-        .select('*')
-        .eq('id', pedido.id)
+        .from("pedidos")
+        .select("*")
+        .eq("id", pedido.id)
         .single();
 
       // Combinar com URLs existentes
       let allEtiquetas: string[] = [];
-      
+
       // Verificar se já existe etiquetas_uploads
       const etiquetasExistentes = (pedidoData as any)?.etiquetas_uploads;
-      if (Array.isArray(etiquetasExistentes)) allEtiquetas = [...etiquetasExistentes];
+      if (Array.isArray(etiquetasExistentes))
+        allEtiquetas = [...etiquetasExistentes];
 
       // Adicionar novas URLs
       allEtiquetas = [...allEtiquetas, ...uploadedUrls];
 
       const isShopeePedido =
         pedido?.plataforma_id === SHOPEE_PLATAFORMA_ID ||
-        String(pedido?.plataforma?.nome || '').toLowerCase().includes('shopee');
+        String(pedido?.plataforma?.nome || "")
+          .toLowerCase()
+          .includes("shopee");
 
       // Salvar no banco
       const updatePayload: any = {
@@ -1441,9 +1735,9 @@ export default function Pedido() {
       }
 
       const { error: updateError } = await supabase
-        .from('pedidos')
+        .from("pedidos")
         .update(updatePayload)
-        .eq('id', pedido.id);
+        .eq("id", pedido.id);
 
       if (updateError) throw updateError;
 
@@ -1451,27 +1745,27 @@ export default function Pedido() {
         pedido.id,
         isShopeePedido
           ? `Upload de ${uploadedUrls.length} etiqueta(s) e envio para Logística (Etiqueta Disponível)`
-          : `Upload de ${uploadedUrls.length} etiqueta(s)`
+          : `Upload de ${uploadedUrls.length} etiqueta(s)`,
       );
       toast({
-        title: 'Etiquetas enviadas',
+        title: "Etiquetas enviadas",
         description: isShopeePedido
           ? `${uploadedUrls.length} etiqueta(s) salvas. Pedido movido para Logística com etiqueta Disponível.`
-          : `${uploadedUrls.length} etiqueta(s) foram carregadas e salvas com sucesso`
+          : `${uploadedUrls.length} etiqueta(s) foram carregadas e salvas com sucesso`,
       });
 
       // Limpar seleção e recarregar
       setSelectedLabelFiles([]);
       if (fileInputRef.current) {
-        fileInputRef.current.value = '';
+        fileInputRef.current.value = "";
       }
       navigate(0);
     } catch (err: any) {
-      console.error('Erro ao fazer upload das etiquetas:', err);
+      console.error("Erro ao fazer upload das etiquetas:", err);
       toast({
-        title: 'Erro ao enviar etiquetas',
+        title: "Erro ao enviar etiquetas",
         description: err?.message || String(err),
-        variant: 'destructive'
+        variant: "destructive",
       });
     } finally {
       setUploadingLabel(false);
@@ -1482,19 +1776,35 @@ export default function Pedido() {
     if (!pedido) return;
     try {
       // Registrar histórico ANTES de deletar
-      await registrarHistoricoMovimentacao(pedido.id, `Pedido excluído (id_externo: ${pedido.id_externo || 'N/A'})`);
+      await registrarHistoricoMovimentacao(
+        pedido.id,
+        `Pedido excluído (id_externo: ${pedido.id_externo || "N/A"})`,
+      );
       // delete itens_pedido first
-      const { error: delItemsErr } = await supabase.from('itens_pedido').delete().eq('pedido_id', pedido.id);
+      const { error: delItemsErr } = await supabase
+        .from("itens_pedido")
+        .delete()
+        .eq("pedido_id", pedido.id);
       if (delItemsErr) throw delItemsErr;
       // delete pedido
-      const { error: delPedidoErr } = await supabase.from('pedidos').delete().eq('id', pedido.id);
+      const { error: delPedidoErr } = await supabase
+        .from("pedidos")
+        .delete()
+        .eq("id", pedido.id);
       if (delPedidoErr) throw delPedidoErr;
-      toast({ title: 'Pedido excluído', description: 'Pedido e itens removidos com sucesso.' });
+      toast({
+        title: "Pedido excluído",
+        description: "Pedido e itens removidos com sucesso.",
+      });
       setDeleteConfirmOpen(false);
-      navigate('/comercial');
+      navigate("/comercial");
     } catch (err: any) {
-      console.error('Erro ao excluir pedido:', err);
-      toast({ title: 'Erro ao excluir', description: err?.message || String(err), variant: 'destructive' });
+      console.error("Erro ao excluir pedido:", err);
+      toast({
+        title: "Erro ao excluir",
+        description: err?.message || String(err),
+        variant: "destructive",
+      });
     }
   };
 
@@ -1503,470 +1813,663 @@ export default function Pedido() {
   return (
     <>
       <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          {/* Avatar of responsible user */}
-          {pedido?.responsavel?.img_url ? (
-            <img src={pedido.responsavel.img_url} alt={pedido?.responsavel?.nome || 'Responsável'} className="w-12 h-12 rounded-full object-cover" />
-          ) : (
-            <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-700">
-              {pedido?.responsavel?.nome ? pedido.responsavel.nome.split(' ').map((n: string) => n[0]).slice(0,2).join('') : '—'}
-            </div>
-          )}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            {/* Avatar of responsible user */}
+            {pedido?.responsavel?.img_url ? (
+              <img
+                src={pedido.responsavel.img_url}
+                alt={pedido?.responsavel?.nome || "Responsável"}
+                className="w-12 h-12 rounded-full object-cover"
+              />
+            ) : (
+              <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center text-sm font-medium text-gray-700">
+                {pedido?.responsavel?.nome
+                  ? pedido.responsavel.nome
+                      .split(" ")
+                      .map((n: string) => n[0])
+                      .slice(0, 2)
+                      .join("")
+                  : "—"}
+              </div>
+            )}
 
-          <div>
-            <button onClick={() => {
-              // Verificar se há uma página de retorno especificada
-              const returnTo = params.get('returnTo');
-              if (returnTo) {
-                navigate(returnTo);
-              } else {
-                // Fallback para Comercial
-                navigate('/comercial');
-              }
-            }} className="text-sm text-muted-foreground hover:underline">&lt; Ver todos os pedidos</button>
-            <div className="flex items-center gap-3">
-              {pedido?.plataforma?.img_url ? (
-                <img
-                  src={pedido.plataforma.img_url}
-                  alt={pedido.plataforma.nome || 'Plataforma'}
-                  title={pedido.plataforma.nome || 'Plataforma'}
-                  className="h-8 w-8 rounded-md object-contain border bg-white p-0.5"
-                />
-              ) : pedido?.plataforma?.nome ? (
-                <span className="text-xs font-semibold px-2 py-1 rounded bg-muted text-muted-foreground border">
-                  {pedido.plataforma.nome}
-                </span>
-              ) : null}
-              <h1 className="text-2xl font-bold">Pedido: {pedido?.id_externo || '—'}</h1>
-              {pedido?.tempo_ganho && pedido?.criado_em && (() => {
-                const tempoGanho = new Date(pedido.tempo_ganho);
-                const hoje = new Date();
-                
-                // Formatar como strings YYYY-MM-DD para comparação apenas de datas (ignora timezone)
-                const tempoGanhoDate = tempoGanho.toISOString().split('T')[0];
-                const hojeDate = hoje.toISOString().split('T')[0];
-                
-                // Calcular dias restantes usando timestamps
-                const tempoGanhoMidnight = new Date(tempoGanhoDate + 'T00:00:00Z').getTime();
-                const hojeMidnight = new Date(hojeDate + 'T00:00:00Z').getTime();
-                const diasRestantes = Math.floor((tempoGanhoMidnight - hojeMidnight) / (1000 * 60 * 60 * 24));
-                
-                return (
-                  <span className="text-red-600 font-semibold text-lg">
-                    {diasRestantes > 0 ? `${diasRestantes} ${diasRestantes === 1 ? 'dia' : 'dias'} para o envio` : (diasRestantes === 0 ? 'Prazo para o dia atual' : 'Prazo vencido')}
+            <div>
+              <button
+                onClick={() => {
+                  // Verificar se há uma página de retorno especificada
+                  const returnTo = params.get("returnTo");
+                  if (returnTo) {
+                    navigate(returnTo);
+                  } else {
+                    // Fallback para Comercial
+                    navigate("/comercial");
+                  }
+                }}
+                className="text-sm text-muted-foreground hover:underline"
+              >
+                &lt; Ver todos os pedidos
+              </button>
+              <div className="flex items-center gap-3">
+                {pedido?.plataforma?.img_url ? (
+                  <img
+                    src={pedido.plataforma.img_url}
+                    alt={pedido.plataforma.nome || "Plataforma"}
+                    title={pedido.plataforma.nome || "Plataforma"}
+                    className="h-8 w-8 rounded-md object-contain border bg-white p-0.5"
+                  />
+                ) : pedido?.plataforma?.nome ? (
+                  <span className="text-xs font-semibold px-2 py-1 rounded bg-muted text-muted-foreground border">
+                    {pedido.plataforma.nome}
                   </span>
-                );
-              })()}
+                ) : null}
+                <h1 className="text-2xl font-bold">
+                  Pedido: {pedido?.id_externo || "—"}
+                </h1>
+                {pedido?.tempo_ganho &&
+                  pedido?.criado_em &&
+                  (() => {
+                    const tempoGanho = new Date(pedido.tempo_ganho);
+                    const hoje = new Date();
+
+                    // Formatar como strings YYYY-MM-DD para comparação apenas de datas (ignora timezone)
+                    const tempoGanhoDate = tempoGanho
+                      .toISOString()
+                      .split("T")[0];
+                    const hojeDate = hoje.toISOString().split("T")[0];
+
+                    // Calcular dias restantes usando timestamps
+                    const tempoGanhoMidnight = new Date(
+                      tempoGanhoDate + "T00:00:00Z",
+                    ).getTime();
+                    const hojeMidnight = new Date(
+                      hojeDate + "T00:00:00Z",
+                    ).getTime();
+                    const diasRestantes = Math.floor(
+                      (tempoGanhoMidnight - hojeMidnight) /
+                        (1000 * 60 * 60 * 24),
+                    );
+
+                    return (
+                      <span className="text-red-600 font-semibold text-lg">
+                        {diasRestantes > 0
+                          ? `${diasRestantes} ${diasRestantes === 1 ? "dia" : "dias"} para o envio`
+                          : diasRestantes === 0
+                            ? "Prazo para o dia atual"
+                            : "Prazo vencido"}
+                      </span>
+                    );
+                  })()}
+              </div>
+              <p className="text-sm text-muted-foreground">
+                em{" "}
+                {pedido?.criado_em
+                  ? new Date(pedido.criado_em).toLocaleString("pt-BR")
+                  : "—"}
+              </p>
             </div>
-            <p className="text-sm text-muted-foreground">em {pedido?.criado_em ? new Date(pedido.criado_em).toLocaleString('pt-BR') : '—'}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Botão para reverter status de enviado */}
+            {pedido?.status?.id === "fa6b38ba-1d67-4bc3-821e-ab089d641a25" &&
+              (() => {
+                const canRevert = hasPermissao
+                  ? hasPermissao(60)
+                  : (permissoes ?? []).includes(60);
+                return canRevert;
+              })() && (
+                <Button
+                  onClick={async () => {
+                    if (!pedido) return;
+
+                    const canRevert = hasPermissao
+                      ? hasPermissao(60)
+                      : (permissoes ?? []).includes(60);
+                    if (!canRevert) {
+                      toast({
+                        title: "Você não tem permissão para isso",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    try {
+                      setRevertendoStatus(true);
+
+                      // Reverter para o status "Logística" e limpar dados de envio
+                      const { error } = await supabase
+                        .from("pedidos")
+                        .update({
+                          status_id: "3473cae9-47c8-4b85-96af-b41fe0e15fa9",
+                          resp_envio: null,
+                          data_enviado: null,
+                          atualizado_em: new Date().toISOString(),
+                        } as any)
+                        .eq("id", pedido.id);
+
+                      if (error) throw error;
+
+                      await registrarHistoricoMovimentacao(
+                        pedido.id,
+                        "Envio revertido - Status voltou para Logística",
+                      );
+                      toast({
+                        title: "Status revertido",
+                        description: "Pedido voltou para Logística",
+                      });
+
+                      // Recarregar página para atualizar dados
+                      navigate(0);
+                    } catch (err: any) {
+                      console.error("Erro ao reverter status:", err);
+                      toast({
+                        title: "Erro",
+                        description: err?.message || String(err),
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setRevertendoStatus(false);
+                    }
+                  }}
+                  variant="outline"
+                  size="sm"
+                  className="inline-flex items-center gap-2"
+                  disabled={revertendoStatus}
+                >
+                  {revertendoStatus ? (
+                    <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
+                  ) : (
+                    <span>↩️</span>
+                  )}
+                  <span>Reverter Envio</span>
+                </Button>
+              )}
+            <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
+              {pedido?.status?.nome}
+            </Badge>
+            {/* Liberar Pedido button: visible only when pedido_liberado is falsy AND there's at least 1 product without up_cell */}
+            {!readonly &&
+              pedido &&
+              !pedido?.pedido_liberado &&
+              (() => {
+                // Check if there's at least one product that is NOT up_cell
+                const hasNonUpCellProduct = (pedido.itens || []).some(
+                  (it: any) => {
+                    const isUpCell = it.produto?.up_cell === true;
+                    return !isUpCell;
+                  },
+                );
+                // Only show button if there's at least one non-up_cell product
+                return hasNonUpCellProduct;
+              })() && (
+                <Button
+                  onClick={async () => {
+                    if (!pedido) return;
+
+                    // Check for pending up-sell products (status_up_sell === 1 or null for up_cell products)
+                    const pendingProducts = (pedido.itens || []).filter(
+                      (it: any) => {
+                        if (!it.produto?.up_cell) return false;
+                        return !it.status_up_sell || it.status_up_sell === 1;
+                      },
+                    );
+
+                    if (pendingProducts.length > 0) {
+                      setPendingUpSellProducts(pendingProducts);
+                      setPendingUpSellAlertOpen(true);
+                      return;
+                    }
+
+                    try {
+                      setLiberando(true);
+                      const { error } = await supabase
+                        .from("pedidos")
+                        .update({
+                          pedido_liberado: true,
+                          status_id: LOGISTICA_STATUS_ID,
+                          etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
+                          atualizado_em: new Date().toISOString(),
+                        } as any)
+                        .eq("id", pedido.id);
+                      if (error) throw error;
+
+                      await registrarHistoricoMovimentacao(
+                        pedido.id,
+                        "Pedido liberado manualmente, enviado para Logística e etiqueta Pendente",
+                      );
+                      // update local state so button disappears
+                      setPedido((p: any) => ({
+                        ...p,
+                        pedido_liberado: true,
+                        status_id: LOGISTICA_STATUS_ID,
+                        etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
+                      }));
+                      toast({
+                        title: "Pedido liberado",
+                        description: "Pedido liberado com sucesso",
+                      });
+                    } catch (err: any) {
+                      console.error("Erro ao liberar pedido:", err);
+                      toast({
+                        title: "Erro",
+                        description: err?.message || String(err),
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setLiberando(false);
+                    }
+                  }}
+                  className="inline-flex items-center gap-2"
+                  style={{ backgroundColor: "#00C853", color: "#fff" }}
+                >
+                  {liberando ? (
+                    <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
+                  ) : (
+                    <span>🔓</span>
+                  )}
+                  <span>Liberar Pedido</span>
+                </Button>
+              )}
+            {!readonly && pedido && (
+              <>
+                <Button
+                  variant="ghost"
+                  className="text-red-600"
+                  onClick={() => {
+                    const canDelete =
+                      (hasPermissao ? hasPermissao(35) : false) ||
+                      (permissoes ?? []).includes(9);
+                    if (!canDelete) {
+                      toast({
+                        title: "Você não tem permissão para isso",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+                    setDeleteConfirmOpen(true);
+                  }}
+                >
+                  <Trash className="h-5 w-5" />
+                </Button>
+              </>
+            )}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          
-          {/* Botão para reverter status de enviado */}
-          {pedido?.status?.id === 'fa6b38ba-1d67-4bc3-821e-ab089d641a25' && (() => {
-            const canRevert = hasPermissao ? hasPermissao(60) : ((permissoes ?? []).includes(60));
-            return canRevert;
-          })() && (
-            <Button
-              onClick={async () => {
-                if (!pedido) return;
-                
-                const canRevert = hasPermissao ? hasPermissao(60) : ((permissoes ?? []).includes(60));
-                if (!canRevert) {
-                  toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
-                  return;
-                }
-                
-                try {
-                  setRevertendoStatus(true);
-                  
-                  // Reverter para o status "Logística" e limpar dados de envio
-                  const { error } = await supabase
-                    .from('pedidos')
-                    .update({ 
-                      status_id: '3473cae9-47c8-4b85-96af-b41fe0e15fa9',
-                      resp_envio: null,
-                      data_enviado: null,
-                      atualizado_em: new Date().toISOString() 
-                    } as any)
-                    .eq('id', pedido.id);
-                  
-                  if (error) throw error;
-                  
-                  await registrarHistoricoMovimentacao(pedido.id, 'Envio revertido - Status voltou para Logística');
-                  toast({ 
-                    title: 'Status revertido', 
-                    description: 'Pedido voltou para Logística' 
-                  });
-                  
-                  // Recarregar página para atualizar dados
-                  navigate(0);
-                } catch (err: any) {
-                  console.error('Erro ao reverter status:', err);
-                  toast({ 
-                    title: 'Erro', 
-                    description: err?.message || String(err), 
-                    variant: 'destructive' 
-                  });
-                } finally {
-                  setRevertendoStatus(false);
-                }
-              }}
-              variant="outline"
-              size="sm"
-              className="inline-flex items-center gap-2"
-              disabled={revertendoStatus}
-            >
-              {revertendoStatus ? (
-                <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
-              ) : (
-                <span>↩️</span>
-              )}
-              <span>Reverter Envio</span>
-            </Button>
-          )}
-          <Badge style={{ backgroundColor: pedido?.status?.corHex }}>
-            {pedido?.status?.nome}
-          </Badge>
-          {/* Liberar Pedido button: visible only when pedido_liberado is falsy AND there's at least 1 product without up_cell */}
-          {!readonly && pedido && !pedido?.pedido_liberado && (() => {
-            // Check if there's at least one product that is NOT up_cell
-            const hasNonUpCellProduct = (pedido.itens || []).some((it: any) => {
-              const isUpCell = it.produto?.up_cell === true;
-              return !isUpCell;
-            });
-            // Only show button if there's at least one non-up_cell product
-            return hasNonUpCellProduct;
-          })() && (
-            <Button
-              onClick={async () => {
-                if (!pedido) return;
-                
-                // Check for pending up-sell products (status_up_sell === 1 or null for up_cell products)
-                const pendingProducts = (pedido.itens || []).filter((it: any) => {
-                  if (!it.produto?.up_cell) return false;
-                  return !it.status_up_sell || it.status_up_sell === 1;
-                });
-                
-                if (pendingProducts.length > 0) {
-                  setPendingUpSellProducts(pendingProducts);
-                  setPendingUpSellAlertOpen(true);
-                  return;
-                }
-                
-                try {
-                  setLiberando(true);
-                  const { error } = await supabase
-                    .from('pedidos')
-                    .update({
-                      pedido_liberado: true,
-                      status_id: LOGISTICA_STATUS_ID,
-                      etiqueta_envio_id: ETIQUETA_PENDENTE_ID,
-                      atualizado_em: new Date().toISOString()
-                    } as any)
-                    .eq('id', pedido.id);
-                  if (error) throw error;
 
-                  await registrarHistoricoMovimentacao(pedido.id, 'Pedido liberado manualmente, enviado para Logística e etiqueta Pendente');
-                  // update local state so button disappears
-                  setPedido((p: any) => ({ ...p, pedido_liberado: true, status_id: LOGISTICA_STATUS_ID, etiqueta_envio_id: ETIQUETA_PENDENTE_ID }));
-                  toast({ title: 'Pedido liberado', description: 'Pedido liberado com sucesso' });
-                } catch (err: any) {
-                  console.error('Erro ao liberar pedido:', err);
-                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
-                } finally {
-                  setLiberando(false);
-                }
-              }}
-              className="inline-flex items-center gap-2"
-              style={{ backgroundColor: '#00C853', color: '#fff' }}
-            >
-              {liberando ? (
-                <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
-              ) : (
-                <span>🔓</span>
-              )}
-              <span>Liberar Pedido</span>
-            </Button>
-          )}
-          {!readonly && pedido && (
-            <>
-              <Button variant="ghost" className="text-red-600" onClick={() => {
-                const canDelete = (hasPermissao ? hasPermissao(35) : false) || ((permissoes ?? []).includes(9));
-                if (!canDelete) {
-                  toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
-                  return;
-                }
-                setDeleteConfirmOpen(true);
-              }}>
-                <Trash className="h-5 w-5" />
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <Card>
-          <CardContent className="flex flex-col lg:flex-row gap-6 items-stretch pt-6">
-            <div className="flex-1 flex gap-8 items-start h-full">
-              <div className="flex-1">
-                <div className="text-sm text-muted-foreground">CLIENTE</div>
+        <div>
+          <Card>
+            <CardContent className="flex flex-col lg:flex-row gap-6 items-stretch pt-6">
+              <div className="flex-1 flex gap-8 items-start h-full">
+                <div className="flex-1">
+                  <div className="text-sm text-muted-foreground">CLIENTE</div>
                   <div className="font-medium text-lg flex items-center gap-2">
-                        {pedido?.cliente ? (
+                    {pedido?.cliente ? (
                       <>
-                        <a className="text-blue-600 hover:underline">{pedido.cliente.nome}</a>
+                        <a className="text-blue-600 hover:underline">
+                          {pedido.cliente.nome}
+                        </a>
                         {!readonly && (
-                          <button onClick={() => {
-                            const canEditClient = hasPermissao ? hasPermissao(12) : (permissoes ?? []).includes(12);
-                            if (!canEditClient) {
-                              toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
-                              return;
-                            }
-                            setClientEditOpen(true);
-                          }} className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100">
+                          <button
+                            onClick={() => {
+                              const canEditClient = hasPermissao
+                                ? hasPermissao(12)
+                                : (permissoes ?? []).includes(12);
+                              if (!canEditClient) {
+                                toast({
+                                  title: "Você não tem permissão para isso",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              setClientEditOpen(true);
+                            }}
+                            className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100"
+                          >
                             <Edit className="h-4 w-4 text-gray-600" />
                           </button>
                         )}
                       </>
-                    ) : '—'}
+                    ) : (
+                      "—"
+                    )}
                   </div>
-                <div className="text-sm text-muted-foreground">{pedido?.cliente?.email}</div>
-                <div className="mt-2 text-sm">{pedido?.cliente?.telefone && (<span className="text-blue-600">{pedido.cliente.telefone}</span>)}</div>
-                <div className="mt-2 text-sm text-muted-foreground">
-                  {pedido?.cliente?.cpf ? (<div>CPF: {pedido.cliente.cpf}</div>) : pedido?.cliente?.cnpj ? (<div>CNPJ: {pedido.cliente.cnpj}</div>) : null}
+                  <div className="text-sm text-muted-foreground">
+                    {pedido?.cliente?.email}
+                  </div>
+                  <div className="mt-2 text-sm">
+                    {pedido?.cliente?.telefone && (
+                      <span className="text-blue-600">
+                        {pedido.cliente.telefone}
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    {pedido?.cliente?.cpf ? (
+                      <div>CPF: {pedido.cliente.cpf}</div>
+                    ) : pedido?.cliente?.cnpj ? (
+                      <div>CNPJ: {pedido.cliente.cnpj}</div>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    IP da compra: {pedido?.ip || "—"}
+                  </div>
                 </div>
-                <div className="mt-2 text-sm text-muted-foreground">IP da compra: {pedido?.ip || '—'}</div>
-              </div>
 
-              <div className="flex-1">
-                <div className="text-sm text-muted-foreground flex items-center justify-between">
-                  <span>PAGAMENTO</span>
-                  {!readonly && (
-                    <button 
-                      onClick={() => setEditPaymentOpen(!editPaymentOpen)} 
-                      className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100"
-                      title="Editar formas de pagamento"
-                    >
-                      <Pencil className="h-3.5 w-3.5 text-gray-600" />
-                    </button>
-                  )}
-                </div>
-                <div className="mt-2">
-                  {editPaymentOpen && !readonly ? (
-                    <div className="space-y-2">
-                      <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-2">
-                        {formasPagamentos.map((forma) => {
-                          const isSelected = (pedido?.lista_pagamentos || []).some((lp: any) => String(lp.formas_pagamentos_id || lp.formas_pagamentos?.id) === String(forma.id));
-                          return (
-                            <label key={forma.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={async (e) => {
-                                  try {
-                                    setSavingPayment(true);
-                                    if (e.target.checked) {
-                                      // Add payment method
-                                      const { error: insertError } = await (supabase as any)
-                                        .from('lista_pagamentos')
-                                        .insert({
-                                          pedido_id: pedido.id,
-                                          formas_pagamentos_id: forma.id,
-                                          valor: 0
-                                        });
-
-                                      if (insertError) throw insertError;
-                                    } else {
-                                      // Remove all payment method records of this type (regardless of installments)
-                                      const { error: deleteError } = await (supabase as any)
-                                        .from('lista_pagamentos')
-                                        .delete()
-                                        .eq('pedido_id', pedido.id)
-                                        .eq('formas_pagamentos_id', forma.id);
-
-                                      if (deleteError) throw deleteError;
-                                    }
-
-                                    await registrarHistoricoMovimentacao(pedido.id, `Forma de pagamento ${e.target.checked ? 'adicionada' : 'removida'}: ${forma.nome}`);
-                                    toast({
-                                      title: 'Forma de pagamento atualizada',
-                                      description: `${forma.nome} ${e.target.checked ? 'adicionado' : 'removido'}`
-                                    });
-
-                                    navigate(0); // Reload page
-                                  } catch (err: any) {
-                                    console.error('Erro ao atualizar forma de pagamento:', err);
-                                    toast({
-                                      title: 'Erro',
-                                      description: err?.message || 'Não foi possível atualizar a forma de pagamento',
-                                      variant: 'destructive'
-                                    });
-                                  } finally {
-                                    setSavingPayment(false);
-                                  }
-                                }}
-                                disabled={savingPayment}
-                                className="cursor-pointer"
-                              />
-                              {forma.img_url && (
-                                <img 
-                                  src={forma.img_url} 
-                                  alt={forma.nome} 
-                                  className="w-5 h-5 rounded object-contain"
-                                />
-                              )}
-                              <span className="text-sm">{forma.nome}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                      <Button 
-                        variant="outline" 
-                        size="sm" 
-                        onClick={() => setEditPaymentOpen(false)}
-                        className="w-full"
+                <div className="flex-1">
+                  <div className="text-sm text-muted-foreground flex items-center justify-between">
+                    <span>PAGAMENTO</span>
+                    {!readonly && (
+                      <button
+                        onClick={() => setEditPaymentOpen(!editPaymentOpen)}
+                        className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100"
+                        title="Editar formas de pagamento"
                       >
-                        Cancelar
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      {(pedido?.lista_pagamentos || []).length > 0 ? (
-                        <div className="space-y-2">
-                          {(() => {
-                            // Group payments intelligently: remove installment info (3x, 4x, etc.) from card names
-                            const grouped: Record<string, any> = {};
-                            (pedido.lista_pagamentos || []).forEach((lp: any) => {
-                              const nome = lp.formas_pagamentos?.nome || '—';
-                              // Remove installment info like "3x", "4x", etc. for grouping
-                              const nomeNormalizado = nome.replace(/\s*\d+x\s*$/i, '').trim();
-                              const id = nomeNormalizado; // Use normalized name as grouping key
-                              
-                              if (!grouped[id]) {
-                                grouped[id] = {
-                                  id,
-                                  nome: nomeNormalizado,
-                                  img_url: lp.formas_pagamentos?.img_url || lp.img_url,
-                                  valor: 0,
-                                  count: 0
-                                };
-                              }
-                              grouped[id].valor += Number(lp.valor || 0);
-                              grouped[id].count += 1;
-                            });
-                            
-                            return Object.values(grouped).map((payment: any) => (
-                              <div key={payment.id} className="flex items-center gap-2 p-2 rounded">
-                                {payment.img_url && (
-                                  <img 
-                                    src={payment.img_url} 
-                                    alt={payment.nome} 
-                                    className="w-6 h-6 rounded object-contain"
+                        <Pencil className="h-3.5 w-3.5 text-gray-600" />
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-2">
+                    {editPaymentOpen && !readonly ? (
+                      <div className="space-y-2">
+                        <div className="border rounded-md p-2 max-h-40 overflow-y-auto space-y-2">
+                          {formasPagamentos.map((forma) => {
+                            const isSelected = (
+                              pedido?.lista_pagamentos || []
+                            ).some(
+                              (lp: any) =>
+                                String(
+                                  lp.formas_pagamentos_id ||
+                                    lp.formas_pagamentos?.id,
+                                ) === String(forma.id),
+                            );
+                            return (
+                              <label
+                                key={forma.id}
+                                className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={isSelected}
+                                  onChange={async (e) => {
+                                    try {
+                                      setSavingPayment(true);
+                                      if (e.target.checked) {
+                                        // Add payment method
+                                        const { error: insertError } = await (
+                                          supabase as any
+                                        )
+                                          .from("lista_pagamentos")
+                                          .insert({
+                                            pedido_id: pedido.id,
+                                            formas_pagamentos_id: forma.id,
+                                            valor: 0,
+                                          });
+
+                                        if (insertError) throw insertError;
+                                      } else {
+                                        // Remove all payment method records of this type (regardless of installments)
+                                        const { error: deleteError } = await (
+                                          supabase as any
+                                        )
+                                          .from("lista_pagamentos")
+                                          .delete()
+                                          .eq("pedido_id", pedido.id)
+                                          .eq("formas_pagamentos_id", forma.id);
+
+                                        if (deleteError) throw deleteError;
+                                      }
+
+                                      await registrarHistoricoMovimentacao(
+                                        pedido.id,
+                                        `Forma de pagamento ${e.target.checked ? "adicionada" : "removida"}: ${forma.nome}`,
+                                      );
+                                      toast({
+                                        title: "Forma de pagamento atualizada",
+                                        description: `${forma.nome} ${e.target.checked ? "adicionado" : "removido"}`,
+                                      });
+
+                                      navigate(0); // Reload page
+                                    } catch (err: any) {
+                                      console.error(
+                                        "Erro ao atualizar forma de pagamento:",
+                                        err,
+                                      );
+                                      toast({
+                                        title: "Erro",
+                                        description:
+                                          err?.message ||
+                                          "Não foi possível atualizar a forma de pagamento",
+                                        variant: "destructive",
+                                      });
+                                    } finally {
+                                      setSavingPayment(false);
+                                    }
+                                  }}
+                                  disabled={savingPayment}
+                                  className="cursor-pointer"
+                                />
+                                {forma.img_url && (
+                                  <img
+                                    src={forma.img_url}
+                                    alt={forma.nome}
+                                    className="w-5 h-5 rounded object-contain"
                                   />
                                 )}
-                                <div className="flex-1 min-w-0">
-                                  <div className="font-medium text-sm">{payment.nome}</div>
-                                  {payment.valor > 0 && (
-                                    <div className="text-xs text-muted-foreground">R$ {Number(payment.valor).toFixed(2)}</div>
-                                  )}
-                                </div>
-                              </div>
-                            ));
-                          })()}
+                                <span className="text-sm">{forma.nome}</span>
+                              </label>
+                            );
+                          })}
                         </div>
-                      ) : pedido?.forma_pagamento ? (
-                        <div className="flex items-center gap-2">
-                          {pedido.forma_pagamento.img_url && (
-                            <img 
-                              src={pedido.forma_pagamento.img_url} 
-                              alt={pedido.forma_pagamento.nome} 
-                              className="w-8 h-8 rounded object-contain"
-                            />
-                          )}
-                          <div>
-                            <div className="font-medium">{pedido.forma_pagamento.nome}</div>
-                            {pedido.valor_pagamento && (
-                              <div className="text-sm text-muted-foreground">R$ {Number(pedido.valor_pagamento).toFixed(2)}</div>
-                            )}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setEditPaymentOpen(false)}
+                          className="w-full"
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        {(pedido?.lista_pagamentos || []).length > 0 ? (
+                          <div className="space-y-2">
+                            {(() => {
+                              // Group payments intelligently: remove installment info (3x, 4x, etc.) from card names
+                              const grouped: Record<string, any> = {};
+                              (pedido.lista_pagamentos || []).forEach(
+                                (lp: any) => {
+                                  const nome =
+                                    lp.formas_pagamentos?.nome || "—";
+                                  // Remove installment info like "3x", "4x", etc. for grouping
+                                  const nomeNormalizado = nome
+                                    .replace(/\s*\d+x\s*$/i, "")
+                                    .trim();
+                                  const id = nomeNormalizado; // Use normalized name as grouping key
+
+                                  if (!grouped[id]) {
+                                    grouped[id] = {
+                                      id,
+                                      nome: nomeNormalizado,
+                                      img_url:
+                                        lp.formas_pagamentos?.img_url ||
+                                        lp.img_url,
+                                      valor: 0,
+                                      count: 0,
+                                    };
+                                  }
+                                  grouped[id].valor += Number(lp.valor || 0);
+                                  grouped[id].count += 1;
+                                },
+                              );
+
+                              return Object.values(grouped).map(
+                                (payment: any) => (
+                                  <div
+                                    key={payment.id}
+                                    className="flex items-center gap-2 p-2 rounded"
+                                  >
+                                    {payment.img_url && (
+                                      <img
+                                        src={payment.img_url}
+                                        alt={payment.nome}
+                                        className="w-6 h-6 rounded object-contain"
+                                      />
+                                    )}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium text-sm">
+                                        {payment.nome}
+                                      </div>
+                                      {payment.valor > 0 && (
+                                        <div className="text-xs text-muted-foreground">
+                                          R$ {Number(payment.valor).toFixed(2)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                ),
+                              );
+                            })()}
                           </div>
-                        </div>
-                      ) : (
-                        pedido?.pagamento || (pedido?.id_pagamento && (paymentMethods ? paymentMethods[pedido.id_pagamento] : ( {
-                          1: 'Pix',
-                          2: 'Boleto',
-                          3: 'Cartão'
-                        }[pedido.id_pagamento] )) ) || '—'
-                      )}
-                    </>
-                  )}
+                        ) : pedido?.forma_pagamento ? (
+                          <div className="flex items-center gap-2">
+                            {pedido.forma_pagamento.img_url && (
+                              <img
+                                src={pedido.forma_pagamento.img_url}
+                                alt={pedido.forma_pagamento.nome}
+                                className="w-8 h-8 rounded object-contain"
+                              />
+                            )}
+                            <div>
+                              <div className="font-medium">
+                                {pedido.forma_pagamento.nome}
+                              </div>
+                              {pedido.valor_pagamento && (
+                                <div className="text-sm text-muted-foreground">
+                                  R$ {Number(pedido.valor_pagamento).toFixed(2)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ) : (
+                          pedido?.pagamento ||
+                          (pedido?.id_pagamento &&
+                            (paymentMethods
+                              ? paymentMethods[pedido.id_pagamento]
+                              : {
+                                  1: "Pix",
+                                  2: "Boleto",
+                                  3: "Cartão",
+                                }[pedido.id_pagamento])) ||
+                          "—"
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <div className="w-56">
+                  <div className="text-sm text-muted-foreground">ENTREGA</div>
+                  <div className="font-medium">
+                    {pedido?.cliente?.nome || pedido?.cliente_nome}
+                  </div>
+                  <div className="text-sm">
+                    {formatAddress(pedido?.cliente)}
+                  </div>
+                  <div className="mt-2 text-sm text-muted-foreground">
+                    Prazo: 0 dias
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    Data prevista: {pedido?.data_prevista || "—"}
+                  </div>
+                  {/* Link do formulário de entrega: botão de copiar antes do texto, sem input auxiliar */}
+                  <div className="mt-4 flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        const clientId =
+                          pedido?.cliente?.id ||
+                          (pedido as any)?.cliente_id ||
+                          null;
+                        if (!clientId) {
+                          toast({
+                            title: "Erro",
+                            description: "Cliente sem ID para gerar link",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        const url = `${window.location.origin}/informacoes-entrega/${clientId}`;
+                        try {
+                          await navigator.clipboard.writeText(url);
+                          toast({
+                            title: "Link copiado",
+                            description:
+                              "Rota de informações de entrega copiada para a área de transferência",
+                          });
+                        } catch (err) {
+                          console.error("Erro ao copiar link:", err);
+                          toast({
+                            title: "Erro",
+                            description: "Não foi possível copiar o link",
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                      className="inline-flex items-center gap-2"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                    <div className="text-sm text-muted-foreground">
+                      Link formulário de entrega
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              <div className="w-56">
-                <div className="text-sm text-muted-foreground">ENTREGA</div>
-                <div className="font-medium">{pedido?.cliente?.nome || pedido?.cliente_nome}</div>
-                <div className="text-sm">{formatAddress(pedido?.cliente)}</div>
-                <div className="mt-2 text-sm text-muted-foreground">Prazo: 0 dias</div>
-                <div className="text-sm text-muted-foreground">Data prevista: {pedido?.data_prevista || '—'}</div>
-                {/* Link do formulário de entrega: botão de copiar antes do texto, sem input auxiliar */}
-                <div className="mt-4 flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      const clientId = pedido?.cliente?.id || (pedido as any)?.cliente_id || null;
-                      if (!clientId) {
-                        toast({ title: 'Erro', description: 'Cliente sem ID para gerar link', variant: 'destructive' });
-                        return;
-                      }
-                      const url = `${window.location.origin}/informacoes-entrega/${clientId}`;
-                      try {
-                        await navigator.clipboard.writeText(url);
-                        toast({ title: 'Link copiado', description: 'Rota de informações de entrega copiada para a área de transferência' });
-                      } catch (err) {
-                        console.error('Erro ao copiar link:', err);
-                        toast({ title: 'Erro', description: 'Não foi possível copiar o link', variant: 'destructive' });
-                      }
-                    }}
-                    className="inline-flex items-center gap-2"
-                  >
-                    <Copy className="h-4 w-4" />
-                  </Button>
-                  <div className="text-sm text-muted-foreground">Link formulário de entrega</div>
-                </div>
-              </div>
-            </div>
-
-            <div className="border-l pl-6 flex-shrink-0 w-full lg:w-64 h-full">
+              <div className="border-l pl-6 flex-shrink-0 w-full lg:w-64 h-full">
                 <div className="flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">VALOR TOTAL</div>
+                  <div className="text-sm text-muted-foreground">
+                    VALOR TOTAL
+                  </div>
                   {!readonly && (
                     <button
                       onClick={() => {
-                        const canEdit = hasPermissao ? hasPermissao(34) : (permissoes ?? []).includes(34);
+                        const canEdit = hasPermissao
+                          ? hasPermissao(34)
+                          : (permissoes ?? []).includes(34);
                         if (!canEdit) {
-                          toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
+                          toast({
+                            title: "Você não tem permissão para isso",
+                            variant: "destructive",
+                          });
                           return;
                         }
-                        const valorAtual = Number(pedido?.valor_total ?? pedido?.total ?? 0);
+                        const valorAtual = Number(
+                          pedido?.valor_total ?? pedido?.total ?? 0,
+                        );
                         setTempValorTotal(formatCurrencyBR(valorAtual));
                         // Popular os valores de cada forma de pagamento
                         const pagamentosMap: Record<string, string> = {};
                         (pedido?.lista_pagamentos || []).forEach((lp: any) => {
-                          const id = String(lp.formas_pagamentos_id || lp.formas_pagamentos?.id);
-                          const nome = lp.formas_pagamentos?.nome || '—';
-                          const nomeNormalizado = nome.replace(/\s*\d+x\s*$/i, '').trim();
-                          
+                          const id = String(
+                            lp.formas_pagamentos_id || lp.formas_pagamentos?.id,
+                          );
+                          const nome = lp.formas_pagamentos?.nome || "—";
+                          const nomeNormalizado = nome
+                            .replace(/\s*\d+x\s*$/i, "")
+                            .trim();
+
                           // Agrupar por nome normalizado
                           if (!pagamentosMap[nomeNormalizado]) {
-                            pagamentosMap[nomeNormalizado] = '0,00';
+                            pagamentosMap[nomeNormalizado] = "0,00";
                           }
-                          const currentVal = parseCurrencyBR(pagamentosMap[nomeNormalizado]);
+                          const currentVal = parseCurrencyBR(
+                            pagamentosMap[nomeNormalizado],
+                          );
                           const newVal = currentVal + Number(lp.valor || 0);
-                          pagamentosMap[nomeNormalizado] = formatCurrencyBR(newVal);
+                          pagamentosMap[nomeNormalizado] =
+                            formatCurrencyBR(newVal);
                         });
                         setTempValoresPagamentos(pagamentosMap);
                         setEditValorTotalOpen(true);
@@ -1978,773 +2481,1084 @@ export default function Pedido() {
                     </button>
                   )}
                 </div>
-                <div className="text-2xl font-bold">R$ {((pedido?.valor_total ?? pedido?.total) ? Number(pedido?.valor_total ?? pedido?.total).toFixed(2) : '0,00')}</div>
+                <div className="text-2xl font-bold">
+                  R${" "}
+                  {(pedido?.valor_total ?? pedido?.total)
+                    ? Number(pedido?.valor_total ?? pedido?.total).toFixed(2)
+                    : "0,00"}
+                </div>
 
-              <div className="mt-4">
-                <div className="text-sm text-muted-foreground">Frete: Venda</div>
-                {
-                  (() => {
+                <div className="mt-4">
+                  <div className="text-sm text-muted-foreground">
+                    Frete: Venda
+                  </div>
+                  {(() => {
                     // Prefer valor_frete_yampi when populated, then frete_venda, otherwise zero
-                    const raw = pedido?.valor_frete_yampi ?? pedido?.frete_venda ?? 0;
+                    const raw =
+                      pedido?.valor_frete_yampi ?? pedido?.frete_venda ?? 0;
                     const num = Number(raw) || 0;
                     return <Input value={num.toFixed(2)} readOnly />;
-                  })()
-                }
-              </div>
+                  })()}
+                </div>
 
-              <div className="mt-3">
-                <div className="text-sm text-muted-foreground">Frete: Melhor Envio</div>
-                <Input value={pedido?.frete_me ? String(pedido.frete_me) : '0,00'} readOnly />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      <Tabs defaultValue="resumo" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="resumo">Resumo</TabsTrigger>
-          <TabsTrigger value="status">Status</TabsTrigger>
-          <TabsTrigger value="entrega">Entrega</TabsTrigger>
-          <TabsTrigger value="tempo-ganho">Tempo Ganho</TabsTrigger>
-          <TabsTrigger value="subir-etiqueta">Subir etiqueta</TabsTrigger>
-          <TabsTrigger value="historico">Histórico</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="resumo">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Produtos</CardTitle>
-                <Button className="bg-custom-700 text-white" onClick={() => {
-                  if (readonly) return;
-                  const canAdd = hasPermissao ? hasPermissao(24) : (permissoes ?? []).includes(24);
-                  if (!canAdd) {
-                    toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
-                    return;
-                  }
-                  setAddProductsVisible(true);
-                }} disabled={readonly}>Adicionar Produto</Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>SKU</TableHead>
-                    <TableHead>Qtd</TableHead>
-                    <TableHead>Valor unit.</TableHead>
-                    <TableHead>Subtotal</TableHead>
-                    <TableHead className="text-center"></TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pedido?.itens?.length ? (() => {
-                    // Mostrar cada item individualmente da tabela itens_pedido (sem agrupamento)
-                    const items = pedido.itens || [];
-                    
-                    console.log('ITENS INDIVIDUAIS (sem agrupamento):', items.map((it: any) => ({
-                      id: it.id,
-                      nome: it.produto?.nome,
-                      variacao: it.variacao?.nome,
-                      pintado: it.pintado,
-                      pintado_type: typeof it.pintado,
-                      produto_id: it.produto?.id || it.produto_id
-                    })));
-                    
-                    return items.map((item: any) => (
-                    <TableRow key={item.id}>
-                      <TableCell>
-                        <div className="relative flex items-center gap-3">
-                          {item.pintado === true && (
-                            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-end pr-24">
-                              <Badge 
-                                variant="default"
-                                className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-3 py-0.5"
-                              >
-                                PINTADO
-                              </Badge>
-                            </div>
-                          )}
-                          {item.produto?.img_url || item.variacao?.img_url ? (
-                            <img src={item.variacao?.img_url || item.produto?.img_url} alt={item.produto?.nome || item.variacao?.nome} className="w-10 h-10 rounded object-cover" />
-                          ) : null}
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{item.produto?.nome || 'Produto'}</span>
-                            </div>
-                            {item.variacao?.nome && (
-                              <div className="text-sm text-muted-foreground">{item.variacao.nome}</div>
-                            )}
-                            <div className="text-xs text-muted-foreground">SKU: {item.variacao?.sku || item.produto?.sku || '-'}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{item.variacao?.sku || item.produto?.sku || ''}</TableCell>
-                      <TableCell>{item.quantidade}</TableCell>
-                      <TableCell>R$ {Number(item.preco_unitario || item.produto?.preco || 0).toFixed(2)}</TableCell>
-                      <TableCell>R$ {(Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 0)).toFixed(2)}</TableCell>
-                      <TableCell className="text-center">
-                        {item.produto?.up_cell ? (
-                          <div className="flex items-center justify-center gap-2">
-                            {/* Show buttons only if status_up_sell is 1 (Aguardando aumento) or null */}
-                            {(!item.status_up_sell || item.status_up_sell === 1) && (
-                              <>
-                                <Button 
-                                  size="sm" 
-                                  className="bg-green-600 hover:bg-green-700 text-white"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (readonly) return;
-                                    const canDo = hasPermissao ? hasPermissao(25) : (permissoes ?? []).includes(25);
-                                    if (!canDo) {
-                                      toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
-                                      return;
-                                    }
-                                    setIsNormalFlow(true);
-                                    setIsAumentoGratis(false);
-                                    setUpSellSourceItem(item);
-                                    setUpSellModalOpen(true);
-                                  }}
-                                >
-                                  UpSell
-                                </Button>
-                                <Button 
-                                  size="sm" 
-                                  className="bg-red-600 hover:bg-red-700 text-white"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (readonly) return;
-                                    const canDo = hasPermissao ? hasPermissao(25) : (permissoes ?? []).includes(25);
-                                    if (!canDo) {
-                                      toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
-                                      return;
-                                    }
-                                    setItemToKeep(item);
-                                    setConfirmManterOpen(true);
-                                  }}
-                                >
-                                  Manter
-                                </Button>
-                              </>
-                            )}
-                            {/* Show only badge if status is not "Aguardando aumento" */}
-                            {item.status_up_sell && item.status_up_sell !== 1 && statusUpSellMap[item.status_up_sell] && (
-                              <Badge className="bg-green-100 text-green-700 border-green-300">
-                                {statusUpSellMap[item.status_up_sell]}
-                              </Badge>
-                            )}
-                          </div>
-                        ) : null}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button variant="ghost" className="text-red-600" onClick={(e) => { e.stopPropagation(); if (readonly) return; const canDelete = hasPermissao ? hasPermissao(26) : (permissoes ?? []).includes(26); if (!canDelete) { toast({ title: 'Você não tem permissão para isso', variant: 'destructive' }); return; } setProductToRemove(item); setRemoveValueStr(formatCurrencyBR((Number(item.preco_unitario || item.produto?.preco || 0) * Number(item.quantidade || 1)) || 0)); setRemoveModalOpen(true); }}>
-                            <Trash className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                    ))
-                  })() : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">Nenhum produto</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="status">
-          <Card>
-            <CardContent className="space-y-4 px-6 py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="text-sm text-muted-foreground">Status</div>
-                  <div className="font-medium">
-                    <button
-                      className="text-left hover:underline"
-                      disabled={readonly}
-                      onClick={() => {
-                        if (readonly) return;
-                        setEditOptions(statuses.map(s => ({ id: s.id, nome: s.nome })));
-                        setEditValue(pedido?.status?.id || null);
-                        setEditFieldKey('status');
-                        setEditFieldOpen(true);
-                      }}
-                    >
-                      {pedido?.status?.nome || '—'}
-                    </button>
+                <div className="mt-3">
+                  <div className="text-sm text-muted-foreground">
+                    Frete: Melhor Envio
                   </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Plataforma</div>
-                  <div className="font-medium">
-                    <button
-                      className="text-left hover:underline"
-                      disabled={readonly}
-                      onClick={() => {
-                        if (readonly) return;
-                        setEditOptions(plataformas.map(p => ({ id: p.id, nome: p.nome })));
-                        setEditValue(pedido?.plataforma?.id || null);
-                        setEditFieldKey('plataforma');
-                        setEditFieldOpen(true);
-                      }}
-                    >
-                      {pedido?.plataforma?.nome || '—'}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Etiqueta</div>
-                  <div className="font-medium">
-                    <button
-                      className="text-left hover:underline"
-                      disabled={readonly}
-                      onClick={() => {
-                        if (readonly) return;
-                        setEditOptions(etiquetas.map(e => ({ id: e.id, nome: e.nome })));
-                        setEditValue(pedido?.etiqueta?.id || null);
-                        setEditFieldKey('etiqueta');
-                        setEditFieldOpen(true);
-                      }}
-                    >
-                      {pedido?.etiqueta?.nome || '—'}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Responsável</div>
-                  <div className="font-medium">
-                    <button
-                      className="text-left hover:underline"
-                      disabled={readonly}
-                      onClick={() => {
-                        if (readonly) return;
-                        setEditOptions(usuarios.map(u => ({ id: u.id, nome: u.nome })));
-                        setEditValue(pedido?.responsavel?.id || null);
-                        setEditFieldKey('responsavel');
-                        setEditFieldOpen(true);
-                      }}
-                    >
-                      {pedido?.responsavel?.nome || '—'}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Urgente</div>
-                  <div className="font-medium">
-                    <label className="inline-flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={!!pedido?.urgente}
-                        disabled={readonly || savingUrgente}
-                        onChange={async (e) => {
-                          if (readonly) return;
-                          if (!pedido) return;
-                          const next = !!e.target.checked;
-                          try {
-                            setSavingUrgente(true);
-                            const { error } = await supabase
-                              .from('pedidos')
-                              .update({ urgente: next, atualizado_em: new Date().toISOString() } as any)
-                              .eq('id', pedido.id);
-                            if (error) throw error;
-                            await registrarHistoricoMovimentacao(
-                              pedido.id,
-                              next ? 'Pedido marcado como urgente' : 'Pedido removido do urgente'
-                            );
-                            setPedido((p: any) => p ? ({ ...p, urgente: next }) : p);
-                            toast({ title: 'Atualizado', description: `Urgente ${next ? 'ativado' : 'desativado'}` });
-                          } catch (err: any) {
-                            console.error('Erro ao atualizar urgente:', err);
-                            toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
-                          } finally {
-                            setSavingUrgente(false);
-                          }
-                        }}
-                      />
-                      <span>{pedido?.urgente ? 'Sim' : 'Não'}</span>
-                    </label>
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Observações</div>
-                  <div className="font-medium whitespace-pre-wrap">{pedido?.observacoes || '—'}</div>
-                </div>
-              </div>
-
-              {!readonly && (
-                <div className="flex gap-3 justify-end">
-                  <Button onClick={handleSave} disabled={saving}>{saving ? 'Salvando...' : 'Salvar alterações'}</Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="entrega">
-          <Card>
-            <CardContent className="pt-6">
-              {/* Dados do envio atual */}
-              <div className="grid grid-cols-3 gap-6 mb-6">
-                <div>
-                  <div className="text-sm text-muted-foreground">CEP de destino</div>
-                  <div className="font-medium mt-1">{pedido?.cliente?.cep || '—'}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Transportadora atual</div>
-                  <div className="font-medium mt-1">
-                    {pedido?.frete_melhor_envio?.transportadora || '—'}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground">Prazo estimado</div>
-                  <div className="font-medium mt-1">
-                    {pedido?.frete_melhor_envio?.prazo || '—'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Seleção de remetente e embalagem */}
-              <Card className="mb-6">
-                <CardContent className="pt-6">
-                  <div className="grid grid-cols-1 gap-6">
-                    <div>
-                      <div className="text-sm text-muted-foreground mb-2">Remetente</div>
-                      <div className="flex items-center gap-2">
-                        <select 
-                          className="flex-1 border rounded px-3 py-2"
-                          value={selectedRemetente?.id || ''}
-                          onChange={(e) => setSelectedRemetente(
-                            remetentes.find(r => r.id === e.target.value) || null
-                          )}
-                          disabled={readonly}
-                        >
-                          {remetentes.map(r => (
-                            <option key={r.id} value={r.id}>{r.nome}{r.cidade ? ` - ${r.cidade}` : ''}</option>
-                          ))}
-                        </select>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (readonly) return;
-                            if (!canManageRemetentes) {
-                              toast({ title: 'Sem permissão', description: 'Você não tem permissão para isso', variant: 'destructive' });
-                              return;
-                            }
-                            setRemetentesVisible(true);
-                          }}
-                          disabled={readonly}
-                          aria-label="Gerenciar remetentes"
-                        >
-                          Gerenciar
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="mb-6">
-                <CardContent className="pt-6">
-                  <div className="space-y-2">
-                    <div className="text-sm text-muted-foreground">Link da etiqueta</div>
-                    <div className="flex gap-2">
-                      <Input
-                        placeholder="Cole aqui o link da etiqueta"
-                        value={linkEtiqueta}
-                        onChange={(e) => setLinkEtiqueta(e.target.value)}
-                        disabled={readonly || savingLink}
-                      />
-                      <Button
-                        onClick={saveLinkEtiqueta}
-                        disabled={readonly || savingLink}
-                        className="whitespace-nowrap"
-                      >
-                        {savingLink ? 'Salvando...' : 'Salvar link'}
-                      </Button>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Ao salvar com um link válido, o pedido vai para Logística e a etiqueta é marcada como Disponível.
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Botões de ação */}
-              <div className="flex justify-center gap-3">
-                { (pedido?.carrinho_me === true) ? (
-                  // Mostra botões de imprimir / cancelar etiqueta quando já foi enviado ao carrinho ME
-                  <>
-                    <Button
-                      onClick={async () => {
-                        if (readonly) return;
-                        if (!pedido) return;
-                        setProcessingLabel(true);
-                        try {
-                          const payload = {
-                            pedidoId: pedido.id,
-                            id_melhor_envio: pedido.id_melhor_envio
-                          };
-
-                          const { data, error: fnError } = await supabase.functions.invoke('processar-etiqueta-melhorenvio', {
-                            body: payload
-                          });
-
-                          if (fnError) throw fnError;
-
-                          // Se a função retornar uma URL absoluta para a etiqueta, abrir
-                          console.log('Resposta processar-etiqueta-melhorenvio:', data);
-                          const returnedUrl = data?.url || pedido?.etiqueta?.url;
-                          if (returnedUrl && /^https?:\/\//i.test(returnedUrl)) {
-                            window.open(returnedUrl, '_blank');
-                            toast({ title: 'Etiqueta processada', description: 'A etiqueta foi processada e aberta em nova aba' });
-                          } else if (data?.id) {
-                            // A função retornou um id, mas não uma URL absoluta.
-                            // Mostrar mensagem amigável de sucesso para o usuário.
-                            toast({ title: 'Etiqueta impressa com sucesso 🎉', description: 'A etiqueta foi gerada no Melhor Envio. Verifique o painel do Melhor Envio para visualizar ou baixar.' });
-                            console.warn('Etiqueta processada sem URL pública. Retorno:', data);
-                          } else {
-                            // Sem id nem URL: ainda assim apresentar mensagem positiva ao usuário
-                            toast({ title: 'Etiqueta impressa com sucesso 🎉', description: 'A etiqueta foi processada. Verifique o painel do Melhor Envio para mais detalhes.' });
-                            console.warn('Nenhuma URL retornada ao processar etiqueta:', data);
-                          }
-                        } catch (err) {
-                          console.error('Erro ao processar etiqueta:', err);
-                          toast({ title: 'Erro', description: 'Não foi possível processar a etiqueta', variant: 'destructive' });
-                        } finally {
-                          setProcessingLabel(false);
-                        }
-                      }}
-                      disabled={processingLabel || readonly}
-                      className="border-2 border-sky-400 text-sky-700 bg-white hover:bg-sky-50"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        {processingLabel ? (
-                          <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
-                        ) : (
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 00-1 1v6a1 1 0 001 1h2v3a1 1 0 001 1h8a1 1 0 001-1v-3h2a1 1 0 001-1V7a1 1 0 00-1-1h-2V3a1 1 0 00-1-1H6zM8 5h4v3H8V5z" />
-                          </svg>
-                        )}
-                        Imprimir Etiqueta
-                      </span>
-                    </Button>
-
-                    <Button
-                      onClick={async () => {
-                        if (readonly) return;
-                        // Cancelar etiqueta: limpar id_melhor_envio e carrinho_me no pedido
-                        try {
-                          const { error } = await supabase
-                            .from('pedidos')
-                            .update({ id_melhor_envio: null, carrinho_me: false } as any)
-                            .eq('id', id);
-
-                          if (error) throw error;
-                          await registrarHistoricoMovimentacao(id, 'Etiqueta Melhor Envio cancelada');
-                          toast({ title: 'Sucesso', description: 'Etiqueta cancelada' });
-                          navigate(0);
-                        } catch (err) {
-                          console.error('Erro ao cancelar etiqueta:', err);
-                          toast({ title: 'Erro', description: 'Não foi possível cancelar a etiqueta', variant: 'destructive' });
-                        }
-                      }}
-                      className="bg-red-600 hover:bg-red-700 text-white"
-                      disabled={readonly}
-                    >
-                      Cancelar etiqueta
-                    </Button>
-                  </>
-                ) : (
-                  // Botões baseados na verificação de entregue_ml
-                  <>
-                    {temProdutoEntregueML ? (
-                      // Botão para etiqueta Mercado Livre (quando entregue_ml = true)
-                      <Button
-                        onClick={() => {
-                          if (!readonly) {
-                            handleGerarEtiquetaML();
-                          }
-                        }}
-                        disabled={readonly || gerandoEtiquetaML}
-                        className="bg-yellow-500 hover:bg-yellow-600"
-                      >
-                        {gerandoEtiquetaML ? (
-                          <>
-                            <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
-                            Gerando...
-                          </>
-                        ) : (
-                          '📦 Etiqueta Mercado Livre'
-                        )}
-                      </Button>
-                    ) : (
-                      // Botões originais para calcular e enviar mais barato (quando entregue_ml = null ou false)
-                      <>
-                        <Button
-                          onClick={() => { if (!readonly) handleCalcularFrete(); }}
-                          disabled={calculandoFrete || readonly}
-                          className="bg-amber-500 hover:bg-amber-600"
-                        >
-                          {calculandoFrete ? (
-                            <>
-                              <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
-                              Calculando...
-                            </>
-                          ) : (
-                            '📦 Calcular Frete'
-                          )}
-                        </Button>
-                        
-                        <Button
-                          onClick={() => { if (!readonly) handleEnviarMaisBarato(); }}
-                          disabled={calculandoFrete || readonly}
-                          className="bg-custom-700 hover:bg-custom-800"
-                        >
-                          {calculandoFrete ? 'Calculando...' : 'ENVIAR O MAIS BARATO'}
-                        </Button>
-                      </>
-                    )}
-                  </>
-                ) }
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Cards de gerenciamento */}
-          <div className="grid grid-cols-2 gap-6 mt-6">
-           
-
-            {/* Link Etiqueta moved to the top delivery info card as requested */}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="tempo-ganho">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle>Tempo de Entrega Ganho</CardTitle>
-                {!readonly && pedido?.tempo_ganho && (
-                  <Button 
-                    onClick={async () => {
-                      if (!id) return;
-                      setSavingTempoGanho(true);
-                      try {
-                        const { error } = await supabase
-                          .from('pedidos')
-                          .update({ tempo_ganho: null })
-                          .eq('id', id);
-                        
-                        if (error) throw error;
-                        await registrarHistoricoMovimentacao(id, 'Tempo ganho removido do pedido');
-                        
-                        toast({
-                          title: "Sucesso",
-                          description: "Tempo ganho removido com sucesso!",
-                        });
-                        
-                        // Atualizar o pedido local e limpar o estado
-                        setPedido((prev: any) => ({ ...prev, tempo_ganho: null }));
-                        setTempoGanho(undefined);
-                      } catch (error) {
-                        console.error('Erro ao limpar tempo ganho:', error);
-                        toast({
-                          title: "Erro",
-                          description: "Não foi possível limpar o tempo ganho.",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setSavingTempoGanho(false);
-                      }
-                    }}
-                    disabled={savingTempoGanho}
-                    variant="destructive"
-                    size="sm"
-                  >
-                    {savingTempoGanho ? "Limpando..." : "Limpar Tempo Ganho"}
-                  </Button>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Data de hoje
-                  </label>
-                  <Input 
-                    type="text" 
-                    value={format(new Date(), "dd/MM/yyyy", { locale: ptBR })} 
-                    disabled 
-                    className="bg-gray-50"
+                  <Input
+                    value={pedido?.frete_me ? String(pedido.frete_me) : "0,00"}
+                    readOnly
                   />
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Até que dia ganhou de tempo para enviar o pedido?
-                  </label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !tempoGanho && "text-muted-foreground"
-                        )}
+        <Tabs defaultValue="resumo" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="resumo">Resumo</TabsTrigger>
+            <TabsTrigger value="status">Status</TabsTrigger>
+            <TabsTrigger value="entrega">Entrega</TabsTrigger>
+            <TabsTrigger value="tempo-ganho">Tempo Ganho</TabsTrigger>
+            <TabsTrigger value="subir-etiqueta">Subir etiqueta</TabsTrigger>
+            <TabsTrigger value="historico">Histórico</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="resumo">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Produtos</CardTitle>
+                  <Button
+                    className="bg-custom-700 text-white"
+                    onClick={() => {
+                      if (readonly) return;
+                      const canAdd = hasPermissao
+                        ? hasPermissao(24)
+                        : (permissoes ?? []).includes(24);
+                      if (!canAdd) {
+                        toast({
+                          title: "Você não tem permissão para isso",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setAddProductsVisible(true);
+                    }}
+                    disabled={readonly}
+                  >
+                    Adicionar Produto
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Produto</TableHead>
+                      <TableHead>SKU</TableHead>
+                      <TableHead>Qtd</TableHead>
+                      <TableHead>Valor unit.</TableHead>
+                      <TableHead>Subtotal</TableHead>
+                      <TableHead className="text-center"></TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pedido?.itens?.length ? (
+                      (() => {
+                        // Mostrar cada item individualmente da tabela itens_pedido (sem agrupamento)
+                        const items = pedido.itens || [];
+
+                        console.log(
+                          "ITENS INDIVIDUAIS (sem agrupamento):",
+                          items.map((it: any) => ({
+                            id: it.id,
+                            nome: it.produto?.nome,
+                            variacao: it.variacao?.nome,
+                            pintado: it.pintado,
+                            pintado_type: typeof it.pintado,
+                            produto_id: it.produto?.id || it.produto_id,
+                          })),
+                        );
+
+                        return items.map((item: any) => (
+                          <TableRow key={item.id}>
+                            <TableCell>
+                              <div className="relative flex items-center gap-3">
+                                {item.pintado === true && (
+                                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-end pr-24">
+                                    <Badge
+                                      variant="default"
+                                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-sm px-3 py-0.5"
+                                    >
+                                      PINTADO
+                                    </Badge>
+                                  </div>
+                                )}
+                                {item.produto?.img_url ||
+                                item.variacao?.img_url ? (
+                                  <img
+                                    src={
+                                      item.variacao?.img_url ||
+                                      item.produto?.img_url
+                                    }
+                                    alt={
+                                      item.produto?.nome || item.variacao?.nome
+                                    }
+                                    className="w-10 h-10 rounded object-cover"
+                                  />
+                                ) : null}
+                                <div>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium">
+                                      {item.produto?.nome || "Produto"}
+                                    </span>
+                                  </div>
+                                  {item.variacao?.nome && (
+                                    <div className="text-sm text-muted-foreground">
+                                      {item.variacao.nome}
+                                    </div>
+                                  )}
+                                  <div className="text-xs text-muted-foreground">
+                                    SKU:{" "}
+                                    {item.variacao?.sku ||
+                                      item.produto?.sku ||
+                                      "-"}
+                                  </div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {item.variacao?.sku || item.produto?.sku || ""}
+                            </TableCell>
+                            <TableCell>{item.quantidade}</TableCell>
+                            <TableCell>
+                              R${" "}
+                              {Number(
+                                item.preco_unitario || item.produto?.preco || 0,
+                              ).toFixed(2)}
+                            </TableCell>
+                            <TableCell>
+                              R${" "}
+                              {(
+                                Number(
+                                  item.preco_unitario ||
+                                    item.produto?.preco ||
+                                    0,
+                                ) * Number(item.quantidade || 0)
+                              ).toFixed(2)}
+                            </TableCell>
+                            <TableCell className="text-center">
+                              {item.produto?.up_cell ? (
+                                <div className="flex items-center justify-center gap-2">
+                                  {/* Show buttons only if status_up_sell is 1 (Aguardando aumento) or null */}
+                                  {(!item.status_up_sell ||
+                                    item.status_up_sell === 1) && (
+                                    <>
+                                      <Button
+                                        size="sm"
+                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (readonly) return;
+                                          const canDo = hasPermissao
+                                            ? hasPermissao(25)
+                                            : (permissoes ?? []).includes(25);
+                                          if (!canDo) {
+                                            toast({
+                                              title:
+                                                "Você não tem permissão para isso",
+                                              variant: "destructive",
+                                            });
+                                            return;
+                                          }
+                                          setIsNormalFlow(true);
+                                          setIsAumentoGratis(false);
+                                          setUpSellSourceItem(item);
+                                          setUpSellModalOpen(true);
+                                        }}
+                                      >
+                                        UpSell
+                                      </Button>
+                                      <Button
+                                        size="sm"
+                                        className="bg-red-600 hover:bg-red-700 text-white"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          if (readonly) return;
+                                          const canDo = hasPermissao
+                                            ? hasPermissao(25)
+                                            : (permissoes ?? []).includes(25);
+                                          if (!canDo) {
+                                            toast({
+                                              title:
+                                                "Você não tem permissão para isso",
+                                              variant: "destructive",
+                                            });
+                                            return;
+                                          }
+                                          setItemToKeep(item);
+                                          setConfirmManterOpen(true);
+                                        }}
+                                      >
+                                        Manter
+                                      </Button>
+                                    </>
+                                  )}
+                                  {/* Show only badge if status is not "Aguardando aumento" */}
+                                  {item.status_up_sell &&
+                                    item.status_up_sell !== 1 &&
+                                    statusUpSellMap[item.status_up_sell] && (
+                                      <Badge className="bg-green-100 text-green-700 border-green-300">
+                                        {statusUpSellMap[item.status_up_sell]}
+                                      </Badge>
+                                    )}
+                                </div>
+                              ) : null}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                <Button
+                                  variant="ghost"
+                                  className="text-red-600"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (readonly) return;
+                                    const canDelete = hasPermissao
+                                      ? hasPermissao(26)
+                                      : (permissoes ?? []).includes(26);
+                                    if (!canDelete) {
+                                      toast({
+                                        title:
+                                          "Você não tem permissão para isso",
+                                        variant: "destructive",
+                                      });
+                                      return;
+                                    }
+                                    setProductToRemove(item);
+                                    setRemoveValueStr(
+                                      formatCurrencyBR(
+                                        Number(
+                                          item.preco_unitario ||
+                                            item.produto?.preco ||
+                                            0,
+                                        ) * Number(item.quantidade || 1) || 0,
+                                      ),
+                                    );
+                                    setRemoveModalOpen(true);
+                                  }}
+                                >
+                                  <Trash className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ));
+                      })()
+                    ) : (
+                      <TableRow>
+                        <TableCell
+                          colSpan={5}
+                          className="text-center text-sm text-muted-foreground"
+                        >
+                          Nenhum produto
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="status">
+            <Card>
+              <CardContent className="space-y-4 px-6 py-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <div className="text-sm text-muted-foreground">Status</div>
+                    <div className="font-medium">
+                      <button
+                        className="text-left hover:underline"
                         disabled={readonly}
+                        onClick={() => {
+                          if (readonly) return;
+                          setEditOptions(
+                            statuses.map((s) => ({ id: s.id, nome: s.nome })),
+                          );
+                          setEditValue(pedido?.status?.id || null);
+                          setEditFieldKey("status");
+                          setEditFieldOpen(true);
+                        }}
                       >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {tempoGanho ? format(tempoGanho, "dd/MM/yyyy", { locale: ptBR }) : "Selecione a data"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={tempoGanho}
-                        onSelect={setTempoGanho}
-                        locale={ptBR}
-                        disabled={(date) => date < new Date()}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                        {pedido?.status?.nome || "—"}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Plataforma
+                    </div>
+                    <div className="font-medium">
+                      <button
+                        className="text-left hover:underline"
+                        disabled={readonly}
+                        onClick={() => {
+                          if (readonly) return;
+                          setEditOptions(
+                            plataformas.map((p) => ({
+                              id: p.id,
+                              nome: p.nome,
+                            })),
+                          );
+                          setEditValue(pedido?.plataforma?.id || null);
+                          setEditFieldKey("plataforma");
+                          setEditFieldOpen(true);
+                        }}
+                      >
+                        {pedido?.plataforma?.nome || "—"}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Etiqueta
+                    </div>
+                    <div className="font-medium">
+                      <button
+                        className="text-left hover:underline"
+                        disabled={readonly}
+                        onClick={() => {
+                          if (readonly) return;
+                          setEditOptions(
+                            etiquetas.map((e) => ({ id: e.id, nome: e.nome })),
+                          );
+                          setEditValue(pedido?.etiqueta?.id || null);
+                          setEditFieldKey("etiqueta");
+                          setEditFieldOpen(true);
+                        }}
+                      >
+                        {pedido?.etiqueta?.nome || "—"}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Responsável
+                    </div>
+                    <div className="font-medium">
+                      <button
+                        className="text-left hover:underline"
+                        disabled={readonly}
+                        onClick={() => {
+                          if (readonly) return;
+                          setEditOptions(
+                            usuarios.map((u) => ({ id: u.id, nome: u.nome })),
+                          );
+                          setEditValue(pedido?.responsavel?.id || null);
+                          setEditFieldKey("responsavel");
+                          setEditFieldOpen(true);
+                        }}
+                      >
+                        {pedido?.responsavel?.nome || "—"}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">Urgente</div>
+                    <div className="font-medium">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!!pedido?.urgente}
+                          disabled={readonly || savingUrgente}
+                          onChange={async (e) => {
+                            if (readonly) return;
+                            if (!pedido) return;
+                            const next = !!e.target.checked;
+                            try {
+                              setSavingUrgente(true);
+                              const { error } = await supabase
+                                .from("pedidos")
+                                .update({
+                                  urgente: next,
+                                  atualizado_em: new Date().toISOString(),
+                                } as any)
+                                .eq("id", pedido.id);
+                              if (error) throw error;
+                              await registrarHistoricoMovimentacao(
+                                pedido.id,
+                                next
+                                  ? "Pedido marcado como urgente"
+                                  : "Pedido removido do urgente",
+                              );
+                              setPedido((p: any) =>
+                                p ? { ...p, urgente: next } : p,
+                              );
+                              toast({
+                                title: "Atualizado",
+                                description: `Urgente ${next ? "ativado" : "desativado"}`,
+                              });
+                            } catch (err: any) {
+                              console.error("Erro ao atualizar urgente:", err);
+                              toast({
+                                title: "Erro",
+                                description: err?.message || String(err),
+                                variant: "destructive",
+                              });
+                            } finally {
+                              setSavingUrgente(false);
+                            }
+                          }}
+                        />
+                        <span>{pedido?.urgente ? "Sim" : "Não"}</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Observações
+                    </div>
+                    <div className="font-medium whitespace-pre-wrap">
+                      {pedido?.observacoes || "—"}
+                    </div>
+                  </div>
                 </div>
 
                 {!readonly && (
-                  <Button 
-                    onClick={async () => {
-                      if (!tempoGanho || !id) return;
-                      setSavingTempoGanho(true);
-                      try {
-                        const { error } = await supabase
-                          .from('pedidos')
-                          .update({ tempo_ganho: tempoGanho.toISOString() })
-                          .eq('id', id);
-                        
-                        if (error) throw error;
-                        await registrarHistoricoMovimentacao(
-                          id,
-                          `Tempo ganho definido para: ${format(tempoGanho, "dd/MM/yyyy", { locale: ptBR })}`
-                        );
-                        
-                        toast({
-                          title: "Sucesso",
-                          description: "Tempo ganho salvo com sucesso!",
-                        });
-                        
-                        // Atualizar o pedido local
-                        setPedido((prev: any) => ({ ...prev, tempo_ganho: tempoGanho.toISOString() }));
-                      } catch (error) {
-                        console.error('Erro ao salvar tempo ganho:', error);
-                        toast({
-                          title: "Erro",
-                          description: "Não foi possível salvar o tempo ganho.",
-                          variant: "destructive",
-                        });
-                      } finally {
-                        setSavingTempoGanho(false);
-                      }
-                    }}
-                    disabled={!tempoGanho || savingTempoGanho}
-                    className="w-full bg-custom-700 hover:bg-custom-800 text-white"
-                  >
-                    {savingTempoGanho ? "Salvando..." : "Salvar Tempo Ganho"}
-                  </Button>
-                )}
-
-                {pedido?.tempo_ganho && (
-                  <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
-                    <p className="text-sm text-green-800">
-                      <strong>Tempo ganho registrado:</strong> {format(new Date(pedido.tempo_ganho), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
-                    </p>
+                  <div className="flex gap-3 justify-end">
+                    <Button onClick={handleSave} disabled={saving}>
+                      {saving ? "Salvando..." : "Salvar alterações"}
+                    </Button>
                   </div>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <TabsContent value="subir-etiqueta">
-          <Card>
-            <CardHeader>
-              <CardTitle>Subir etiqueta gerada</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700 mb-2 block">
-                    Selecione um ou mais arquivos PDF de etiquetas
-                  </label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept="application/pdf,.pdf"
-                    multiple
-                    onChange={(e) => {
-                      const files = Array.from(e.target.files || []);
-                      if (files.length > 0) {
-                        // Validar se todos são PDFs
-                        const invalidFiles = files.filter(f => f.type !== 'application/pdf');
+          <TabsContent value="entrega">
+            <Card>
+              <CardContent className="pt-6">
+                {/* Dados do envio atual */}
+                <div className="grid grid-cols-3 gap-6 mb-6">
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      CEP de destino
+                    </div>
+                    <div className="font-medium mt-1">
+                      {pedido?.cliente?.cep || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Transportadora atual
+                    </div>
+                    <div className="font-medium mt-1">
+                      {pedido?.frete_melhor_envio?.transportadora || "—"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
+                      Prazo estimado
+                    </div>
+                    <div className="font-medium mt-1">
+                      {pedido?.frete_melhor_envio?.prazo || "—"}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Seleção de remetente e embalagem */}
+                <Card className="mb-6">
+                  <CardContent className="pt-6">
+                    <div className="grid grid-cols-1 gap-6">
+                      <div>
+                        <div className="text-sm text-muted-foreground mb-2">
+                          Remetente
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <select
+                            className="flex-1 border rounded px-3 py-2"
+                            value={selectedRemetente?.id || ""}
+                            onChange={(e) =>
+                              setSelectedRemetente(
+                                remetentes.find(
+                                  (r) => r.id === e.target.value,
+                                ) || null,
+                              )
+                            }
+                            disabled={readonly}
+                          >
+                            {remetentes.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.nome}
+                                {r.cidade ? ` - ${r.cidade}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              if (readonly) return;
+                              if (!canManageRemetentes) {
+                                toast({
+                                  title: "Sem permissão",
+                                  description:
+                                    "Você não tem permissão para isso",
+                                  variant: "destructive",
+                                });
+                                return;
+                              }
+                              setRemetentesVisible(true);
+                            }}
+                            disabled={readonly}
+                            aria-label="Gerenciar remetentes"
+                          >
+                            Gerenciar
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card className="mb-6">
+                  <CardContent className="pt-6">
+                    <div className="space-y-2">
+                      <div className="text-sm text-muted-foreground">
+                        Link da etiqueta
+                      </div>
+                      <div className="flex gap-2">
+                        <Input
+                          placeholder="Cole aqui o link da etiqueta"
+                          value={linkEtiqueta}
+                          onChange={(e) => setLinkEtiqueta(e.target.value)}
+                          disabled={readonly || savingLink}
+                        />
+                        <Button
+                          onClick={saveLinkEtiqueta}
+                          disabled={readonly || savingLink}
+                          className="whitespace-nowrap"
+                        >
+                          {savingLink ? "Salvando..." : "Salvar link"}
+                        </Button>
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        Ao salvar com um link válido, o pedido vai para
+                        Logística e a etiqueta é marcada como Disponível.
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Botões de ação */}
+                <div className="flex justify-center gap-3">
+                  {pedido?.carrinho_me === true ? (
+                    // Mostra botões de imprimir / cancelar etiqueta quando já foi enviado ao carrinho ME
+                    <>
+                      <Button
+                        onClick={async () => {
+                          if (readonly) return;
+                          if (!pedido) return;
+                          setProcessingLabel(true);
+                          try {
+                            const payload = {
+                              pedidoId: pedido.id,
+                              id_melhor_envio: pedido.id_melhor_envio,
+                            };
+
+                            const { data, error: fnError } =
+                              await supabase.functions.invoke(
+                                "processar-etiqueta-melhorenvio",
+                                {
+                                  body: payload,
+                                },
+                              );
+
+                            if (fnError) throw fnError;
+
+                            // Se a função retornar uma URL absoluta para a etiqueta, abrir
+                            console.log(
+                              "Resposta processar-etiqueta-melhorenvio:",
+                              data,
+                            );
+                            const returnedUrl =
+                              data?.url || pedido?.etiqueta?.url;
+                            if (
+                              returnedUrl &&
+                              /^https?:\/\//i.test(returnedUrl)
+                            ) {
+                              window.open(returnedUrl, "_blank");
+                              toast({
+                                title: "Etiqueta processada",
+                                description:
+                                  "A etiqueta foi processada e aberta em nova aba",
+                              });
+                            } else if (data?.id) {
+                              // A função retornou um id, mas não uma URL absoluta.
+                              // Mostrar mensagem amigável de sucesso para o usuário.
+                              toast({
+                                title: "Etiqueta impressa com sucesso 🎉",
+                                description:
+                                  "A etiqueta foi gerada no Melhor Envio. Verifique o painel do Melhor Envio para visualizar ou baixar.",
+                              });
+                              console.warn(
+                                "Etiqueta processada sem URL pública. Retorno:",
+                                data,
+                              );
+                            } else {
+                              // Sem id nem URL: ainda assim apresentar mensagem positiva ao usuário
+                              toast({
+                                title: "Etiqueta impressa com sucesso 🎉",
+                                description:
+                                  "A etiqueta foi processada. Verifique o painel do Melhor Envio para mais detalhes.",
+                              });
+                              console.warn(
+                                "Nenhuma URL retornada ao processar etiqueta:",
+                                data,
+                              );
+                            }
+                          } catch (err) {
+                            console.error("Erro ao processar etiqueta:", err);
+                            toast({
+                              title: "Erro",
+                              description:
+                                "Não foi possível processar a etiqueta",
+                              variant: "destructive",
+                            });
+                          } finally {
+                            setProcessingLabel(false);
+                          }
+                        }}
+                        disabled={processingLabel || readonly}
+                        className="border-2 border-sky-400 text-sky-700 bg-white hover:bg-sky-50"
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          {processingLabel ? (
+                            <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
+                          ) : (
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-5 w-5"
+                              viewBox="0 0 20 20"
+                              fill="currentColor"
+                            >
+                              <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 00-1 1v6a1 1 0 001 1h2v3a1 1 0 001 1h8a1 1 0 001-1v-3h2a1 1 0 001-1V7a1 1 0 00-1-1h-2V3a1 1 0 00-1-1H6zM8 5h4v3H8V5z" />
+                            </svg>
+                          )}
+                          Imprimir Etiqueta
+                        </span>
+                      </Button>
+
+                      <Button
+                        onClick={async () => {
+                          if (readonly) return;
+                          // Cancelar etiqueta: limpar id_melhor_envio e carrinho_me no pedido
+                          try {
+                            const { error } = await supabase
+                              .from("pedidos")
+                              .update({
+                                id_melhor_envio: null,
+                                carrinho_me: false,
+                              } as any)
+                              .eq("id", id);
+
+                            if (error) throw error;
+                            await registrarHistoricoMovimentacao(
+                              id,
+                              "Etiqueta Melhor Envio cancelada",
+                            );
+                            toast({
+                              title: "Sucesso",
+                              description: "Etiqueta cancelada",
+                            });
+                            navigate(0);
+                          } catch (err) {
+                            console.error("Erro ao cancelar etiqueta:", err);
+                            toast({
+                              title: "Erro",
+                              description:
+                                "Não foi possível cancelar a etiqueta",
+                              variant: "destructive",
+                            });
+                          }
+                        }}
+                        className="bg-red-600 hover:bg-red-700 text-white"
+                        disabled={readonly}
+                      >
+                        Cancelar etiqueta
+                      </Button>
+                    </>
+                  ) : (
+                    // Botões baseados na verificação de entregue_ml
+                    <>
+                      {temProdutoEntregueML ? (
+                        // Botão para etiqueta Mercado Livre (quando entregue_ml = true)
+                        <Button
+                          onClick={() => {
+                            if (!readonly) {
+                              handleGerarEtiquetaML();
+                            }
+                          }}
+                          disabled={readonly || gerandoEtiquetaML}
+                          className="bg-yellow-500 hover:bg-yellow-600"
+                        >
+                          {gerandoEtiquetaML ? (
+                            <>
+                              <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                              Gerando...
+                            </>
+                          ) : (
+                            "📦 Etiqueta Mercado Livre"
+                          )}
+                        </Button>
+                      ) : (
+                        // Botões originais para calcular e enviar mais barato (quando entregue_ml = null ou false)
+                        <>
+                          <Button
+                            onClick={() => {
+                              if (!readonly) handleCalcularFrete();
+                            }}
+                            disabled={calculandoFrete || readonly}
+                            className="bg-amber-500 hover:bg-amber-600"
+                          >
+                            {calculandoFrete ? (
+                              <>
+                                <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                                Calculando...
+                              </>
+                            ) : (
+                              "📦 Calcular Frete"
+                            )}
+                          </Button>
+
+                          <Button
+                            onClick={() => {
+                              if (!readonly) handleEnviarMaisBarato();
+                            }}
+                            disabled={calculandoFrete || readonly}
+                            className="bg-custom-700 hover:bg-custom-800"
+                          >
+                            {calculandoFrete
+                              ? "Calculando..."
+                              : "ENVIAR O MAIS BARATO"}
+                          </Button>
+                        </>
+                      )}
+                    </>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Cards de gerenciamento */}
+            <div className="grid grid-cols-2 gap-6 mt-6">
+              {/* Link Etiqueta moved to the top delivery info card as requested */}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="tempo-ganho">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle>Tempo de Entrega Ganho</CardTitle>
+                  {!readonly && pedido?.tempo_ganho && (
+                    <Button
+                      onClick={async () => {
+                        if (!id) return;
+                        setSavingTempoGanho(true);
+                        try {
+                          const { error } = await supabase
+                            .from("pedidos")
+                            .update({ tempo_ganho: null })
+                            .eq("id", id);
+
+                          if (error) throw error;
+                          await registrarHistoricoMovimentacao(
+                            id,
+                            "Tempo ganho removido do pedido",
+                          );
+
+                          toast({
+                            title: "Sucesso",
+                            description: "Tempo ganho removido com sucesso!",
+                          });
+
+                          // Atualizar o pedido local e limpar o estado
+                          setPedido((prev: any) => ({
+                            ...prev,
+                            tempo_ganho: null,
+                          }));
+                          setTempoGanho(undefined);
+                        } catch (error) {
+                          console.error("Erro ao limpar tempo ganho:", error);
+                          toast({
+                            title: "Erro",
+                            description:
+                              "Não foi possível limpar o tempo ganho.",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setSavingTempoGanho(false);
+                        }
+                      }}
+                      disabled={savingTempoGanho}
+                      variant="destructive"
+                      size="sm"
+                    >
+                      {savingTempoGanho ? "Limpando..." : "Limpar Tempo Ganho"}
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Data de hoje
+                    </label>
+                    <Input
+                      type="text"
+                      value={format(new Date(), "dd/MM/yyyy", { locale: ptBR })}
+                      disabled
+                      className="bg-gray-50"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-gray-700 mb-2 block">
+                      Até que dia ganhou de tempo para enviar o pedido?
+                    </label>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button
+                          variant="outline"
+                          className={cn(
+                            "w-full justify-start text-left font-normal",
+                            !tempoGanho && "text-muted-foreground",
+                          )}
+                          disabled={readonly}
+                        >
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {tempoGanho
+                            ? format(tempoGanho, "dd/MM/yyyy", { locale: ptBR })
+                            : "Selecione a data"}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={tempoGanho}
+                          onSelect={setTempoGanho}
+                          locale={ptBR}
+                          disabled={(date) => date < new Date()}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+
+                  {!readonly && (
+                    <Button
+                      onClick={async () => {
+                        if (!tempoGanho || !id) return;
+                        setSavingTempoGanho(true);
+                        try {
+                          const { error } = await supabase
+                            .from("pedidos")
+                            .update({ tempo_ganho: tempoGanho.toISOString() })
+                            .eq("id", id);
+
+                          if (error) throw error;
+                          await registrarHistoricoMovimentacao(
+                            id,
+                            `Tempo ganho definido para: ${format(tempoGanho, "dd/MM/yyyy", { locale: ptBR })}`,
+                          );
+
+                          toast({
+                            title: "Sucesso",
+                            description: "Tempo ganho salvo com sucesso!",
+                          });
+
+                          // Atualizar o pedido local
+                          setPedido((prev: any) => ({
+                            ...prev,
+                            tempo_ganho: tempoGanho.toISOString(),
+                          }));
+                        } catch (error) {
+                          console.error("Erro ao salvar tempo ganho:", error);
+                          toast({
+                            title: "Erro",
+                            description:
+                              "Não foi possível salvar o tempo ganho.",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setSavingTempoGanho(false);
+                        }
+                      }}
+                      disabled={!tempoGanho || savingTempoGanho}
+                      className="w-full bg-custom-700 hover:bg-custom-800 text-white"
+                    >
+                      {savingTempoGanho ? "Salvando..." : "Salvar Tempo Ganho"}
+                    </Button>
+                  )}
+
+                  {pedido?.tempo_ganho && (
+                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-md">
+                      <p className="text-sm text-green-800">
+                        <strong>Tempo ganho registrado:</strong>{" "}
+                        {format(
+                          new Date(pedido.tempo_ganho),
+                          "dd/MM/yyyy 'às' HH:mm",
+                          { locale: ptBR },
+                        )}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="subir-etiqueta">
+            <Card>
+              <CardHeader>
+                <CardTitle>Subir etiqueta gerada</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="space-y-4">
+                  {/* Drop zone */}
+                  <div
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      setIsDraggingLabel(true);
+                    }}
+                    onDragLeave={() => setIsDraggingLabel(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setIsDraggingLabel(false);
+                      if (readonly || uploadingLabel) return;
+                      const files = Array.from(
+                        e.dataTransfer.files || [],
+                      ).filter((f) => f.type === "application/pdf");
+                      if (files.length === 0) {
+                        toast({
+                          title: "Erro",
+                          description: "Apenas arquivos PDF são permitidos",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      const newFiles = files.map((file) => ({
+                        file,
+                        customName: `${file.name.replace(/\.pdf$/i, "")}-${pedido?.id_externo || pedido?.id.slice(0, 8)}`,
+                      }));
+                      setSelectedLabelFiles((prev) => [...prev, ...newFiles]);
+                    }}
+                    className={`relative flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed p-8 text-center transition-colors cursor-pointer ${
+                      isDraggingLabel
+                        ? "border-custom-500 bg-custom-50"
+                        : "border-gray-300 hover:border-custom-400 hover:bg-gray-50"
+                    }`}
+                    onClick={() =>
+                      !readonly &&
+                      !uploadingLabel &&
+                      fileInputRef.current?.click()
+                    }
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="application/pdf,.pdf"
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files || []);
+                        if (files.length === 0) return;
+                        const invalidFiles = files.filter(
+                          (f) => f.type !== "application/pdf",
+                        );
                         if (invalidFiles.length > 0) {
                           toast({
-                            title: 'Erro',
-                            description: 'Apenas arquivos PDF são permitidos',
-                            variant: 'destructive'
+                            title: "Erro",
+                            description: "Apenas arquivos PDF são permitidos",
+                            variant: "destructive",
                           });
-                          e.target.value = '';
+                          e.target.value = "";
                           return;
                         }
-                        // Gerar nome customizado para cada arquivo: nome_original-id_externo
-                        const newFiles = files.map(file => {
-                          const nameWithoutExt = file.name.replace(/\.pdf$/i, '');
-                          const customName = `${nameWithoutExt}-${pedido?.id_externo || pedido?.id.slice(0, 8)}`;
-                          return { file, customName };
-                        });
-                        // Adicionar aos arquivos existentes em vez de substituir
-                        setSelectedLabelFiles(prev => [...prev, ...newFiles]);
-                        // Limpar o input para permitir selecionar os mesmos arquivos novamente se necessário
-                        e.target.value = '';
-                      }
-                    }}
-                    className="block w-full text-sm text-gray-500
-                      file:mr-4 file:py-2 file:px-4
-                      file:rounded-md file:border-0
-                      file:text-sm file:font-semibold
-                      file:bg-custom-50 file:text-custom-700
-                      hover:file:bg-custom-100
-                      cursor-pointer"
-                    disabled={readonly || uploadingLabel}
-                  />
-                  {selectedLabelFiles.length > 0 && (
-                    <div className="mt-3 space-y-2">
+                        const newFiles = files.map((file) => ({
+                          file,
+                          customName: `${file.name.replace(/\.pdf$/i, "")}-${pedido?.id_externo || pedido?.id.slice(0, 8)}`,
+                        }));
+                        setSelectedLabelFiles((prev) => [...prev, ...newFiles]);
+                        e.target.value = "";
+                      }}
+                      className="hidden"
+                      disabled={readonly || uploadingLabel}
+                    />
+                    <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center">
+                      <span className="text-2xl">📎</span>
+                    </div>
+                    <div>
                       <p className="text-sm font-medium text-gray-700">
-                        {selectedLabelFiles.length} arquivo(s) selecionado(s):
+                        {isDraggingLabel
+                          ? "Solte os arquivos aqui"
+                          : "Arraste PDFs aqui ou clique para selecionar"}
                       </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Você pode selecionar ou arrastar vários arquivos de uma
+                        vez
+                      </p>
+                    </div>
+                    <span className="text-xs px-3 py-1.5 rounded-md bg-custom-700 text-white font-medium pointer-events-none">
+                      Selecionar arquivos
+                    </span>
+                  </div>
+
+                  {/* Lista de arquivos selecionados */}
+                  {selectedLabelFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-gray-700">
+                          {selectedLabelFiles.length} arquivo(s) selecionado(s)
+                        </p>
+                        <button
+                          onClick={() =>
+                            !readonly &&
+                            !uploadingLabel &&
+                            fileInputRef.current?.click()
+                          }
+                          className="text-xs text-custom-700 hover:underline disabled:opacity-50"
+                          disabled={readonly || uploadingLabel}
+                        >
+                          + Adicionar mais arquivos
+                        </button>
+                      </div>
                       <div className="max-h-60 overflow-y-auto space-y-3">
                         {selectedLabelFiles.map((item, index) => (
-                          <div key={index} className="p-3 bg-green-50 border border-green-200 rounded-md space-y-2">
+                          <div
+                            key={index}
+                            className="p-3 bg-green-50 border border-green-200 rounded-md space-y-2"
+                          >
                             <div className="flex items-start justify-between">
                               <div className="flex-1 min-w-0">
-                                <p className="text-xs text-green-600">
-                                  Arquivo original: {item.file.name}
+                                <p className="text-xs text-green-600 font-medium truncate">
+                                  {item.file.name}
                                 </p>
-                                <p className="text-xs text-green-600 mt-1">
-                                  Tamanho: {(item.file.size / 1024).toFixed(2)} KB
+                                <p className="text-xs text-green-600 mt-0.5">
+                                  {(item.file.size / 1024).toFixed(1)} KB
                                 </p>
                               </div>
                               <button
-                                onClick={() => {
-                                  setSelectedLabelFiles(prev => prev.filter((_, i) => i !== index));
-                                }}
-                                className="ml-2 text-red-600 hover:text-red-800 flex-shrink-0"
+                                onClick={() =>
+                                  setSelectedLabelFiles((prev) =>
+                                    prev.filter((_, i) => i !== index),
+                                  )
+                                }
+                                className="ml-2 text-red-500 hover:text-red-700 flex-shrink-0 text-sm leading-none"
                                 disabled={uploadingLabel}
                               >
                                 ✕
@@ -2752,14 +3566,17 @@ export default function Pedido() {
                             </div>
                             <div>
                               <label className="text-xs font-medium text-green-700 block mb-1">
-                                Nome do arquivo (sem extensão):
+                                Nome ao salvar (sem .pdf):
                               </label>
                               <input
                                 type="text"
                                 value={item.customName}
                                 onChange={(e) => {
                                   const newFiles = [...selectedLabelFiles];
-                                  newFiles[index].customName = e.target.value;
+                                  newFiles[index] = {
+                                    ...newFiles[index],
+                                    customName: e.target.value,
+                                  };
                                   setSelectedLabelFiles(newFiles);
                                 }}
                                 className="w-full px-2 py-1 text-sm border border-green-300 rounded focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -2767,7 +3584,10 @@ export default function Pedido() {
                                 disabled={uploadingLabel}
                               />
                               <p className="text-xs text-green-600 mt-1">
-                                Será salvo como: <span className="font-mono">{item.customName}.pdf</span>
+                                Salvo como:{" "}
+                                <span className="font-mono">
+                                  {item.customName}.pdf
+                                </span>
                               </p>
                             </div>
                           </div>
@@ -2789,16 +3609,18 @@ export default function Pedido() {
                         Enviando {selectedLabelFiles.length} etiqueta(s)...
                       </>
                     ) : (
-                      `Enviar ${selectedLabelFiles.length > 0 ? selectedLabelFiles.length + ' ' : ''}Etiqueta${selectedLabelFiles.length !== 1 ? 's' : ''}`
+                      `Enviar ${selectedLabelFiles.length > 0 ? selectedLabelFiles.length + " " : ""}Etiqueta${selectedLabelFiles.length !== 1 ? "s" : ""}`
                     )}
                   </Button>
                 )}
 
                 {(() => {
                   // Obter todas as etiquetas do campo JSONB
-                  const etiquetas = pedido?.etiquetas_uploads && Array.isArray(pedido.etiquetas_uploads)
-                    ? pedido.etiquetas_uploads
-                    : [];
+                  const etiquetas =
+                    pedido?.etiquetas_uploads &&
+                    Array.isArray(pedido.etiquetas_uploads)
+                      ? pedido.etiquetas_uploads
+                      : [];
 
                   if (etiquetas.length === 0) return null;
 
@@ -2810,80 +3632,118 @@ export default function Pedido() {
                       <div className="flex flex-wrap gap-3">
                         {etiquetas.map((url: string, index: number) => {
                           // Extrair nome do arquivo da URL
-                          const fileName = url.split('/').pop()?.replace('.pdf', '') || `etiqueta-${index + 1}`;
-                          
+                          const fileName =
+                            url.split("/").pop()?.replace(".pdf", "") ||
+                            `etiqueta-${index + 1}`;
+
                           return (
                             <div
                               key={index}
                               className="relative flex flex-col items-center justify-center p-2 border-2 border-blue-300 bg-white rounded-lg hover:bg-gray-50 transition-colors cursor-pointer w-36 h-36"
-                              onClick={() => window.open(url, '_blank')}
+                              onClick={() => window.open(url, "_blank")}
                               title={fileName}
                             >
                               {!readonly && (
                                 <button
                                   onClick={async (e) => {
                                     e.stopPropagation();
-                                    if (!confirm(`Deseja realmente excluir esta etiqueta?`)) return;
-                                    
+                                    if (
+                                      !confirm(
+                                        `Deseja realmente excluir esta etiqueta?`,
+                                      )
+                                    )
+                                      return;
+
                                     try {
                                       // Extrair o caminho do arquivo da URL
                                       // URL exemplo: https://...supabase.co/storage/v1/object/public/documentos/etiquetas/arquivo.pdf
-                                      const urlParts = url.split('/documentos/');
-                                      console.log('URL completa:', url);
-                                      console.log('URL Parts:', urlParts);
-                                      
+                                      const urlParts =
+                                        url.split("/documentos/");
+                                      console.log("URL completa:", url);
+                                      console.log("URL Parts:", urlParts);
+
                                       if (urlParts.length > 1) {
                                         let filePath = urlParts[1]; // Pega "etiquetas/arquivo.pdf"
                                         // Decodificar URL (converter %20 para espaço, etc)
                                         filePath = decodeURIComponent(filePath);
-                                        
-                                        console.log('Caminho do arquivo a remover:', filePath);
-                                        
+
+                                        console.log(
+                                          "Caminho do arquivo a remover:",
+                                          filePath,
+                                        );
+
                                         // Remover do Storage
-                                        const { data: removeData, error: storageError } = await supabase.storage
-                                          .from('documentos')
+                                        const {
+                                          data: removeData,
+                                          error: storageError,
+                                        } = await supabase.storage
+                                          .from("documentos")
                                           .remove([filePath]);
-                                        
-                                        console.log('Resultado da remoção:', { removeData, storageError });
-                                        
+
+                                        console.log("Resultado da remoção:", {
+                                          removeData,
+                                          storageError,
+                                        });
+
                                         if (storageError) {
-                                          console.error('Erro ao remover do storage:', storageError);
+                                          console.error(
+                                            "Erro ao remover do storage:",
+                                            storageError,
+                                          );
                                           toast({
-                                            title: 'Aviso',
-                                            description: 'Erro ao remover arquivo do storage: ' + storageError.message,
-                                            variant: 'destructive'
+                                            title: "Aviso",
+                                            description:
+                                              "Erro ao remover arquivo do storage: " +
+                                              storageError.message,
+                                            variant: "destructive",
                                           });
                                         } else {
-                                          console.log('Arquivo removido do storage com sucesso');
+                                          console.log(
+                                            "Arquivo removido do storage com sucesso",
+                                          );
                                         }
                                       }
-                                      
+
                                       // Remover do array de etiquetas
-                                      const newEtiquetas = etiquetas.filter((_: string, i: number) => i !== index);
-                                      
+                                      const newEtiquetas = etiquetas.filter(
+                                        (_: string, i: number) => i !== index,
+                                      );
+
                                       const { error } = await supabase
-                                        .from('pedidos')
+                                        .from("pedidos")
                                         .update({
-                                          etiquetas_uploads: newEtiquetas.length > 0 ? newEtiquetas : null,
-                                          atualizado_em: new Date().toISOString()
+                                          etiquetas_uploads:
+                                            newEtiquetas.length > 0
+                                              ? newEtiquetas
+                                              : null,
+                                          atualizado_em:
+                                            new Date().toISOString(),
                                         } as any)
-                                        .eq('id', pedido.id);
-                                      
+                                        .eq("id", pedido.id);
+
                                       if (error) throw error;
-                                      
-                                      await registrarHistoricoMovimentacao(pedido.id, 'Etiqueta removida do pedido');
+
+                                      await registrarHistoricoMovimentacao(
+                                        pedido.id,
+                                        "Etiqueta removida do pedido",
+                                      );
                                       toast({
-                                        title: 'Etiqueta removida',
-                                        description: 'A etiqueta foi removida com sucesso do banco e do storage'
+                                        title: "Etiqueta removida",
+                                        description:
+                                          "A etiqueta foi removida com sucesso do banco e do storage",
                                       });
-                                      
+
                                       navigate(0);
                                     } catch (err: any) {
-                                      console.error('Erro ao remover etiqueta:', err);
+                                      console.error(
+                                        "Erro ao remover etiqueta:",
+                                        err,
+                                      );
                                       toast({
-                                        title: 'Erro',
-                                        description: 'Não foi possível remover a etiqueta',
-                                        variant: 'destructive'
+                                        title: "Erro",
+                                        description:
+                                          "Não foi possível remover a etiqueta",
+                                        variant: "destructive",
                                       });
                                     }
                                   }}
@@ -2903,8 +3763,8 @@ export default function Pedido() {
                                   e.stopPropagation();
                                   navigator.clipboard.writeText(url);
                                   toast({
-                                    title: 'Link copiado',
-                                    description: `Link copiado para área de transferência`
+                                    title: "Link copiado",
+                                    description: `Link copiado para área de transferência`,
                                   });
                                 }}
                                 className="mt-1 h-6 w-6 p-0"
@@ -2918,2027 +3778,2967 @@ export default function Pedido() {
                     </div>
                   );
                 })()}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="historico">
+            <HistoricoTabPedido pedidoId={id} />
+          </TabsContent>
+        </Tabs>
+
+        {/* Modais de gerenciamento */}
+        <Dialog
+          open={remetentesVisible}
+          onOpenChange={(open) => {
+            if (!readonly) setRemetentesVisible(open);
+          }}
+        >
+          <DialogContent className="max-w-4xl">
+            <RemetentesManager />
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={deleteConfirmOpen}
+          onOpenChange={(open) => {
+            if (!readonly) setDeleteConfirmOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Excluir Pedido</DialogTitle>
+            </DialogHeader>
+            <div className="py-4 text-center">
+              <h3 className="text-lg font-semibold text-red-600">
+                Você tem certeza?
+              </h3>
+              <p className="text-sm text-muted-foreground mt-2">
+                Esta ação não poderá ser desfeita.
+              </p>
+            </div>
+            <DialogFooter>
+              <div className="flex justify-between w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => setDeleteConfirmOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="bg-red-600 hover:bg-red-700"
+                  onClick={handleDeletePedido}
+                >
+                  Sim, quero excluir
+                </Button>
               </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-        
-        <TabsContent value="historico">
-          <HistoricoTabPedido pedidoId={id} />
-        </TabsContent>
-      </Tabs>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      {/* Modais de gerenciamento */}
-  <Dialog open={remetentesVisible} onOpenChange={(open) => { if (!readonly) setRemetentesVisible(open); }}>
-        <DialogContent className="max-w-4xl">
-          <RemetentesManager />
-        </DialogContent>
-      </Dialog>
+        <Dialog
+          open={embalagensVisible}
+          onOpenChange={(open) => {
+            if (!readonly) setEmbalagensVisible(open);
+          }}
+        >
+          <DialogContent className="max-w-4xl">
+            <EmbalagensManager />
+          </DialogContent>
+        </Dialog>
 
-  <Dialog open={deleteConfirmOpen} onOpenChange={(open) => { if (!readonly) setDeleteConfirmOpen(open); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Excluir Pedido</DialogTitle>
-          </DialogHeader>
-          <div className="py-4 text-center">
-            <h3 className="text-lg font-semibold text-red-600">Você tem certeza?</h3>
-            <p className="text-sm text-muted-foreground mt-2">Esta ação não poderá ser desfeita.</p>
-          </div>
-          <DialogFooter>
-            <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>Cancelar</Button>
-              <Button className="bg-red-600 hover:bg-red-700" onClick={handleDeletePedido}>Sim, quero excluir</Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-  <Dialog open={embalagensVisible} onOpenChange={(open) => { if (!readonly) setEmbalagensVisible(open); }}>
-        <DialogContent className="max-w-4xl">
-          <EmbalagensManager />
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Visualizar e Imprimir Etiqueta ML */}
-      <Dialog open={etiquetaMLModalOpen} onOpenChange={(open) => { if (!open) handleFecharModalEtiquetaML(); }}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>📦 Etiqueta Mercado Livre</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0">
-            {etiquetaMLPdfUrl && (
-              <iframe
-                src={etiquetaMLPdfUrl}
-                className="w-full h-full border rounded-lg"
-                title="Etiqueta ML PDF"
-              />
-            )}
-          </div>
-          <DialogFooter>
-            <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={handleFecharModalEtiquetaML}>
-                Fechar
-              </Button>
-           
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Remover item do pedido (informe valor a ser subtraído) */}
-      <Dialog open={removeModalOpen} onOpenChange={(open) => { if (!readonly) setRemoveModalOpen(open); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Remover item</DialogTitle>
-          </DialogHeader>
-          <div className="py-2">
-            <div className="text-sm text-muted-foreground mb-2">Você está removendo:</div>
-            <div className="mb-4">
-              <div className="font-medium">{productToRemove?.produto?.nome || productToRemove?.nome || '—'}</div>
-              {productToRemove?.variacao?.nome && (
-                <div className="text-sm text-muted-foreground">{productToRemove.variacao.nome}</div>
+        {/* Modal: Visualizar e Imprimir Etiqueta ML */}
+        <Dialog
+          open={etiquetaMLModalOpen}
+          onOpenChange={(open) => {
+            if (!open) handleFecharModalEtiquetaML();
+          }}
+        >
+          <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>📦 Etiqueta Mercado Livre</DialogTitle>
+            </DialogHeader>
+            <div className="flex-1 min-h-0">
+              {etiquetaMLPdfUrl && (
+                <iframe
+                  src={etiquetaMLPdfUrl}
+                  className="w-full h-full border rounded-lg"
+                  title="Etiqueta ML PDF"
+                />
               )}
             </div>
+            <DialogFooter>
+              <div className="flex justify-between w-full">
+                <Button variant="outline" onClick={handleFecharModalEtiquetaML}>
+                  Fechar
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-            <label className="block text-sm text-muted-foreground">Valor a subtrair do pedido</label>
-            <div className="flex items-center gap-2 mt-2">
-              <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
-              <Input value={removeValueStr} onChange={(e) => setRemoveValueStr(e.target.value)} />
-            </div>
-            <div className="text-xs text-muted-foreground mt-2">Informe quanto do valor total deve ser removido ao excluir este item.</div>
-          </div>
-          <DialogFooter>
-            <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={() => { setRemoveModalOpen(false); setProductToRemove(null); }}>Cancelar</Button>
-              <Button className="bg-red-600 text-white" onClick={async () => {
-                if (readonly) return;
-                if (!productToRemove || !pedido) return;
-                setRemovingItem(true);
-                try {
-                  // Simply delete the item - no need to reset status
-                  // When re-added, it will be a NEW item with "Aguardando aumento"
-                  const { error: delErr } = await supabase.from('itens_pedido').delete().eq('id', productToRemove.id);
-                  if (delErr) throw delErr;
-
-                  const providedValue = parseCurrencyBR(removeValueStr);
-                  const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
-                  const newTotal = Number(Math.max(0, currentTotal - providedValue).toFixed(2));
-
-                  const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
-                  if (updErr) throw updErr;
-
-                  // Registrar no histórico de movimentações
-                  try {
-                    let nomeProduto = productToRemove?.produto?.nome || productToRemove?.nome_produto || 'Produto';
-                    
-                    // Adicionar variação se existir
-                    if (productToRemove?.variacao?.nome) {
-                      nomeProduto = `${nomeProduto} - ${productToRemove.variacao.nome}`;
-                    }
-                    
-                    const precoItem = Number(productToRemove?.preco_unitario || 0).toFixed(2);
-                    const valorRemovido = providedValue.toFixed(2);
-                    
-                    const mensagem = `Produto removido: ${nomeProduto} | Preço: R$ ${precoItem} | Valor subtraído do pedido: R$ ${valorRemovido}`;
-                    
-                    await registrarHistoricoMovimentacao(pedido.id, mensagem);
-                  } catch (histErr) {
-                    console.error('Erro ao registrar remoção no histórico:', histErr);
-                  }
-
-                  // update local state
-                  setPedido((p: any) => p ? ({ ...p, itens: (p.itens || []).filter((i: any) => i.id !== productToRemove.id), valor_total: newTotal }) : p);
-                  toast({ title: 'Item removido', description: 'Item removido e valor do pedido atualizado' });
-                  setRemoveModalOpen(false);
-                  setProductToRemove(null);
-                } catch (err: any) {
-                  console.error('Erro ao remover item:', err);
-                  toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
-                } finally {
-                  setRemovingItem(false);
-                }
-              }} disabled={removingItem}>{removingItem ? 'Removendo...' : 'Confirmar remoção'}</Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Adicionar Produtos (copiado do NovoPedido UI pattern) */}
-  <Dialog open={addProductsVisible} onOpenChange={(open) => { if (!readonly) setAddProductsVisible(open); }}>
-        <DialogContent className="max-w-6xl w-full h-[90vh] flex flex-col">
-          <div className="grid grid-cols-2 gap-6 flex-1 overflow-hidden" style={{ minHeight: '600px' }}>
-            <div className="flex flex-col h-full">
-              <Input placeholder="Buscar produto" value={searchModal} onChange={(e) => { setSearchModal(e.target.value); setModalPage(1); }} />
-              <div className="flex-1 flex flex-col mt-4" style={{ minHeight: '500px' }}>
-                <div className="space-y-4 overflow-y-auto flex-1 pr-2">
-                {loadingProdutosModal && <div className="text-sm text-muted-foreground">Carregando produtos...</div>}
-                {produtosErrorModal && <div className="text-sm text-destructive">Erro: {produtosErrorModal}</div>}
-                {!loadingProdutosModal && !produtosErrorModal && (() => {
-                  const filtered = produtosListModal.filter(p => p.nome.toLowerCase().includes(searchModal.toLowerCase()));
-                  const totalPages = Math.max(1, Math.ceil(filtered.length / modalPageSize));
-                  const startIdx = (modalPage - 1) * modalPageSize;
-                  const endIdx = startIdx + modalPageSize;
-                  const paginated = filtered.slice(startIdx, endIdx);
-                  return (
-                    <>
-                      {paginated.map((p) => (
-                  <div key={p.id} className="flex items-center gap-4 py-2 min-h-[80px]">
-                    <img src={p.imagemUrl} alt={p.nome} className="w-12 h-12 rounded flex-shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-medium text-custom-700 truncate" title={p.nome}>{p.nome}</div>
-                      <div className="text-sm text-muted-foreground">R$ {Number(p.preco || 0).toFixed(2)}</div>
-                    </div>
-
-                    <div className="w-48 flex-shrink-0">
-                      {p.variacoes && p.variacoes.length > 0 ? (
-                        <select className="w-full border rounded p-2" value={variationSelectionsModal[p.id] || ''} onChange={(e) => setVariationSelectionsModal((s) => ({ ...s, [p.id]: e.target.value }))}>
-                          {p.variacoes.map((v: any) => (
-                            <option key={v.id} value={v.id}>{v.nome} - R$ {Number(v.valor).toFixed(2)}</option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="text-sm text-muted-foreground">Sem variações</div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <label className="text-sm">
-                        <input type="checkbox" checked={brindeSelectionsModal[p.id] || false} onChange={(e) => setBrindeSelectionsModal((s) => ({ ...s, [p.id]: e.target.checked }))} />
-                        <span className="ml-2">Brinde</span>
-                      </label>
-                    </div>
-
-                    <div>
-                      <Button className="bg-custom-700 text-white" onClick={() => {
-                        // add to modal cart (include codigo_barras)
-                        const variacaoId = variationSelectionsModal[p.id] || (p.variacoes && p.variacoes[0]?.id) || null;
-                        const quantidade = 1;
-                        const unitario = variacaoId ? Number((p.variacoes || []).find((v: any) => v.id === variacaoId)?.valor || p.preco || 0) : Number(p.preco || 0);
-                        const itemId = variacaoId ? `${p.id}:${variacaoId}` : p.id;
-                        const selectedVar = variacaoId ? (p.variacoes || []).find((v: any) => v.id === variacaoId) : null;
-                        const barcode = selectedVar?.codigo_barras_v || p.codigo_barras || null;
-                        setModalCart(prev => {
-                          const existing = prev.find(i => i.id === itemId && !!i.brinde === !!brindeSelectionsModal[p.id]);
-                          if (existing) return prev.map(i => i.id === itemId ? { ...i, quantidade: i.quantidade + 1 } : i);
-                          return [...prev, { id: itemId, produtoId: p.id, nome: p.nome, quantidade, preco: unitario, imagemUrl: p.imagemUrl, codigo_barras: barcode, brinde: !!brindeSelectionsModal[p.id], up_cell: p.up_cell || false }];
-                        });
-                      }}>+</Button>
-                    </div>
+        {/* Modal: Remover item do pedido (informe valor a ser subtraído) */}
+        <Dialog
+          open={removeModalOpen}
+          onOpenChange={(open) => {
+            if (!readonly) setRemoveModalOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Remover item</DialogTitle>
+            </DialogHeader>
+            <div className="py-2">
+              <div className="text-sm text-muted-foreground mb-2">
+                Você está removendo:
+              </div>
+              <div className="mb-4">
+                <div className="font-medium">
+                  {productToRemove?.produto?.nome ||
+                    productToRemove?.nome ||
+                    "—"}
+                </div>
+                {productToRemove?.variacao?.nome && (
+                  <div className="text-sm text-muted-foreground">
+                    {productToRemove.variacao.nome}
                   </div>
-                      ))}
-                    </>
-                  );
-                })()}
-                </div>
-                <div className="flex items-center justify-between pt-3 mt-3 border-t flex-shrink-0">
-                  {(() => {
-                    const filtered = produtosListModal.filter(p => p.nome.toLowerCase().includes(searchModal.toLowerCase()));
-                    const totalPages = Math.max(1, Math.ceil(filtered.length / modalPageSize));
-                    return (
-                      <>
-                        <div className="text-sm text-muted-foreground">
-                          Página {modalPage} de {totalPages}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => setModalPage(p => Math.max(1, p - 1))} 
-                            disabled={modalPage <= 1}
-                          >
-                            Anterior
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => setModalPage(p => Math.min(totalPages, p + 1))} 
-                            disabled={modalPage >= totalPages}
-                          >
-                            Próximo
-                          </Button>
-                        </div>
-                      </>
-                    );
-                  })()}
-                </div>
+                )}
+              </div>
+
+              <label className="block text-sm text-muted-foreground">
+                Valor a subtrair do pedido
+              </label>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
+                <Input
+                  value={removeValueStr}
+                  onChange={(e) => setRemoveValueStr(e.target.value)}
+                />
+              </div>
+              <div className="text-xs text-muted-foreground mt-2">
+                Informe quanto do valor total deve ser removido ao excluir este
+                item.
               </div>
             </div>
+            <DialogFooter>
+              <div className="flex justify-between w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setRemoveModalOpen(false);
+                    setProductToRemove(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  className="bg-red-600 text-white"
+                  onClick={async () => {
+                    if (readonly) return;
+                    if (!productToRemove || !pedido) return;
+                    setRemovingItem(true);
+                    try {
+                      // Simply delete the item - no need to reset status
+                      // When re-added, it will be a NEW item with "Aguardando aumento"
+                      const { error: delErr } = await supabase
+                        .from("itens_pedido")
+                        .delete()
+                        .eq("id", productToRemove.id);
+                      if (delErr) throw delErr;
 
-            <div className="flex flex-col h-full">
-              <div className="text-lg font-semibold">ITENS DO CARRINHO</div>
-              <div className="text-sm text-muted-foreground mb-4">{modalCart.length} R$ {modalCart.reduce((s, it) => s + (Number(it.preco || 0) * Number(it.quantidade || 1)), 0).toFixed(2)}</div>
-              <div className="space-y-3 overflow-y-auto flex-1 pr-2">
-                {modalCart.map((item, idx) => (
-                  <div key={item.id} className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <img src={item.imagemUrl} className="w-10 h-10 rounded" />
-                      <div>
-                        <div className="font-medium">{item.nome}</div>
-                        <div className="text-sm text-muted-foreground">R$ {Number(item.preco || 0).toFixed(2)}</div>
+                      const providedValue = parseCurrencyBR(removeValueStr);
+                      const currentTotal =
+                        Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
+                      const newTotal = Number(
+                        Math.max(0, currentTotal - providedValue).toFixed(2),
+                      );
+
+                      const { error: updErr } = await supabase
+                        .from("pedidos")
+                        .update({
+                          valor_total: newTotal,
+                          atualizado_em: new Date().toISOString(),
+                        } as any)
+                        .eq("id", pedido.id);
+                      if (updErr) throw updErr;
+
+                      // Registrar no histórico de movimentações
+                      try {
+                        let nomeProduto =
+                          productToRemove?.produto?.nome ||
+                          productToRemove?.nome_produto ||
+                          "Produto";
+
+                        // Adicionar variação se existir
+                        if (productToRemove?.variacao?.nome) {
+                          nomeProduto = `${nomeProduto} - ${productToRemove.variacao.nome}`;
+                        }
+
+                        const precoItem = Number(
+                          productToRemove?.preco_unitario || 0,
+                        ).toFixed(2);
+                        const valorRemovido = providedValue.toFixed(2);
+
+                        const mensagem = `Produto removido: ${nomeProduto} | Preço: R$ ${precoItem} | Valor subtraído do pedido: R$ ${valorRemovido}`;
+
+                        await registrarHistoricoMovimentacao(
+                          pedido.id,
+                          mensagem,
+                        );
+                      } catch (histErr) {
+                        console.error(
+                          "Erro ao registrar remoção no histórico:",
+                          histErr,
+                        );
+                      }
+
+                      // update local state
+                      setPedido((p: any) =>
+                        p
+                          ? {
+                              ...p,
+                              itens: (p.itens || []).filter(
+                                (i: any) => i.id !== productToRemove.id,
+                              ),
+                              valor_total: newTotal,
+                            }
+                          : p,
+                      );
+                      toast({
+                        title: "Item removido",
+                        description:
+                          "Item removido e valor do pedido atualizado",
+                      });
+                      setRemoveModalOpen(false);
+                      setProductToRemove(null);
+                    } catch (err: any) {
+                      console.error("Erro ao remover item:", err);
+                      toast({
+                        title: "Erro",
+                        description: err?.message || String(err),
+                        variant: "destructive",
+                      });
+                    } finally {
+                      setRemovingItem(false);
+                    }
+                  }}
+                  disabled={removingItem}
+                >
+                  {removingItem ? "Removendo..." : "Confirmar remoção"}
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Adicionar Produtos (copiado do NovoPedido UI pattern) */}
+        <Dialog
+          open={addProductsVisible}
+          onOpenChange={(open) => {
+            if (!readonly) setAddProductsVisible(open);
+          }}
+        >
+          <DialogContent className="max-w-6xl w-full h-[90vh] flex flex-col">
+            <div
+              className="grid grid-cols-2 gap-6 flex-1 overflow-hidden"
+              style={{ minHeight: "600px" }}
+            >
+              <div className="flex flex-col h-full">
+                <Input
+                  placeholder="Buscar produto"
+                  value={searchModal}
+                  onChange={(e) => {
+                    setSearchModal(e.target.value);
+                    setModalPage(1);
+                  }}
+                />
+                <div
+                  className="flex-1 flex flex-col mt-4"
+                  style={{ minHeight: "500px" }}
+                >
+                  <div className="space-y-4 overflow-y-auto flex-1 pr-2">
+                    {loadingProdutosModal && (
+                      <div className="text-sm text-muted-foreground">
+                        Carregando produtos...
+                      </div>
+                    )}
+                    {produtosErrorModal && (
+                      <div className="text-sm text-destructive">
+                        Erro: {produtosErrorModal}
+                      </div>
+                    )}
+                    {!loadingProdutosModal &&
+                      !produtosErrorModal &&
+                      (() => {
+                        const filtered = produtosListModal.filter((p) =>
+                          p.nome
+                            .toLowerCase()
+                            .includes(searchModal.toLowerCase()),
+                        );
+                        const totalPages = Math.max(
+                          1,
+                          Math.ceil(filtered.length / modalPageSize),
+                        );
+                        const startIdx = (modalPage - 1) * modalPageSize;
+                        const endIdx = startIdx + modalPageSize;
+                        const paginated = filtered.slice(startIdx, endIdx);
+                        return (
+                          <>
+                            {paginated.map((p) => (
+                              <div
+                                key={p.id}
+                                className="flex items-center gap-4 py-2 min-h-[80px]"
+                              >
+                                <img
+                                  src={p.imagemUrl}
+                                  alt={p.nome}
+                                  className="w-12 h-12 rounded flex-shrink-0"
+                                />
+                                <div className="flex-1 min-w-0">
+                                  <div
+                                    className="font-medium text-custom-700 truncate"
+                                    title={p.nome}
+                                  >
+                                    {p.nome}
+                                  </div>
+                                  <div className="text-sm text-muted-foreground">
+                                    R$ {Number(p.preco || 0).toFixed(2)}
+                                  </div>
+                                </div>
+
+                                <div className="w-48 flex-shrink-0">
+                                  {p.variacoes && p.variacoes.length > 0 ? (
+                                    <select
+                                      className="w-full border rounded p-2"
+                                      value={
+                                        variationSelectionsModal[p.id] || ""
+                                      }
+                                      onChange={(e) =>
+                                        setVariationSelectionsModal((s) => ({
+                                          ...s,
+                                          [p.id]: e.target.value,
+                                        }))
+                                      }
+                                    >
+                                      {p.variacoes.map((v: any) => (
+                                        <option key={v.id} value={v.id}>
+                                          {v.nome} - R${" "}
+                                          {Number(v.valor).toFixed(2)}
+                                        </option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <div className="text-sm text-muted-foreground">
+                                      Sem variações
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                  <label className="text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={
+                                        brindeSelectionsModal[p.id] || false
+                                      }
+                                      onChange={(e) =>
+                                        setBrindeSelectionsModal((s) => ({
+                                          ...s,
+                                          [p.id]: e.target.checked,
+                                        }))
+                                      }
+                                    />
+                                    <span className="ml-2">Brinde</span>
+                                  </label>
+                                </div>
+
+                                <div>
+                                  <Button
+                                    className="bg-custom-700 text-white"
+                                    onClick={() => {
+                                      // add to modal cart (include codigo_barras)
+                                      const variacaoId =
+                                        variationSelectionsModal[p.id] ||
+                                        (p.variacoes && p.variacoes[0]?.id) ||
+                                        null;
+                                      const quantidade = 1;
+                                      const unitario = variacaoId
+                                        ? Number(
+                                            (p.variacoes || []).find(
+                                              (v: any) => v.id === variacaoId,
+                                            )?.valor ||
+                                              p.preco ||
+                                              0,
+                                          )
+                                        : Number(p.preco || 0);
+                                      const itemId = variacaoId
+                                        ? `${p.id}:${variacaoId}`
+                                        : p.id;
+                                      const selectedVar = variacaoId
+                                        ? (p.variacoes || []).find(
+                                            (v: any) => v.id === variacaoId,
+                                          )
+                                        : null;
+                                      const barcode =
+                                        selectedVar?.codigo_barras_v ||
+                                        p.codigo_barras ||
+                                        null;
+                                      setModalCart((prev) => {
+                                        const existing = prev.find(
+                                          (i) =>
+                                            i.id === itemId &&
+                                            !!i.brinde ===
+                                              !!brindeSelectionsModal[p.id],
+                                        );
+                                        if (existing)
+                                          return prev.map((i) =>
+                                            i.id === itemId
+                                              ? {
+                                                  ...i,
+                                                  quantidade: i.quantidade + 1,
+                                                }
+                                              : i,
+                                          );
+                                        return [
+                                          ...prev,
+                                          {
+                                            id: itemId,
+                                            produtoId: p.id,
+                                            nome: p.nome,
+                                            quantidade,
+                                            preco: unitario,
+                                            imagemUrl: p.imagemUrl,
+                                            codigo_barras: barcode,
+                                            brinde:
+                                              !!brindeSelectionsModal[p.id],
+                                            up_cell: p.up_cell || false,
+                                          },
+                                        ];
+                                      });
+                                    }}
+                                  >
+                                    +
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </>
+                        );
+                      })()}
+                  </div>
+                  <div className="flex items-center justify-between pt-3 mt-3 border-t flex-shrink-0">
+                    {(() => {
+                      const filtered = produtosListModal.filter((p) =>
+                        p.nome
+                          .toLowerCase()
+                          .includes(searchModal.toLowerCase()),
+                      );
+                      const totalPages = Math.max(
+                        1,
+                        Math.ceil(filtered.length / modalPageSize),
+                      );
+                      return (
+                        <>
+                          <div className="text-sm text-muted-foreground">
+                            Página {modalPage} de {totalPages}
+                          </div>
+                          <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setModalPage((p) => Math.max(1, p - 1))
+                              }
+                              disabled={modalPage <= 1}
+                            >
+                              Anterior
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() =>
+                                setModalPage((p) => Math.min(totalPages, p + 1))
+                              }
+                              disabled={modalPage >= totalPages}
+                            >
+                              Próximo
+                            </Button>
+                          </div>
+                        </>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col h-full">
+                <div className="text-lg font-semibold">ITENS DO CARRINHO</div>
+                <div className="text-sm text-muted-foreground mb-4">
+                  {modalCart.length} R${" "}
+                  {modalCart
+                    .reduce(
+                      (s, it) =>
+                        s + Number(it.preco || 0) * Number(it.quantidade || 1),
+                      0,
+                    )
+                    .toFixed(2)}
+                </div>
+                <div className="space-y-3 overflow-y-auto flex-1 pr-2">
+                  {modalCart.map((item, idx) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center justify-between"
+                    >
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={item.imagemUrl}
+                          className="w-10 h-10 rounded"
+                        />
+                        <div>
+                          <div className="font-medium">{item.nome}</div>
+                          <div className="text-sm text-muted-foreground">
+                            R$ {Number(item.preco || 0).toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm">{item.quantidade}</div>
+                        <Button
+                          variant="ghost"
+                          onClick={() =>
+                            setModalCart((prev) =>
+                              prev.filter((_, i) => i !== idx),
+                            )
+                          }
+                        >
+                          Remover
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-sm">{item.quantidade}</div>
-                      <Button variant="ghost" onClick={() => setModalCart(prev => prev.filter((_, i) => i !== idx))}>Remover</Button>
-                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-6 flex justify-end gap-3 flex-shrink-0">
+                  <Button
+                    variant="outline"
+                    onClick={() => setAddProductsVisible(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    className="bg-custom-700 text-white"
+                    onClick={() => {
+                      // Open the wizard (date/payment/value) before persisting
+                      if (!pedido) {
+                        toast({
+                          title: "Erro",
+                          description: "Pedido não carregado",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      if (!modalCart.length) {
+                        setAddProductsVisible(false);
+                        return;
+                      }
+                      setWizardDate(new Date().toISOString().slice(0, 10));
+                      setAddProductsVisible(false);
+                      setWizardOpen(true);
+                    }}
+                  >
+                    Próxima etapa
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Wizard: Data -> Forma de Pagamento -> Valor */}
+        <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {wizardStep === 1
+                  ? "Selecionar Data"
+                  : wizardStep === 2
+                    ? "Selecionar Forma de Pagamento"
+                    : "Definir Valor"}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-4">
+              {/* simple step indicator */}
+              <div className="flex items-center justify-between mb-4">
+                <div
+                  className={`flex-1 text-center ${wizardStep >= 1 ? "font-semibold text-custom-700" : "text-gray-400"}`}
+                >
+                  Data
+                </div>
+                <div
+                  className={`flex-1 text-center ${wizardStep >= 2 ? "font-semibold text-custom-700" : "text-gray-400"}`}
+                >
+                  Forma. Pag
+                </div>
+                <div
+                  className={`flex-1 text-center ${wizardStep >= 3 ? "font-semibold text-custom-700" : "text-gray-400"}`}
+                >
+                  Valor
+                </div>
+              </div>
+
+              {wizardStep === 1 && (
+                <div className="text-center">
+                  <input
+                    type="date"
+                    className="mx-auto p-2 border rounded"
+                    value={wizardDate}
+                    onChange={(e) => setWizardDate(e.target.value)}
+                  />
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    Você selecionou {wizardDate.split("-").reverse().join("/")}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
 
-              <div className="mt-6 flex justify-end gap-3 flex-shrink-0">
-                <Button variant="outline" onClick={() => setAddProductsVisible(false)}>Cancelar</Button>
-                <Button className="bg-custom-700 text-white" onClick={() => {
-                  // Open the wizard (date/payment/value) before persisting
-                  if (!pedido) {
-                    toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
-                    return;
-                  }
-                  if (!modalCart.length) {
-                    setAddProductsVisible(false);
-                    return;
-                  }
-                  setWizardDate(new Date().toISOString().slice(0,10));
-                  setAddProductsVisible(false);
-                  setWizardOpen(true);
-                }}>Próxima etapa</Button>
-              </div>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+              {wizardStep === 2 && (
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground mb-3">
+                    Selecione uma ou mais formas de pagamento:
+                  </div>
+                  <div className="flex gap-4 flex-wrap justify-center">
+                    {loadingFormasPagamentosWizard ? (
+                      <div className="text-sm text-gray-500">
+                        Carregando formas de pagamento...
+                      </div>
+                    ) : formasPagamentosWizard.length === 0 ? (
+                      <div className="text-sm text-gray-500">
+                        Nenhuma forma de pagamento disponível
+                      </div>
+                    ) : (
+                      <>
+                        {/* Mostrar formas de pagamento que NÃO são cartão */}
+                        {formasPagamentosWizard
+                          .filter(
+                            (f) =>
+                              !f.nome?.toLowerCase().includes("cartão") &&
+                              !f.nome?.toLowerCase().includes("cartao"),
+                          )
+                          .map((forma) => {
+                            const isSelected = selectedPaymentIds.includes(
+                              String(forma.id),
+                            );
+                            return (
+                              <div key={forma.id} className="relative group">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPaymentIds((prev) =>
+                                      isSelected
+                                        ? prev.filter(
+                                            (id) => id !== String(forma.id),
+                                          )
+                                        : [...prev, String(forma.id)],
+                                    );
+                                  }}
+                                  className={`relative p-3 rounded-lg transition-all ${
+                                    isSelected
+                                      ? "border-2 border-custom-700 bg-custom-50 shadow-md"
+                                      : "border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm"
+                                  }`}
+                                  title={forma.nome}
+                                >
+                                  {forma.img_url && (
+                                    <img
+                                      src={forma.img_url}
+                                      alt={forma.nome}
+                                      className="w-8 h-8 object-contain"
+                                    />
+                                  )}
+                                  {isSelected && (
+                                    <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
+                                      ✓
+                                    </div>
+                                  )}
+                                </button>
+                                {/* Tooltip */}
+                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                  {forma.nome}
+                                </div>
+                              </div>
+                            );
+                          })}
 
-      {/* Wizard: Data -> Forma de Pagamento -> Valor */}
-      <Dialog open={wizardOpen} onOpenChange={setWizardOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{wizardStep === 1 ? 'Selecionar Data' : wizardStep === 2 ? 'Selecionar Forma de Pagamento' : 'Definir Valor'}</DialogTitle>
-          </DialogHeader>
-
-          <div className="py-4">
-            {/* simple step indicator */}
-            <div className="flex items-center justify-between mb-4">
-              <div className={`flex-1 text-center ${wizardStep >= 1 ? 'font-semibold text-custom-700' : 'text-gray-400'}`}>Data</div>
-              <div className={`flex-1 text-center ${wizardStep >= 2 ? 'font-semibold text-custom-700' : 'text-gray-400'}`}>Forma. Pag</div>
-              <div className={`flex-1 text-center ${wizardStep >= 3 ? 'font-semibold text-custom-700' : 'text-gray-400'}`}>Valor</div>
-            </div>
-
-            {wizardStep === 1 && (
-              <div className="text-center">
-                <input type="date" className="mx-auto p-2 border rounded" value={wizardDate} onChange={(e) => setWizardDate(e.target.value)} />
-                <div className="mt-4 text-sm text-muted-foreground">Você selecionou {wizardDate.split('-').reverse().join('/')}</div>
-              </div>
-            )}
-
-            {wizardStep === 2 && (
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground mb-3">Selecione uma ou mais formas de pagamento:</div>
-                <div className="flex gap-4 flex-wrap justify-center">
-                  {loadingFormasPagamentosWizard ? (
-                    <div className="text-sm text-gray-500">Carregando formas de pagamento...</div>
-                  ) : formasPagamentosWizard.length === 0 ? (
-                    <div className="text-sm text-gray-500">Nenhuma forma de pagamento disponível</div>
-                  ) : (
-                    <>
-                      {/* Mostrar formas de pagamento que NÃO são cartão */}
-                      {formasPagamentosWizard.filter(f => !f.nome?.toLowerCase().includes('cartão') && !f.nome?.toLowerCase().includes('cartao')).map((forma) => {
-                        const isSelected = selectedPaymentIds.includes(String(forma.id));
-                        return (
-                          <div key={forma.id} className="relative group">
+                        {/* Card especial para Cartão com dropdown */}
+                        {formasPagamentosWizard.find(
+                          (f) =>
+                            f.nome?.toLowerCase().includes("cartão") ||
+                            f.nome?.toLowerCase().includes("cartao"),
+                        ) && (
+                          <div
+                            className="relative group"
+                            ref={cartaoDropdownRef}
+                          >
                             <button
                               type="button"
-                              onClick={() => {
-                                setSelectedPaymentIds(prev => 
-                                  isSelected 
-                                    ? prev.filter(id => id !== String(forma.id))
-                                    : [...prev, String(forma.id)]
-                                );
-                              }}
+                              onClick={() =>
+                                setShowCartaoDropdownWizard(
+                                  !showCartaoDropdownWizard,
+                                )
+                              }
                               className={`relative p-3 rounded-lg transition-all ${
-                                isSelected
-                                  ? 'border-2 border-custom-700 bg-custom-50 shadow-md'
-                                  : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
+                                selectedPaymentIds.some((id) =>
+                                  formasPagamentosWizard.find(
+                                    (f) =>
+                                      String(f.id) === id &&
+                                      (f.nome
+                                        ?.toLowerCase()
+                                        .includes("cartão") ||
+                                        f.nome
+                                          ?.toLowerCase()
+                                          .includes("cartao")),
+                                  ),
+                                )
+                                  ? "border-2 border-custom-700 bg-custom-50 shadow-md"
+                                  : "border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm"
                               }`}
-                              title={forma.nome}
+                              title="Cartão"
                             >
-                              {forma.img_url && (
-                                <img
-                                  src={forma.img_url}
-                                  alt={forma.nome}
-                                  className="w-8 h-8 object-contain"
-                                />
-                              )}
-                              {isSelected && (
+                              {(() => {
+                                const cartaoGenerico =
+                                  formasPagamentosWizard.find(
+                                    (f) =>
+                                      f.nome
+                                        ?.toLowerCase()
+                                        .includes("cartão") ||
+                                      f.nome?.toLowerCase().includes("cartao"),
+                                  );
+                                return cartaoGenerico?.img_url ? (
+                                  <img
+                                    src={cartaoGenerico.img_url}
+                                    alt="Cartão"
+                                    className="w-8 h-8 object-contain"
+                                  />
+                                ) : null;
+                              })()}
+                              {selectedPaymentIds.some((id) =>
+                                formasPagamentosWizard.find(
+                                  (f) =>
+                                    String(f.id) === id &&
+                                    (f.nome?.toLowerCase().includes("cartão") ||
+                                      f.nome?.toLowerCase().includes("cartao")),
+                                ),
+                              ) && (
                                 <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
                                   ✓
                                 </div>
                               )}
                             </button>
+
                             {/* Tooltip */}
                             <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                              {forma.nome}
+                              Cartão
                             </div>
-                          </div>
-                        );
-                      })}
 
-                      {/* Card especial para Cartão com dropdown */}
-                      {formasPagamentosWizard.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')) && (
-                        <div className="relative group" ref={cartaoDropdownRef}>
-                          <button
-                            type="button"
-                            onClick={() => setShowCartaoDropdownWizard(!showCartaoDropdownWizard)}
-                            className={`relative p-3 rounded-lg transition-all ${
-                              selectedPaymentIds.some(id => formasPagamentosWizard.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'))))
-                                ? 'border-2 border-custom-700 bg-custom-50 shadow-md'
-                                : 'border-2 border-gray-200 hover:border-gray-400 hover:shadow-sm'
-                            }`}
-                            title="Cartão"
-                          >
-                            {(() => {
-                              const cartaoGenerico = formasPagamentosWizard.find(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao'));
-                              return cartaoGenerico?.img_url ? (
-                                <img
-                                  src={cartaoGenerico.img_url}
-                                  alt="Cartão"
-                                  className="w-8 h-8 object-contain"
-                                />
-                              ) : null;
-                            })()}
-                            {selectedPaymentIds.some(id => formasPagamentosWizard.find(f => String(f.id) === id && (f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')))) && (
-                              <div className="absolute top-0 right-0 transform translate-x-1 -translate-y-1 bg-custom-700 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs font-bold">
-                                ✓
+                            {/* Dropdown de tipos de cartão - seleção exclusiva (apenas um cartão por vez) */}
+                            {showCartaoDropdownWizard && (
+                              <div className="absolute top-full left-0 mt-2 bg-white border-2 rounded-lg shadow-lg z-10 min-w-max">
+                                <div className="p-2 max-h-80 overflow-y-auto">
+                                  {formasPagamentosWizard
+                                    .filter(
+                                      (f) =>
+                                        f.nome
+                                          ?.toLowerCase()
+                                          .includes("cartão") ||
+                                        f.nome
+                                          ?.toLowerCase()
+                                          .includes("cartao"),
+                                    )
+                                    .map((forma) => {
+                                      const isSelected =
+                                        selectedPaymentIds.includes(
+                                          String(forma.id),
+                                        );
+                                      return (
+                                        <button
+                                          key={forma.id}
+                                          type="button"
+                                          onClick={() => {
+                                            if (isSelected) {
+                                              // Se já está selecionado, remove
+                                              setSelectedPaymentIds((prev) =>
+                                                prev.filter(
+                                                  (id) =>
+                                                    id !== String(forma.id),
+                                                ),
+                                              );
+                                            } else {
+                                              // Se não está selecionado, remove outros cartões mas mantém não-cartão (Pix, Boleto, etc.)
+                                              const nonCardPayments =
+                                                selectedPaymentIds.filter(
+                                                  (id) => {
+                                                    const payment =
+                                                      formasPagamentosWizard.find(
+                                                        (f) =>
+                                                          String(f.id) === id,
+                                                      );
+                                                    return (
+                                                      !payment?.nome
+                                                        ?.toLowerCase()
+                                                        .includes("cartão") &&
+                                                      !payment?.nome
+                                                        ?.toLowerCase()
+                                                        .includes("cartao")
+                                                    );
+                                                  },
+                                                );
+                                              setSelectedPaymentIds([
+                                                ...nonCardPayments,
+                                                String(forma.id),
+                                              ]);
+                                            }
+                                          }}
+                                          className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${
+                                            isSelected
+                                              ? "bg-custom-100 border-2 border-custom-500"
+                                              : "border-2 border-transparent hover:bg-gray-50"
+                                          }`}
+                                        >
+                                          {forma.img_url && (
+                                            <img
+                                              src={forma.img_url}
+                                              alt={forma.nome}
+                                              className="w-8 h-8 object-contain"
+                                            />
+                                          )}
+                                          <span className="font-medium text-sm">
+                                            {forma.nome}
+                                          </span>
+                                          {isSelected && (
+                                            <span className="ml-auto text-custom-600">
+                                              ✓
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                </div>
                               </div>
                             )}
-                          </button>
-
-                          {/* Tooltip */}
-                          <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-900 text-white text-xs rounded-md whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                            Cartão
-                          </div>
-
-                          {/* Dropdown de tipos de cartão - seleção exclusiva (apenas um cartão por vez) */}
-                          {showCartaoDropdownWizard && (
-                            <div className="absolute top-full left-0 mt-2 bg-white border-2 rounded-lg shadow-lg z-10 min-w-max">
-                              <div className="p-2 max-h-80 overflow-y-auto">
-                                {formasPagamentosWizard.filter(f => f.nome?.toLowerCase().includes('cartão') || f.nome?.toLowerCase().includes('cartao')).map((forma) => {
-                                  const isSelected = selectedPaymentIds.includes(String(forma.id));
-                                  return (
-                                    <button
-                                      key={forma.id}
-                                      type="button"
-                                      onClick={() => {
-                                        if (isSelected) {
-                                          // Se já está selecionado, remove
-                                          setSelectedPaymentIds(prev => prev.filter(id => id !== String(forma.id)));
-                                        } else {
-                                          // Se não está selecionado, remove outros cartões mas mantém não-cartão (Pix, Boleto, etc.)
-                                          const nonCardPayments = selectedPaymentIds.filter(id => {
-                                            const payment = formasPagamentosWizard.find(f => String(f.id) === id);
-                                            return !payment?.nome?.toLowerCase().includes('cartão') && !payment?.nome?.toLowerCase().includes('cartao');
-                                          });
-                                          setSelectedPaymentIds([...nonCardPayments, String(forma.id)]);
-                                        }
-                                      }}
-                                      className={`w-full text-left rounded-lg flex items-center gap-3 transition-colors px-3 py-2 ${
-                                        isSelected
-                                          ? 'bg-custom-100 border-2 border-custom-500'
-                                          : 'border-2 border-transparent hover:bg-gray-50'
-                                      }`}
-                                    >
-                                      {forma.img_url && (
-                                        <img
-                                          src={forma.img_url}
-                                          alt={forma.nome}
-                                          className="w-8 h-8 object-contain"
-                                        />
-                                      )}
-                                      <span className="font-medium text-sm">{forma.nome}</span>
-                                      {isSelected && (
-                                        <span className="ml-auto text-custom-600">✓</span>
-                                      )}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-                <div className="text-sm text-muted-foreground mt-4 text-center">
-                  {selectedPaymentIds.length === 0 ? 'Selecione ao menos uma forma de pagamento' : `${selectedPaymentIds.length} forma(s) selecionada(s)`}
-                </div>
-              </div>
-            )}
-
-            {wizardStep === 3 && (
-              <div className="space-y-4">
-                <div className="text-sm text-muted-foreground">Informe os valores por forma de pagamento:</div>
-                {selectedPaymentIds.map((paymentId) => {
-                  const payment = formasPagamentosWizard.find(f => String(f.id) === paymentId);
-                  if (!payment) return null;
-                  return (
-                    <div key={paymentId} className="space-y-2">
-                      <label className="block text-sm font-medium flex items-center gap-2">
-                        {payment.img_url && <img src={payment.img_url} alt={payment.nome} className="w-5 h-5 object-contain" />}
-                        {payment.nome}
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
-                        <Input 
-                          value={wizardPaymentValues[paymentId] || '0,00'} 
-                          onChange={(e) => {
-                            const normalized = normalizeAndFormatCurrencyInput(e.target.value);
-                            setWizardPaymentValues(prev => ({ ...prev, [paymentId]: normalized }));
-                          }}
-                          placeholder="0,00"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <div className="flex justify-between w-full">
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => {
-                  // Cancel wizard and reopen addProducts modal for editing
-                  setWizardOpen(false);
-                  const canAdd = hasPermissao ? hasPermissao(24) : (permissoes ?? []).includes(24);
-                  if (!canAdd) {
-                    toast({ title: 'Você não tem permissão para isso', variant: 'destructive' });
-                    return;
-                  }
-                  setAddProductsVisible(true);
-                }}>Cancelar</Button>
-                {wizardStep > 1 && <Button variant="ghost" onClick={() => setWizardStep(w => Math.max(1, w-1))}>Voltar</Button>}
-              </div>
-              <div>
-                {wizardStep < 3 ? (
-                  <Button className="bg-custom-700 text-white" onClick={() => {
-                    if (wizardStep === 2 && selectedPaymentIds.length === 0) {
-                      toast({ title: 'Erro', description: 'Selecione ao menos uma forma de pagamento', variant: 'destructive' });
-                      return;
-                    }
-                    setWizardStep(s => s + 1);
-                  }}>Próxima etapa</Button>
-                ) : (
-                  <Button className="bg-custom-700 text-white" disabled={wizardSaving} onClick={async () => {
-                    // finalize: persist itens_pedido and add value to pedido.valor_total
-                    if (!pedido) return;
-
-                    if (wizardSubmitLockRef.current || wizardSaving) {
-                      toast({
-                        title: 'Processando requisição',
-                        description: 'Aguarde a conclusão para evitar itens duplicados.',
-                        variant: 'destructive',
-                      });
-                      return;
-                    }
-
-                    const fingerprint = buildWizardSubmissionFingerprint();
-                    const lastSubmission = lastWizardSubmitRef.current;
-                    const isSameRecentSubmission =
-                      !!lastSubmission &&
-                      lastSubmission.fingerprint === fingerprint &&
-                      (Date.now() - lastSubmission.at) < 120000;
-
-                    if (isSameRecentSubmission) {
-                      const confirmarDuplicidade = window.confirm(
-                        'Detectamos uma tentativa idêntica recente. Isso pode duplicar itens por instabilidade de rede. Deseja continuar mesmo assim?'
-                      );
-                      if (!confirmarDuplicidade) return;
-                    }
-
-                    const totalUnidades = (modalCart || []).reduce((acc: number, it: any) => acc + Number(it.quantidade || 1), 0);
-                    if (totalUnidades >= 8) {
-                      const confirmarLoteGrande = window.confirm(
-                        `Você está prestes a adicionar ${totalUnidades} unidades. Confirme para evitar duplicidade acidental.`
-                      );
-                      if (!confirmarLoteGrande) return;
-                    }
-
-                    wizardSubmitLockRef.current = true;
-                    setWizardSaving(true);
-                    try {
-                      // Get "Aguardando aumento" status ID
-                      let aguardandoAumentoId: number | null = null;
-                      try {
-                        const { data: statusData } = await supabase
-                          .from('status_upsell')
-                          .select('id')
-                          .eq('status', 'Aguardando aumento')
-                          .single();
-                        
-                        if (statusData) {
-                          aguardandoAumentoId = statusData.id;
-                        }
-                      } catch (err) {
-                        console.warn('Status "Aguardando aumento" não encontrado:', err);
-                      }
-                      
-                      // Build inserts: expand quantities into individual rows (one per unit)
-                      const inserts: any[] = [];
-                      for (const it of modalCart) {
-                        const [produtoId, variacaoId] = String(it.id).split(':');
-                        const qty = Number(it.quantidade || 1);
-                        
-                        // Buscar dimensões do produto ou variação
-                        let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
-                        
-                        // Verificar se é o produto específico (livraria)
-                        const finalProdutoId = it.produtoId || produtoId;
-                        const pintado = finalProdutoId === '1ff7aa43-d30b-4061-b8da-bfdee912dbb5';
-                        
-                        try {
-                          // Se tem variação, buscar da variação primeiro
-                          if (variacaoId) {
-                            const { data: variacaoData } = await supabase
-                              .from('variacoes_produto')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', variacaoId)
-                              .maybeSingle();
-                            
-                            if (variacaoData) {
-                              dimensoes = {
-                                altura: variacaoData.altura,
-                                largura: variacaoData.largura,
-                                comprimento: variacaoData.comprimento,
-                                peso: variacaoData.peso
-                              };
-                            }
-                          }
-                          
-                          // Se não tem variação ou a variação não tem dimensões, buscar do produto
-                          if (!dimensoes.altura && !dimensoes.peso) {
-                            const { data: produtoData } = await supabase
-                              .from('produtos')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', finalProdutoId)
-                              .maybeSingle();
-                            
-                            if (produtoData) {
-                              dimensoes = {
-                                altura: produtoData.altura,
-                                largura: produtoData.largura,
-                                comprimento: produtoData.comprimento,
-                                peso: produtoData.peso
-                              };
-                            }
-                          }
-                        } catch (err) {
-                          console.error('Erro ao buscar dimensões:', err);
-                        }
-                        
-                        for (let k = 0; k < qty; k++) {
-                          const insertItem: any = {
-                            pedido_id: pedido.id,
-                            produto_id: it.produtoId || produtoId,
-                            variacao_id: variacaoId || null,
-                            quantidade: 1,
-                            preco_unitario: it.preco || 0,
-                            codigo_barras: it.codigo_barras || null,
-                            altura: dimensoes.altura,
-                            largura: dimensoes.largura,
-                            comprimento: dimensoes.comprimento,
-                            peso: dimensoes.peso,
-                            pintado: pintado,
-                            criado_em: new Date().toISOString(),
-                            empresa_id: empresaId || null
-                          };
-                          
-                          // Add "Aguardando aumento" status if product has up_cell
-                          if (it.up_cell && aguardandoAumentoId) {
-                            insertItem.status_up_sell = aguardandoAumentoId;
-                          }
-                          
-                          inserts.push(insertItem);
-                        }
-                      }
-
-                      if (inserts.length) {
-                        const { error: insErr } = await supabase.from('itens_pedido').insert(inserts as any);
-                        if (insErr) throw insErr;
-                        
-                        // Registrar cada produto adicionado no histórico
-                        for (const item of modalCart) {
-                          try {
-                            const [produtoId, variacaoId] = String(item.id).split(':');
-                            let nomeProduto = item.nome || 'Produto';
-                            
-                            // Se tem variação, buscar o nome da variação
-                            if (variacaoId) {
-                              const { data: variacaoData } = await supabase
-                                .from('variacoes_produto')
-                                .select('nome')
-                                .eq('id', variacaoId)
-                                .maybeSingle();
-                              
-                              if (variacaoData?.nome) {
-                                nomeProduto = `${nomeProduto} - ${variacaoData.nome}`;
-                              }
-                            }
-                            
-                            const quantidade = Number(item.quantidade || 1);
-                            const preco = Number(item.preco || 0);
-                            const total = (quantidade * preco).toFixed(2);
-                            
-                            const mensagem = quantidade > 1 
-                              ? `Produto adicionado: ${nomeProduto} | Qtd: ${quantidade} | Preço unitário: R$ ${preco.toFixed(2)} | Total: R$ ${total}`
-                              : `Produto adicionado: ${nomeProduto} | Preço: R$ ${preco.toFixed(2)}`;
-                            
-                            await registrarHistoricoMovimentacao(pedido.id, mensagem);
-                          } catch (err) {
-                            console.error('Erro ao registrar produto no histórico:', err);
-                          }
-                        }
-                        
-                        // Incrementar contagem dos produtos adicionados
-                        const productCounts: Record<string, number> = {};
-                        modalCart.forEach(it => {
-                          const [produtoId] = String(it.id).split(':');
-                          const productId = it.produtoId || produtoId;
-                          const qty = Number(it.quantidade || 1);
-                          productCounts[productId] = (productCounts[productId] || 0) + qty;
-                        });
-
-                        for (const [productId, count] of Object.entries(productCounts)) {
-                          const { data: currentProduct } = await supabase
-                            .from('produtos')
-                            .select('contagem')
-                            .eq('id', productId)
-                            .single();
-                          
-                          if (currentProduct) {
-                            await supabase
-                              .from('produtos')
-                              .update({ contagem: (currentProduct.contagem || 0) + count })
-                              .eq('id', productId);
-                          }
-                        }
-                      }
-
-                      // update pedido valor_total (add sum of payment values)
-                      let totalPagamentos = 0;
-                      selectedPaymentIds.forEach(paymentId => {
-                        const valueStr = wizardPaymentValues[paymentId] || '0,00';
-                        totalPagamentos += parseCurrencyBR(valueStr);
-                      });
-                      
-                      const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
-                      const newTotal = Number((currentTotal + totalPagamentos).toFixed(2));
-                      const { error: updErr } = await supabase.from('pedidos').update({ valor_total: newTotal, atualizado_em: new Date().toISOString() } as any).eq('id', pedido.id);
-                      if (updErr) throw updErr;
-
-                      // Registrar no histórico de movimentações
-                      await registrarHistoricoMovimentacao(
-                        pedido.id,
-                        `Produtos/pagamentos adicionados - Valor alterado de R$ ${currentTotal.toFixed(2)} para R$ ${newTotal.toFixed(2)}`
-                      );
-
-                      // Insert payment methods into lista_pagamentos
-                      const pagamentosInserts: any[] = [];
-                      selectedPaymentIds.forEach(paymentId => {
-                        const valueStr = wizardPaymentValues[paymentId] || '0,00';
-                        const value = parseCurrencyBR(valueStr);
-                        pagamentosInserts.push({
-                          pedido_id: pedido.id,
-                          formas_pagamentos_id: Number(paymentId),
-                          valor: value
-                        });
-                      });
-
-                      if (pagamentosInserts.length) {
-                        const { error: pagErr } = await (supabase as any).from('lista_pagamentos').insert(pagamentosInserts);
-                        if (pagErr) {
-                          console.error('Erro ao inserir formas de pagamento:', pagErr);
-                          toast({ title: 'Aviso', description: 'Itens adicionados mas houve erro ao registrar as formas de pagamento.', variant: 'destructive' });
-                        } else {
-                          await registrarHistoricoMovimentacao(pedido.id, `Formas de pagamento adicionadas via wizard: ${pagamentosInserts.length} forma(s)`);
-                        }
-                      }
-
-                      lastWizardSubmitRef.current = { fingerprint, at: Date.now() };
-
-                      toast({ title: 'Itens adicionados', description: 'Produtos adicionados, valor atualizado e formas de pagamento registradas' });
-                      setWizardOpen(false);
-                      // refresh page
-                      navigate(0);
-                    } catch (err: any) {
-                      console.error('Erro ao persistir itens do modal (wizard):', err);
-                      toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
-                    } finally {
-                      wizardSubmitLockRef.current = false;
-                      setWizardSaving(false);
-                    }
-                  }}>{wizardSaving ? 'Adicionando...' : `Adicionar (${modalCart.length})`}</Button>
-                )}
-              </div>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reusable edit modal for single-field dropdowns */}
-      <EditSelectModal
-        open={editFieldOpen}
-        onOpenChange={(open) => { if (!readonly) setEditFieldOpen(open); }}
-        title={editFieldKey === 'status' ? 'Atualizar Status' : editFieldKey === 'plataforma' ? 'Atualizar Plataforma' : editFieldKey === 'responsavel' ? 'Atualizar Responsável' : 'Atualizar Etiqueta'}
-        options={editOptions}
-        value={editValue}
-        onSave={async (selectedId) => {
-          if (readonly) {
-            toast({ title: 'Somente leitura', description: 'Este pedido é somente leitura e não pode ser alterado.' });
-            return;
-          }
-          if (!pedido) {
-            toast({ title: 'Erro', description: 'Pedido não carregado', variant: 'destructive' });
-            return;
-          }
-          try {
-            const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
-            const updateData: any = { atualizado_em: new Date().toISOString() };
-            if (editFieldKey === 'status') {
-              updateData.status_id = selectedId || null;
-              // Se o status for alterado para "Enviado", popula data_enviado
-              if (selectedId === ENVIADO_STATUS_ID) {
-                updateData.data_enviado = new Date().toISOString();
-              }
-            }
-            if (editFieldKey === 'plataforma') updateData.plataforma_id = selectedId || null;
-            if (editFieldKey === 'responsavel') updateData.responsavel_id = selectedId || null;
-            if (editFieldKey === 'etiqueta') updateData.etiqueta_envio_id = selectedId || null;
-
-            const { error } = await supabase.from('pedidos').update(updateData).eq('id', pedido.id);
-            if (error) throw error;
-
-            // Registrar no histórico de movimentações
-            let mensagemHistorico = '';
-            if (editFieldKey === 'status') {
-              const statusAnterior = pedido?.status?.nome || 'Status removido';
-              const statusNovo = statuses.find(s => s.id === selectedId)?.nome || 'Status removido';
-              if (statusAnterior !== statusNovo) {
-                mensagemHistorico = `Status alterado: ${statusAnterior} → ${statusNovo}`;
-              }
-            } else if (editFieldKey === 'plataforma') {
-              const plataformaAnterior = pedido?.plataforma?.nome || 'Plataforma removida';
-              const plataformaNova = plataformas.find(p => p.id === selectedId)?.nome || 'Plataforma removida';
-              if (plataformaAnterior !== plataformaNova) {
-                mensagemHistorico = `Plataforma alterada: ${plataformaAnterior} → ${plataformaNova}`;
-              }
-            } else if (editFieldKey === 'responsavel') {
-              const responsavelNome = usuarios.find(u => u.id === selectedId)?.nome || 'Responsável removido';
-              mensagemHistorico = `Responsável alterado para: ${responsavelNome}`;
-            } else if (editFieldKey === 'etiqueta') {
-              const etiquetaAnterior = pedido?.etiqueta?.nome || 'Etiqueta removida';
-              const etiquetaNova = etiquetas.find(e => e.id === selectedId)?.nome || 'Etiqueta removida';
-              if (etiquetaAnterior !== etiquetaNova) {
-                mensagemHistorico = `Status da etiqueta alterado: ${etiquetaAnterior} → ${etiquetaNova}`;
-              }
-            }
-            
-            if (mensagemHistorico) {
-              await registrarHistoricoMovimentacao(pedido.id, mensagemHistorico);
-            }
-
-            toast({ title: 'Atualizado', description: 'Campo atualizado com sucesso' });
-            setEditFieldOpen(false);
-            navigate(0);
-          } catch (err: any) {
-            console.error('Erro ao atualizar campo do pedido:', err);
-            toast({ title: 'Erro', description: err?.message || String(err), variant: 'destructive' });
-          }
-        }}
-      />
-
-  {/* Client edit modal (pencil icon) */}
-  <ClientEditModal open={clientEditOpen} onOpenChange={(open) => { if (!readonly) setClientEditOpen(open); }} clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null} pedidoId={pedido?.id || null} onSaved={() => navigate(0)} />
-
-      {/* Modal de cotações */}
-      <CotacaoFreteModal
-        open={cotacaoModal}
-        onClose={() => setCotacaoModal(false)}
-        onSelect={handleSelectCotacao}
-        cotacoes={cotacoes}
-        loading={calculandoFrete}
-        remetente={selectedRemetente}
-        cliente={pedido?.cliente}
-        embalagem={selectedEmbalagem}
-        insuranceValue={1}
-        productName={(pedido?.itens && pedido.itens.length) ? 
-          (pedido.itens[0].variacao?.nome ? `${pedido.itens[0].produto?.nome} - ${pedido.itens[0].variacao.nome}` : (pedido.itens[0].produto?.nome || '')) : ''}
-        orderProducts={(pedido?.itens || []).map((it: any) => ({
-          name: it.variacao?.nome ? `${it.produto?.nome} - ${it.variacao.nome}` : (it.produto?.nome || 'Produto'),
-          quantity: Number(it.quantidade || 1),
-          unitary_value: Number(it.preco_unitario || it.preco || 0)
-        }))}
-      />
-
-      {/* Modal para editar valor total */}
-      <Dialog open={editValorTotalOpen} onOpenChange={setEditValorTotalOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Editar Valor Total</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 overflow-y-auto flex-1">
-            {/* Exibir valores de cada forma de pagamento */}
-            {Object.keys(tempValoresPagamentos).length > 0 && (
-              <div className="space-y-3 p-3 bg-gray-50 rounded-md">
-                <div className="text-sm font-medium text-gray-700">Valores por Forma de Pagamento:</div>
-                {Object.entries(tempValoresPagamentos).map(([nome, valor]) => {
-                  return (
-                    <div key={nome} className="space-y-1">
-                      <label className="text-sm font-medium">{nome}</label>
-                      <div className="flex items-center gap-2">
-                        <span className="px-3 py-2 bg-white border rounded-l text-sm">R$</span>
-                        <Input
-                          type="text"
-                          value={valor}
-                          onChange={(e) => {
-                            const normalized = normalizeAndFormatCurrencyInput(e.target.value);
-                            const updated = {
-                              ...tempValoresPagamentos,
-                              [nome]: normalized
-                            };
-                            setTempValoresPagamentos(updated);
-                            
-                            // Recalcular valor total baseado no estado atualizado
-                            const novoTotal = Object.values(updated)
-                              .reduce((sum, v) => sum + parseCurrencyBR(String(v)), 0);
-                            setTempValorTotal(formatCurrencyBR(novoTotal));
-                          }}
-                          placeholder="0,00"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-            
-            <div>
-              <label className="text-sm font-medium">Valor Total (R$)</label>
-              <Input
-                type="text"
-                value={tempValorTotal}
-                onChange={(e) => {
-                  const normalized = normalizeAndFormatCurrencyInput(e.target.value);
-                  setTempValorTotal(normalized);
-                }}
-                placeholder="0,00"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setEditValorTotalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button
-              onClick={async () => {
-                try {
-                  // Parse valor using parseCurrencyBR and validate
-                  const novoValor = parseCurrencyBR(tempValorTotal);
-                  if (isNaN(novoValor) || !isFinite(novoValor)) {
-                    toast({ 
-                      title: 'Erro', 
-                      description: 'Valor total inválido', 
-                      variant: 'destructive' 
-                    });
-                    return;
-                  }
-                  
-                  const { error } = await supabase
-                    .from('pedidos')
-                    .update({ 
-                      valor_total: novoValor,
-                      atualizado_em: new Date().toISOString() 
-                    })
-                    .eq('id', pedido?.id);
-
-                  if (error) throw error;
-
-                  // Atualizar valores de cada forma de pagamento na tabela lista_pagamentos
-                  console.log('Iniciando atualização dos valores de pagamento...');
-                  console.log('tempValoresPagamentos:', tempValoresPagamentos);
-                  
-                  for (const [nomePagamento, valor] of Object.entries(tempValoresPagamentos)) {
-                    // Parse valor from pt-BR format and validate
-                    const valNum = parseCurrencyBR(String(valor));
-                    console.log(`Processando ${nomePagamento}: ${valor} -> ${valNum}`);
-                    
-                    if (isNaN(valNum) || !isFinite(valNum)) {
-                      console.warn(`Valor inválido para ${nomePagamento}: ${valor}`);
-                      continue; // Skip invalid values
-                    }
-                    
-                    // Buscar registros direto do banco para garantir dados atualizados
-                    const { data: listaPagamentos, error: fetchErr } = await (supabase as any)
-                      .from('lista_pagamentos')
-                      .select('id, valor, formas_pagamentos(id, nome)')
-                      .eq('pedido_id', pedido?.id);
-                    
-                    if (fetchErr) {
-                      console.error('Erro ao buscar lista_pagamentos:', fetchErr);
-                      throw fetchErr;
-                    }
-                    
-                    console.log(`Registros encontrados para pedido ${pedido?.id}:`, listaPagamentos);
-                    
-                    // Encontrar todos os registros que correspondem a este nome de pagamento
-                    const registrosPagamento = (listaPagamentos || [])
-                      .filter((lp: any) => {
-                        const nome = lp.formas_pagamentos?.nome || '—';
-                        const nomeNormalizado = nome.replace(/\s*\d+x\s*$/i, '').trim();
-                        console.log(`Comparando: ${nomeNormalizado} === ${nomePagamento}`);
-                        return nomeNormalizado === nomePagamento;
-                      });
-
-                    console.log(`Registros correspondentes a ${nomePagamento}:`, registrosPagamento);
-
-                    if (registrosPagamento.length > 0) {
-                      // Dividir o valor igualmente entre os registros
-                      const valorPorRegistro = valNum / registrosPagamento.length;
-                      console.log(`Valor por registro: ${valorPorRegistro}`);
-                      
-                      // Atualizar cada registro individualmente
-                      for (const lp of registrosPagamento) {
-                        const id = Number(lp.id);
-                        if (isNaN(id)) {
-                          console.warn(`ID inválido: ${lp.id}`);
-                          continue;
-                        }
-                        
-                        console.log(`Atualizando lista_pagamentos id=${id} com valor=${valorPorRegistro}`);
-                        const { error: updateErr } = await (supabase as any)
-                          .from('lista_pagamentos')
-                          .update({ valor: valorPorRegistro })
-                          .eq('id', id)
-                          .eq('pedido_id', pedido?.id);
-                        
-                        if (updateErr) {
-                          console.error(`Erro ao atualizar id=${id}:`, updateErr);
-                          throw updateErr;
-                        }
-                        console.log(`✓ Atualizado com sucesso id=${id}`);
-                      }
-                    } else {
-                      console.warn(`Nenhum registro encontrado para ${nomePagamento}`);
-                    }
-                  }
-
-                  console.log('Todas as atualizações concluídas!');
-                  const valorAnterior = pedido?.valor_total || 0;
-                  await registrarHistoricoMovimentacao(pedido?.id, `Valor total editado: R$ ${Number(valorAnterior).toFixed(2)} → R$ ${novoValor.toFixed(2)}`);
-                  toast({ 
-                    title: 'Sucesso', 
-                    description: 'Valor total e formas de pagamento atualizados com sucesso' 
-                  });
-                  setEditValorTotalOpen(false);
-                  navigate(0); // Recarrega a página
-                } catch (err: any) {
-                  console.error('Erro ao atualizar valor total:', err);
-                  toast({ 
-                    title: 'Erro', 
-                    description: err?.message || 'Não foi possível atualizar o valor total', 
-                    variant: 'destructive' 
-                  });
-                }
-              }}
-            >
-              Salvar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Up-Sell */}
-      <Dialog open={upSellModalOpen} onOpenChange={setUpSellModalOpen}>
-        <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="text-base">Selecionar Produto Up-Sell</DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto space-y-3 py-2">
-            {loadingUpSell ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-sm text-muted-foreground">Carregando produtos...</p>
-              </div>
-            ) : upSellProducts.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <p className="text-sm text-muted-foreground">Nenhum produto up-sell configurado</p>
-              </div>
-            ) : (
-              upSellProducts.map((prod) => {
-                const hasVariations = prod.variacoes_produto && prod.variacoes_produto.length > 0;
-                const selectedVarId = selectedVariations[prod.id] || (hasVariations ? prod.variacoes_produto[0].id : null);
-                const selectedVar = hasVariations ? prod.variacoes_produto.find((v: any) => v.id === selectedVarId) : null;
-                const displayPrice = selectedVar ? selectedVar.valor : prod.preco;
-                
-                return (
-                  <div
-                    key={prod.id}
-                    className="border rounded-lg p-3 border-gray-300"
-                  >
-                    <div className="flex items-start gap-3">
-                      {(selectedVar?.img_url || prod.img_url) ? (
-                        <div className="w-14 h-14 flex-shrink-0">
-                          <img
-                            src={selectedVar?.img_url || prod.img_url}
-                            alt={prod.nome}
-                            className="w-full h-full object-cover rounded border"
-                          />
-                        </div>
-                      ) : (
-                        <div className="w-14 h-14 flex-shrink-0 bg-gray-100 rounded border flex items-center justify-center">
-                          <span className="text-gray-400 text-[10px]">Sem imagem</span>
-                        </div>
-                      )}
-                      
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900 break-words line-clamp-2 leading-tight">{prod.nome}</div>
-                        
-                        {hasVariations && (
-                          <div className="mt-2">
-                            <label className="text-[10px] text-gray-600 mb-1 block">
-                              Selecione a variação:
-                            </label>
-                            <select
-                              className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gray-400"
-                              value={selectedVarId || ''}
-                              onChange={(e) => {
-                                e.stopPropagation();
-                                setSelectedVariations(prev => ({
-                                  ...prev,
-                                  [prod.id]: e.target.value
-                                }));
-                              }}
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              {prod.variacoes_produto.map((v: any) => (
-                                <option key={v.id} value={v.id}>
-                                  {v.nome} - R$ {Number(v.valor || 0).toFixed(2)}
-                                </option>
-                              ))}
-                            </select>
                           </div>
                         )}
-                        
-                        <div className="mt-3 flex flex-col gap-2">
-                          <Button
-                            size="sm"
-                            className="w-full bg-green-600 hover:bg-green-700 text-white text-xs py-2"
-                            onClick={() => {
-                              // Store selected product and open wizard
-                              const selectedProduct = {
-                                ...prod,
-                                selectedVariationId: selectedVarId,
-                                selectedVariation: selectedVar,
-                                displayPrice: displayPrice
-                              };
-                              setSelectedUpSellProduct(selectedProduct);
-                              
-                              // Calculate the price difference for wizard
-                              const originalPrice = Number(upSellSourceItem.preco_unitario || upSellSourceItem.produto?.preco || 0);
-                              const newPrice = Number(displayPrice || 0);
-                              const difference = newPrice - originalPrice;
-                              
-                              // Set wizard initial values for normal flow
-                              setUpSellValueStr(formatCurrencyBR(Math.abs(difference)));
-                              setUpSellDate(new Date().toISOString().slice(0,10));
-                              setUpSellPayment('Pix');
-                              setUpSellWizardStep(1);
-                              setIsNormalFlow(true);
-                              setIsAumentoGratis(false);
-                              
-                              // Close product selection modal and open wizard
-                              setUpSellModalOpen(false);
-                              setUpSellWizardOpen(true);
+                      </>
+                    )}
+                  </div>
+                  <div className="text-sm text-muted-foreground mt-4 text-center">
+                    {selectedPaymentIds.length === 0
+                      ? "Selecione ao menos uma forma de pagamento"
+                      : `${selectedPaymentIds.length} forma(s) selecionada(s)`}
+                  </div>
+                </div>
+              )}
+
+              {wizardStep === 3 && (
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    Informe os valores por forma de pagamento:
+                  </div>
+                  {selectedPaymentIds.map((paymentId) => {
+                    const payment = formasPagamentosWizard.find(
+                      (f) => String(f.id) === paymentId,
+                    );
+                    if (!payment) return null;
+                    return (
+                      <div key={paymentId} className="space-y-2">
+                        <label className="block text-sm font-medium flex items-center gap-2">
+                          {payment.img_url && (
+                            <img
+                              src={payment.img_url}
+                              alt={payment.nome}
+                              className="w-5 h-5 object-contain"
+                            />
+                          )}
+                          {payment.nome}
+                        </label>
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-2 bg-gray-100 rounded-l">
+                            R$
+                          </span>
+                          <Input
+                            value={wizardPaymentValues[paymentId] || "0,00"}
+                            onChange={(e) => {
+                              const normalized =
+                                normalizeAndFormatCurrencyInput(e.target.value);
+                              setWizardPaymentValues((prev) => ({
+                                ...prev,
+                                [paymentId]: normalized,
+                              }));
                             }}
-                          >
-                            Próxima etapa
-                          </Button>
-                          
-                          <button
-                            className="text-xs text-gray-700 underline hover:text-gray-900"
-                            onClick={() => {
-                              // Store selected product and open wizard
-                              const selectedProduct = {
-                                ...prod,
-                                selectedVariationId: selectedVarId,
-                                selectedVariation: selectedVar,
-                                displayPrice: displayPrice
+                            placeholder="0,00"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <div className="flex justify-between w-full">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      // Cancel wizard and reopen addProducts modal for editing
+                      setWizardOpen(false);
+                      const canAdd = hasPermissao
+                        ? hasPermissao(24)
+                        : (permissoes ?? []).includes(24);
+                      if (!canAdd) {
+                        toast({
+                          title: "Você não tem permissão para isso",
+                          variant: "destructive",
+                        });
+                        return;
+                      }
+                      setAddProductsVisible(true);
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  {wizardStep > 1 && (
+                    <Button
+                      variant="ghost"
+                      onClick={() => setWizardStep((w) => Math.max(1, w - 1))}
+                    >
+                      Voltar
+                    </Button>
+                  )}
+                </div>
+                <div>
+                  {wizardStep < 3 ? (
+                    <Button
+                      className="bg-custom-700 text-white"
+                      onClick={() => {
+                        if (
+                          wizardStep === 2 &&
+                          selectedPaymentIds.length === 0
+                        ) {
+                          toast({
+                            title: "Erro",
+                            description:
+                              "Selecione ao menos uma forma de pagamento",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+                        setWizardStep((s) => s + 1);
+                      }}
+                    >
+                      Próxima etapa
+                    </Button>
+                  ) : (
+                    <Button
+                      className="bg-custom-700 text-white"
+                      disabled={wizardSaving}
+                      onClick={async () => {
+                        // finalize: persist itens_pedido and add value to pedido.valor_total
+                        if (!pedido) return;
+
+                        if (wizardSubmitLockRef.current || wizardSaving) {
+                          toast({
+                            title: "Processando requisição",
+                            description:
+                              "Aguarde a conclusão para evitar itens duplicados.",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        const fingerprint = buildWizardSubmissionFingerprint();
+                        const lastSubmission = lastWizardSubmitRef.current;
+                        const isSameRecentSubmission =
+                          !!lastSubmission &&
+                          lastSubmission.fingerprint === fingerprint &&
+                          Date.now() - lastSubmission.at < 120000;
+
+                        if (isSameRecentSubmission) {
+                          const confirmarDuplicidade = window.confirm(
+                            "Detectamos uma tentativa idêntica recente. Isso pode duplicar itens por instabilidade de rede. Deseja continuar mesmo assim?",
+                          );
+                          if (!confirmarDuplicidade) return;
+                        }
+
+                        const totalUnidades = (modalCart || []).reduce(
+                          (acc: number, it: any) =>
+                            acc + Number(it.quantidade || 1),
+                          0,
+                        );
+                        if (totalUnidades >= 8) {
+                          const confirmarLoteGrande = window.confirm(
+                            `Você está prestes a adicionar ${totalUnidades} unidades. Confirme para evitar duplicidade acidental.`,
+                          );
+                          if (!confirmarLoteGrande) return;
+                        }
+
+                        wizardSubmitLockRef.current = true;
+                        setWizardSaving(true);
+                        try {
+                          // Get "Aguardando aumento" status ID
+                          let aguardandoAumentoId: number | null = null;
+                          try {
+                            const { data: statusData } = await supabase
+                              .from("status_upsell")
+                              .select("id")
+                              .eq("status", "Aguardando aumento")
+                              .single();
+
+                            if (statusData) {
+                              aguardandoAumentoId = statusData.id;
+                            }
+                          } catch (err) {
+                            console.warn(
+                              'Status "Aguardando aumento" não encontrado:',
+                              err,
+                            );
+                          }
+
+                          // Build inserts: expand quantities into individual rows (one per unit)
+                          const inserts: any[] = [];
+                          for (const it of modalCart) {
+                            const [produtoId, variacaoId] = String(it.id).split(
+                              ":",
+                            );
+                            const qty = Number(it.quantidade || 1);
+
+                            // Buscar dimensões do produto ou variação
+                            let dimensoes = {
+                              altura: null,
+                              largura: null,
+                              comprimento: null,
+                              peso: null,
+                            };
+
+                            // Verificar se é o produto específico (livraria)
+                            const finalProdutoId = it.produtoId || produtoId;
+                            const pintado =
+                              finalProdutoId ===
+                              "1ff7aa43-d30b-4061-b8da-bfdee912dbb5";
+
+                            try {
+                              // Se tem variação, buscar da variação primeiro
+                              if (variacaoId) {
+                                const { data: variacaoData } = await supabase
+                                  .from("variacoes_produto")
+                                  .select("altura, largura, comprimento, peso")
+                                  .eq("id", variacaoId)
+                                  .maybeSingle();
+
+                                if (variacaoData) {
+                                  dimensoes = {
+                                    altura: variacaoData.altura,
+                                    largura: variacaoData.largura,
+                                    comprimento: variacaoData.comprimento,
+                                    peso: variacaoData.peso,
+                                  };
+                                }
+                              }
+
+                              // Se não tem variação ou a variação não tem dimensões, buscar do produto
+                              if (!dimensoes.altura && !dimensoes.peso) {
+                                const { data: produtoData } = await supabase
+                                  .from("produtos")
+                                  .select("altura, largura, comprimento, peso")
+                                  .eq("id", finalProdutoId)
+                                  .maybeSingle();
+
+                                if (produtoData) {
+                                  dimensoes = {
+                                    altura: produtoData.altura,
+                                    largura: produtoData.largura,
+                                    comprimento: produtoData.comprimento,
+                                    peso: produtoData.peso,
+                                  };
+                                }
+                              }
+                            } catch (err) {
+                              console.error("Erro ao buscar dimensões:", err);
+                            }
+
+                            for (let k = 0; k < qty; k++) {
+                              const insertItem: any = {
+                                pedido_id: pedido.id,
+                                produto_id: it.produtoId || produtoId,
+                                variacao_id: variacaoId || null,
+                                quantidade: 1,
+                                preco_unitario: it.preco || 0,
+                                codigo_barras: it.codigo_barras || null,
+                                altura: dimensoes.altura,
+                                largura: dimensoes.largura,
+                                comprimento: dimensoes.comprimento,
+                                peso: dimensoes.peso,
+                                pintado: pintado,
+                                criado_em: new Date().toISOString(),
+                                empresa_id: empresaId || null,
                               };
-                              setSelectedUpSellProduct(selectedProduct);
-                              
-                              // Set wizard initial values for aumento grátis
-                              setUpSellDate(new Date().toISOString().slice(0,10));
-                              setUpSellWizardStep(1);
-                              setIsAumentoGratis(true);
-                              setIsNormalFlow(false);
-                              
-                              // Close product selection modal and open wizard
-                              setUpSellModalOpen(false);
-                              setUpSellWizardOpen(true);
-                            }}
-                          >
-                            upsell gratuito
-                          </button>
+
+                              // Add "Aguardando aumento" status if product has up_cell
+                              if (it.up_cell && aguardandoAumentoId) {
+                                insertItem.status_up_sell = aguardandoAumentoId;
+                              }
+
+                              inserts.push(insertItem);
+                            }
+                          }
+
+                          if (inserts.length) {
+                            const { error: insErr } = await supabase
+                              .from("itens_pedido")
+                              .insert(inserts as any);
+                            if (insErr) throw insErr;
+
+                            // Registrar cada produto adicionado no histórico
+                            for (const item of modalCart) {
+                              try {
+                                const [produtoId, variacaoId] = String(
+                                  item.id,
+                                ).split(":");
+                                let nomeProduto = item.nome || "Produto";
+
+                                // Se tem variação, buscar o nome da variação
+                                if (variacaoId) {
+                                  const { data: variacaoData } = await supabase
+                                    .from("variacoes_produto")
+                                    .select("nome")
+                                    .eq("id", variacaoId)
+                                    .maybeSingle();
+
+                                  if (variacaoData?.nome) {
+                                    nomeProduto = `${nomeProduto} - ${variacaoData.nome}`;
+                                  }
+                                }
+
+                                const quantidade = Number(item.quantidade || 1);
+                                const preco = Number(item.preco || 0);
+                                const total = (quantidade * preco).toFixed(2);
+
+                                const mensagem =
+                                  quantidade > 1
+                                    ? `Produto adicionado: ${nomeProduto} | Qtd: ${quantidade} | Preço unitário: R$ ${preco.toFixed(2)} | Total: R$ ${total}`
+                                    : `Produto adicionado: ${nomeProduto} | Preço: R$ ${preco.toFixed(2)}`;
+
+                                await registrarHistoricoMovimentacao(
+                                  pedido.id,
+                                  mensagem,
+                                );
+                              } catch (err) {
+                                console.error(
+                                  "Erro ao registrar produto no histórico:",
+                                  err,
+                                );
+                              }
+                            }
+
+                            // Incrementar contagem dos produtos adicionados
+                            const productCounts: Record<string, number> = {};
+                            modalCart.forEach((it) => {
+                              const [produtoId] = String(it.id).split(":");
+                              const productId = it.produtoId || produtoId;
+                              const qty = Number(it.quantidade || 1);
+                              productCounts[productId] =
+                                (productCounts[productId] || 0) + qty;
+                            });
+
+                            for (const [productId, count] of Object.entries(
+                              productCounts,
+                            )) {
+                              const { data: currentProduct } = await supabase
+                                .from("produtos")
+                                .select("contagem")
+                                .eq("id", productId)
+                                .single();
+
+                              if (currentProduct) {
+                                await supabase
+                                  .from("produtos")
+                                  .update({
+                                    contagem:
+                                      (currentProduct.contagem || 0) + count,
+                                  })
+                                  .eq("id", productId);
+                              }
+                            }
+                          }
+
+                          // update pedido valor_total (add sum of payment values)
+                          let totalPagamentos = 0;
+                          selectedPaymentIds.forEach((paymentId) => {
+                            const valueStr =
+                              wizardPaymentValues[paymentId] || "0,00";
+                            totalPagamentos += parseCurrencyBR(valueStr);
+                          });
+
+                          const currentTotal =
+                            Number(pedido?.valor_total ?? pedido?.total ?? 0) ||
+                            0;
+                          const newTotal = Number(
+                            (currentTotal + totalPagamentos).toFixed(2),
+                          );
+                          const { error: updErr } = await supabase
+                            .from("pedidos")
+                            .update({
+                              valor_total: newTotal,
+                              atualizado_em: new Date().toISOString(),
+                            } as any)
+                            .eq("id", pedido.id);
+                          if (updErr) throw updErr;
+
+                          // Registrar no histórico de movimentações
+                          await registrarHistoricoMovimentacao(
+                            pedido.id,
+                            `Produtos/pagamentos adicionados - Valor alterado de R$ ${currentTotal.toFixed(2)} para R$ ${newTotal.toFixed(2)}`,
+                          );
+
+                          // Insert payment methods into lista_pagamentos
+                          const pagamentosInserts: any[] = [];
+                          selectedPaymentIds.forEach((paymentId) => {
+                            const valueStr =
+                              wizardPaymentValues[paymentId] || "0,00";
+                            const value = parseCurrencyBR(valueStr);
+                            pagamentosInserts.push({
+                              pedido_id: pedido.id,
+                              formas_pagamentos_id: Number(paymentId),
+                              valor: value,
+                            });
+                          });
+
+                          if (pagamentosInserts.length) {
+                            const { error: pagErr } = await (supabase as any)
+                              .from("lista_pagamentos")
+                              .insert(pagamentosInserts);
+                            if (pagErr) {
+                              console.error(
+                                "Erro ao inserir formas de pagamento:",
+                                pagErr,
+                              );
+                              toast({
+                                title: "Aviso",
+                                description:
+                                  "Itens adicionados mas houve erro ao registrar as formas de pagamento.",
+                                variant: "destructive",
+                              });
+                            } else {
+                              await registrarHistoricoMovimentacao(
+                                pedido.id,
+                                `Formas de pagamento adicionadas via wizard: ${pagamentosInserts.length} forma(s)`,
+                              );
+                            }
+                          }
+
+                          lastWizardSubmitRef.current = {
+                            fingerprint,
+                            at: Date.now(),
+                          };
+
+                          toast({
+                            title: "Itens adicionados",
+                            description:
+                              "Produtos adicionados, valor atualizado e formas de pagamento registradas",
+                          });
+                          setWizardOpen(false);
+                          // refresh page
+                          navigate(0);
+                        } catch (err: any) {
+                          console.error(
+                            "Erro ao persistir itens do modal (wizard):",
+                            err,
+                          );
+                          toast({
+                            title: "Erro",
+                            description: err?.message || String(err),
+                            variant: "destructive",
+                          });
+                        } finally {
+                          wizardSubmitLockRef.current = false;
+                          setWizardSaving(false);
+                        }
+                      }}
+                    >
+                      {wizardSaving
+                        ? "Adicionando..."
+                        : `Adicionar (${modalCart.length})`}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Reusable edit modal for single-field dropdowns */}
+        <EditSelectModal
+          open={editFieldOpen}
+          onOpenChange={(open) => {
+            if (!readonly) setEditFieldOpen(open);
+          }}
+          title={
+            editFieldKey === "status"
+              ? "Atualizar Status"
+              : editFieldKey === "plataforma"
+                ? "Atualizar Plataforma"
+                : editFieldKey === "responsavel"
+                  ? "Atualizar Responsável"
+                  : "Atualizar Etiqueta"
+          }
+          options={editOptions}
+          value={editValue}
+          onSave={async (selectedId) => {
+            if (readonly) {
+              toast({
+                title: "Somente leitura",
+                description:
+                  "Este pedido é somente leitura e não pode ser alterado.",
+              });
+              return;
+            }
+            if (!pedido) {
+              toast({
+                title: "Erro",
+                description: "Pedido não carregado",
+                variant: "destructive",
+              });
+              return;
+            }
+            try {
+              const ENVIADO_STATUS_ID = "fa6b38ba-1d67-4bc3-821e-ab089d641a25";
+              const updateData: any = {
+                atualizado_em: new Date().toISOString(),
+              };
+              if (editFieldKey === "status") {
+                updateData.status_id = selectedId || null;
+                // Se o status for alterado para "Enviado", popula data_enviado
+                if (selectedId === ENVIADO_STATUS_ID) {
+                  updateData.data_enviado = new Date().toISOString();
+                }
+              }
+              if (editFieldKey === "plataforma")
+                updateData.plataforma_id = selectedId || null;
+              if (editFieldKey === "responsavel")
+                updateData.responsavel_id = selectedId || null;
+              if (editFieldKey === "etiqueta")
+                updateData.etiqueta_envio_id = selectedId || null;
+
+              const { error } = await supabase
+                .from("pedidos")
+                .update(updateData)
+                .eq("id", pedido.id);
+              if (error) throw error;
+
+              // Registrar no histórico de movimentações
+              let mensagemHistorico = "";
+              if (editFieldKey === "status") {
+                const statusAnterior =
+                  pedido?.status?.nome || "Status removido";
+                const statusNovo =
+                  statuses.find((s) => s.id === selectedId)?.nome ||
+                  "Status removido";
+                if (statusAnterior !== statusNovo) {
+                  mensagemHistorico = `Status alterado: ${statusAnterior} → ${statusNovo}`;
+                }
+              } else if (editFieldKey === "plataforma") {
+                const plataformaAnterior =
+                  pedido?.plataforma?.nome || "Plataforma removida";
+                const plataformaNova =
+                  plataformas.find((p) => p.id === selectedId)?.nome ||
+                  "Plataforma removida";
+                if (plataformaAnterior !== plataformaNova) {
+                  mensagemHistorico = `Plataforma alterada: ${plataformaAnterior} → ${plataformaNova}`;
+                }
+              } else if (editFieldKey === "responsavel") {
+                const responsavelNome =
+                  usuarios.find((u) => u.id === selectedId)?.nome ||
+                  "Responsável removido";
+                mensagemHistorico = `Responsável alterado para: ${responsavelNome}`;
+              } else if (editFieldKey === "etiqueta") {
+                const etiquetaAnterior =
+                  pedido?.etiqueta?.nome || "Etiqueta removida";
+                const etiquetaNova =
+                  etiquetas.find((e) => e.id === selectedId)?.nome ||
+                  "Etiqueta removida";
+                if (etiquetaAnterior !== etiquetaNova) {
+                  mensagemHistorico = `Status da etiqueta alterado: ${etiquetaAnterior} → ${etiquetaNova}`;
+                }
+              }
+
+              if (mensagemHistorico) {
+                await registrarHistoricoMovimentacao(
+                  pedido.id,
+                  mensagemHistorico,
+                );
+              }
+
+              toast({
+                title: "Atualizado",
+                description: "Campo atualizado com sucesso",
+              });
+              setEditFieldOpen(false);
+              navigate(0);
+            } catch (err: any) {
+              console.error("Erro ao atualizar campo do pedido:", err);
+              toast({
+                title: "Erro",
+                description: err?.message || String(err),
+                variant: "destructive",
+              });
+            }
+          }}
+        />
+
+        {/* Client edit modal (pencil icon) */}
+        <ClientEditModal
+          open={clientEditOpen}
+          onOpenChange={(open) => {
+            if (!readonly) setClientEditOpen(open);
+          }}
+          clienteId={pedido?.cliente?.id || (pedido as any)?.cliente_id || null}
+          pedidoId={pedido?.id || null}
+          onSaved={() => navigate(0)}
+        />
+
+        {/* Modal de cotações */}
+        <CotacaoFreteModal
+          open={cotacaoModal}
+          onClose={() => setCotacaoModal(false)}
+          onSelect={handleSelectCotacao}
+          cotacoes={cotacoes}
+          loading={calculandoFrete}
+          remetente={selectedRemetente}
+          cliente={pedido?.cliente}
+          embalagem={selectedEmbalagem}
+          insuranceValue={1}
+          productName={
+            pedido?.itens && pedido.itens.length
+              ? pedido.itens[0].variacao?.nome
+                ? `${pedido.itens[0].produto?.nome} - ${pedido.itens[0].variacao.nome}`
+                : pedido.itens[0].produto?.nome || ""
+              : ""
+          }
+          orderProducts={(pedido?.itens || []).map((it: any) => ({
+            name: it.variacao?.nome
+              ? `${it.produto?.nome} - ${it.variacao.nome}`
+              : it.produto?.nome || "Produto",
+            quantity: Number(it.quantidade || 1),
+            unitary_value: Number(it.preco_unitario || it.preco || 0),
+          }))}
+        />
+
+        {/* Modal para editar valor total */}
+        <Dialog open={editValorTotalOpen} onOpenChange={setEditValorTotalOpen}>
+          <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Editar Valor Total</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 overflow-y-auto flex-1">
+              {/* Exibir valores de cada forma de pagamento */}
+              {Object.keys(tempValoresPagamentos).length > 0 && (
+                <div className="space-y-3 p-3 bg-gray-50 rounded-md">
+                  <div className="text-sm font-medium text-gray-700">
+                    Valores por Forma de Pagamento:
+                  </div>
+                  {Object.entries(tempValoresPagamentos).map(
+                    ([nome, valor]) => {
+                      return (
+                        <div key={nome} className="space-y-1">
+                          <label className="text-sm font-medium">{nome}</label>
+                          <div className="flex items-center gap-2">
+                            <span className="px-3 py-2 bg-white border rounded-l text-sm">
+                              R$
+                            </span>
+                            <Input
+                              type="text"
+                              value={valor}
+                              onChange={(e) => {
+                                const normalized =
+                                  normalizeAndFormatCurrencyInput(
+                                    e.target.value,
+                                  );
+                                const updated = {
+                                  ...tempValoresPagamentos,
+                                  [nome]: normalized,
+                                };
+                                setTempValoresPagamentos(updated);
+
+                                // Recalcular valor total baseado no estado atualizado
+                                const novoTotal = Object.values(updated).reduce(
+                                  (sum, v) => sum + parseCurrencyBR(String(v)),
+                                  0,
+                                );
+                                setTempValorTotal(formatCurrencyBR(novoTotal));
+                              }}
+                              placeholder="0,00"
+                            />
+                          </div>
+                        </div>
+                      );
+                    },
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="text-sm font-medium">Valor Total (R$)</label>
+                <Input
+                  type="text"
+                  value={tempValorTotal}
+                  onChange={(e) => {
+                    const normalized = normalizeAndFormatCurrencyInput(
+                      e.target.value,
+                    );
+                    setTempValorTotal(normalized);
+                  }}
+                  placeholder="0,00"
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setEditValorTotalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                onClick={async () => {
+                  try {
+                    // Parse valor using parseCurrencyBR and validate
+                    const novoValor = parseCurrencyBR(tempValorTotal);
+                    if (isNaN(novoValor) || !isFinite(novoValor)) {
+                      toast({
+                        title: "Erro",
+                        description: "Valor total inválido",
+                        variant: "destructive",
+                      });
+                      return;
+                    }
+
+                    const { error } = await supabase
+                      .from("pedidos")
+                      .update({
+                        valor_total: novoValor,
+                        atualizado_em: new Date().toISOString(),
+                      })
+                      .eq("id", pedido?.id);
+
+                    if (error) throw error;
+
+                    // Atualizar valores de cada forma de pagamento na tabela lista_pagamentos
+                    console.log(
+                      "Iniciando atualização dos valores de pagamento...",
+                    );
+                    console.log(
+                      "tempValoresPagamentos:",
+                      tempValoresPagamentos,
+                    );
+
+                    for (const [nomePagamento, valor] of Object.entries(
+                      tempValoresPagamentos,
+                    )) {
+                      // Parse valor from pt-BR format and validate
+                      const valNum = parseCurrencyBR(String(valor));
+                      console.log(
+                        `Processando ${nomePagamento}: ${valor} -> ${valNum}`,
+                      );
+
+                      if (isNaN(valNum) || !isFinite(valNum)) {
+                        console.warn(
+                          `Valor inválido para ${nomePagamento}: ${valor}`,
+                        );
+                        continue; // Skip invalid values
+                      }
+
+                      // Buscar registros direto do banco para garantir dados atualizados
+                      const { data: listaPagamentos, error: fetchErr } = await (
+                        supabase as any
+                      )
+                        .from("lista_pagamentos")
+                        .select("id, valor, formas_pagamentos(id, nome)")
+                        .eq("pedido_id", pedido?.id);
+
+                      if (fetchErr) {
+                        console.error(
+                          "Erro ao buscar lista_pagamentos:",
+                          fetchErr,
+                        );
+                        throw fetchErr;
+                      }
+
+                      console.log(
+                        `Registros encontrados para pedido ${pedido?.id}:`,
+                        listaPagamentos,
+                      );
+
+                      // Encontrar todos os registros que correspondem a este nome de pagamento
+                      const registrosPagamento = (listaPagamentos || []).filter(
+                        (lp: any) => {
+                          const nome = lp.formas_pagamentos?.nome || "—";
+                          const nomeNormalizado = nome
+                            .replace(/\s*\d+x\s*$/i, "")
+                            .trim();
+                          console.log(
+                            `Comparando: ${nomeNormalizado} === ${nomePagamento}`,
+                          );
+                          return nomeNormalizado === nomePagamento;
+                        },
+                      );
+
+                      console.log(
+                        `Registros correspondentes a ${nomePagamento}:`,
+                        registrosPagamento,
+                      );
+
+                      if (registrosPagamento.length > 0) {
+                        // Dividir o valor igualmente entre os registros
+                        const valorPorRegistro =
+                          valNum / registrosPagamento.length;
+                        console.log(`Valor por registro: ${valorPorRegistro}`);
+
+                        // Atualizar cada registro individualmente
+                        for (const lp of registrosPagamento) {
+                          const id = Number(lp.id);
+                          if (isNaN(id)) {
+                            console.warn(`ID inválido: ${lp.id}`);
+                            continue;
+                          }
+
+                          console.log(
+                            `Atualizando lista_pagamentos id=${id} com valor=${valorPorRegistro}`,
+                          );
+                          const { error: updateErr } = await (supabase as any)
+                            .from("lista_pagamentos")
+                            .update({ valor: valorPorRegistro })
+                            .eq("id", id)
+                            .eq("pedido_id", pedido?.id);
+
+                          if (updateErr) {
+                            console.error(
+                              `Erro ao atualizar id=${id}:`,
+                              updateErr,
+                            );
+                            throw updateErr;
+                          }
+                          console.log(`✓ Atualizado com sucesso id=${id}`);
+                        }
+                      } else {
+                        console.warn(
+                          `Nenhum registro encontrado para ${nomePagamento}`,
+                        );
+                      }
+                    }
+
+                    console.log("Todas as atualizações concluídas!");
+                    const valorAnterior = pedido?.valor_total || 0;
+                    await registrarHistoricoMovimentacao(
+                      pedido?.id,
+                      `Valor total editado: R$ ${Number(valorAnterior).toFixed(2)} → R$ ${novoValor.toFixed(2)}`,
+                    );
+                    toast({
+                      title: "Sucesso",
+                      description:
+                        "Valor total e formas de pagamento atualizados com sucesso",
+                    });
+                    setEditValorTotalOpen(false);
+                    navigate(0); // Recarrega a página
+                  } catch (err: any) {
+                    console.error("Erro ao atualizar valor total:", err);
+                    toast({
+                      title: "Erro",
+                      description:
+                        err?.message ||
+                        "Não foi possível atualizar o valor total",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                Salvar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Up-Sell */}
+        <Dialog open={upSellModalOpen} onOpenChange={setUpSellModalOpen}>
+          <DialogContent className="max-w-md max-h-[90vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="text-base">
+                Selecionar Produto Up-Sell
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto space-y-3 py-2">
+              {loadingUpSell ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm text-muted-foreground">
+                    Carregando produtos...
+                  </p>
+                </div>
+              ) : upSellProducts.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum produto up-sell configurado
+                  </p>
+                </div>
+              ) : (
+                upSellProducts.map((prod) => {
+                  const hasVariations =
+                    prod.variacoes_produto && prod.variacoes_produto.length > 0;
+                  const selectedVarId =
+                    selectedVariations[prod.id] ||
+                    (hasVariations ? prod.variacoes_produto[0].id : null);
+                  const selectedVar = hasVariations
+                    ? prod.variacoes_produto.find(
+                        (v: any) => v.id === selectedVarId,
+                      )
+                    : null;
+                  const displayPrice = selectedVar
+                    ? selectedVar.valor
+                    : prod.preco;
+
+                  return (
+                    <div
+                      key={prod.id}
+                      className="border rounded-lg p-3 border-gray-300"
+                    >
+                      <div className="flex items-start gap-3">
+                        {selectedVar?.img_url || prod.img_url ? (
+                          <div className="w-14 h-14 flex-shrink-0">
+                            <img
+                              src={selectedVar?.img_url || prod.img_url}
+                              alt={prod.nome}
+                              className="w-full h-full object-cover rounded border"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-14 h-14 flex-shrink-0 bg-gray-100 rounded border flex items-center justify-center">
+                            <span className="text-gray-400 text-[10px]">
+                              Sem imagem
+                            </span>
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-sm text-gray-900 break-words line-clamp-2 leading-tight">
+                            {prod.nome}
+                          </div>
+
+                          {hasVariations && (
+                            <div className="mt-2">
+                              <label className="text-[10px] text-gray-600 mb-1 block">
+                                Selecione a variação:
+                              </label>
+                              <select
+                                className="w-full px-2 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-gray-400"
+                                value={selectedVarId || ""}
+                                onChange={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedVariations((prev) => ({
+                                    ...prev,
+                                    [prod.id]: e.target.value,
+                                  }));
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {prod.variacoes_produto.map((v: any) => (
+                                  <option key={v.id} value={v.id}>
+                                    {v.nome} - R${" "}
+                                    {Number(v.valor || 0).toFixed(2)}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          <div className="mt-3 flex flex-col gap-2">
+                            <Button
+                              size="sm"
+                              className="w-full bg-green-600 hover:bg-green-700 text-white text-xs py-2"
+                              onClick={() => {
+                                // Store selected product and open wizard
+                                const selectedProduct = {
+                                  ...prod,
+                                  selectedVariationId: selectedVarId,
+                                  selectedVariation: selectedVar,
+                                  displayPrice: displayPrice,
+                                };
+                                setSelectedUpSellProduct(selectedProduct);
+
+                                // Calculate the price difference for wizard
+                                const originalPrice = Number(
+                                  upSellSourceItem.preco_unitario ||
+                                    upSellSourceItem.produto?.preco ||
+                                    0,
+                                );
+                                const newPrice = Number(displayPrice || 0);
+                                const difference = newPrice - originalPrice;
+
+                                // Set wizard initial values for normal flow
+                                setUpSellValueStr(
+                                  formatCurrencyBR(Math.abs(difference)),
+                                );
+                                setUpSellDate(
+                                  new Date().toISOString().slice(0, 10),
+                                );
+                                setUpSellPayment("Pix");
+                                setUpSellWizardStep(1);
+                                setIsNormalFlow(true);
+                                setIsAumentoGratis(false);
+
+                                // Close product selection modal and open wizard
+                                setUpSellModalOpen(false);
+                                setUpSellWizardOpen(true);
+                              }}
+                            >
+                              Próxima etapa
+                            </Button>
+
+                            <button
+                              className="text-xs text-gray-700 underline hover:text-gray-900"
+                              onClick={() => {
+                                // Store selected product and open wizard
+                                const selectedProduct = {
+                                  ...prod,
+                                  selectedVariationId: selectedVarId,
+                                  selectedVariation: selectedVar,
+                                  displayPrice: displayPrice,
+                                };
+                                setSelectedUpSellProduct(selectedProduct);
+
+                                // Set wizard initial values for aumento grátis
+                                setUpSellDate(
+                                  new Date().toISOString().slice(0, 10),
+                                );
+                                setUpSellWizardStep(1);
+                                setIsAumentoGratis(true);
+                                setIsNormalFlow(false);
+
+                                // Close product selection modal and open wizard
+                                setUpSellModalOpen(false);
+                                setUpSellWizardOpen(true);
+                              }}
+                            >
+                              upsell gratuito
+                            </button>
+                          </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
+                  );
+                })
+              )}
+            </div>
 
-          <DialogFooter>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setUpSellModalOpen(false);
-                setUpSellSourceItem(null);
-                setSelectedVariations({});
-              }}
-            >
-              Cancelar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Alerta Up-Sell Pendente */}
-      <Dialog open={pendingUpSellAlertOpen} onOpenChange={setPendingUpSellAlertOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-red-600">⚠️ Produtos com Up-Sell Pendente</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-gray-600 mb-4">
-              Não é possível liberar o pedido. Os seguintes produtos estão com up-sell pendente:
-            </p>
-            <ul className="space-y-2">
-              {pendingUpSellProducts.map((item: any, index: number) => (
-                <li key={index} className="flex items-center gap-2 p-2 bg-orange-50 rounded border border-orange-200">
-                  {item.produto?.img_url && (
-                    <img src={item.produto.img_url} alt={item.produto?.nome} className="w-8 h-8 rounded object-cover" />
-                  )}
-                  <div>
-                    <span className="font-medium">{item.produto?.nome || 'Produto'}</span>
-                    {item.variacao?.nome && (
-                      <span className="text-sm text-gray-500 ml-1">({item.variacao.nome})</span>
-                    )}
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <p className="text-sm text-gray-500 mt-4">
-              Por favor, resolva o up-sell de cada produto (UpSell ou Manter) antes de liberar o pedido.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              onClick={() => {
-                setPendingUpSellAlertOpen(false);
-                setPendingUpSellProducts([]);
-              }}
-            >
-              Entendi
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal de Confirmação Manter */}
-      <Dialog open={confirmManterOpen} onOpenChange={setConfirmManterOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Confirmar Manter Produto</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-sm text-gray-600">
-              Tem certeza que deseja manter o produto <strong>{itemToKeep?.produto?.nome}</strong> sem fazer up-sell?
-            </p>
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setConfirmManterOpen(false);
-                setItemToKeep(null);
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={async () => {
-                try {
-                  const itemId = itemToKeep._sourceIds?.[0] || itemToKeep.id;
-                  
-                  // Set status to "Não aumentado" (ID 2)
-                  const { error } = await supabase
-                    .from('itens_pedido')
-                    .update({ status_up_sell: 2 })
-                    .eq('id', itemId);
-                  
-                  if (error) throw error;
-                  
-                  // Register metric
-                  await supabase.from('metricas_upsell').insert({
-                    responsavel_id: user?.id || null,
-                    status_upsell: 2,
-                    pedido_id: pedido?.id || null,
-                    produto_base: itemToKeep.produto?.id || null,
-                    produto_upsell: null, // No up-sell, kept original
-                    variacao_base: itemToKeep.variacao?.id || null,
-                    variacao_upsell: null,
-                    produto_base_nome: itemToKeep.produto?.nome || null,
-                    produto_upsell_nome: null,
-                    variacao_base_nome: itemToKeep.variacao?.nome || null,
-                    variacao_upsell_nome: null,
-                    empresa_id: empresaId || null,
-                  });
-                  
-                  // Registrar no histórico
-                  try {
-                    const nomeProduto = itemToKeep.variacao?.nome 
-                      ? `${itemToKeep.produto?.nome} - ${itemToKeep.variacao.nome}`
-                      : itemToKeep.produto?.nome || 'Produto';
-                    
-                    await registrarHistoricoMovimentacao(
-                      pedido?.id,
-                      `Produto mantido sem up-sell: ${nomeProduto}`,
-                      user?.id
-                    );
-                  } catch (histErr) {
-                    console.error('Erro ao registrar histórico:', histErr);
-                  }
-                  
-                  toast({
-                    title: 'Produto mantido',
-                    description: 'O produto original foi mantido no pedido',
-                  });
-                  
-                  // Check if all up_cell products are now resolved and auto-liberate
-                  await checkAndAutoLiberatePedido(itemId);
-                  
-                  setConfirmManterOpen(false);
-                  setItemToKeep(null);
-                  navigate(0);
-                } catch (err: any) {
-                  console.error('Erro ao manter produto:', err);
-                  toast({
-                    title: 'Erro',
-                    description: err?.message || 'Não foi possível manter o produto',
-                    variant: 'destructive',
-                  });
-                }
-              }}
-            >
-              Confirmar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Wizard Up-Sell: Data -> Forma de Pagamento -> Valor -> Status Up-Sell */}
-      <Dialog open={upSellWizardOpen} onOpenChange={setUpSellWizardOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              {isAumentoGratis ? 'Selecionar Data do Aumento Grátis' :
-               isNormalFlow ? (
-                 upSellWizardStep === 1 ? 'Selecionar Data' : 
-                 upSellWizardStep === 2 ? 'Selecionar Forma de Pagamento' : 
-                 'Definir Valor'
-               ) :
-               upSellWizardStep === 1 ? 'Selecionar Data' : 
-               upSellWizardStep === 2 ? 'Selecionar Forma de Pagamento' : 
-               upSellWizardStep === 3 ? 'Definir Valor' : 
-               'Tipo de Up-Sell'
-              }
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="py-4">
-            {/* Step indicator */}
-            {isAumentoGratis ? (
-              <div className="flex items-center justify-center mb-4 text-xs">
-                <div className="font-semibold text-blue-600 cursor-pointer hover:underline" onClick={() => setUpSellWizardStep(1)}>Data</div>
-              </div>
-            ) : isNormalFlow ? (
-              <div className="flex items-center justify-between mb-4 text-xs">
-                <div 
-                  className={`flex-1 text-center ${upSellWizardStep >= 1 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
-                  onClick={() => upSellWizardStep > 1 && setUpSellWizardStep(1)}
-                >
-                  Data
-                </div>
-                <div 
-                  className={`flex-1 text-center ${upSellWizardStep >= 2 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
-                  onClick={() => upSellWizardStep > 2 && setUpSellWizardStep(2)}
-                >
-                  Forma Pag.
-                </div>
-                <div className={`flex-1 text-center ${upSellWizardStep >= 3 ? 'font-semibold text-green-600' : 'text-gray-400'}`}>Valor</div>
-              </div>
-            ) : (
-              <div className="flex items-center justify-between mb-4 text-xs">
-                <div 
-                  className={`flex-1 text-center ${upSellWizardStep >= 1 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
-                  onClick={() => upSellWizardStep > 1 && setUpSellWizardStep(1)}
-                >
-                  Data
-                </div>
-                <div 
-                  className={`flex-1 text-center ${upSellWizardStep >= 2 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
-                  onClick={() => upSellWizardStep > 2 && setUpSellWizardStep(2)}
-                >
-                  Forma Pag.
-                </div>
-                <div 
-                  className={`flex-1 text-center ${upSellWizardStep >= 3 ? 'font-semibold text-green-600 cursor-pointer hover:underline' : 'text-gray-400'}`}
-                  onClick={() => upSellWizardStep > 3 && setUpSellWizardStep(3)}
-                >
-                  Valor
-                </div>
-                <div className={`flex-1 text-center ${upSellWizardStep >= 4 ? 'font-semibold text-green-600' : 'text-gray-400'}`}>Status</div>
-              </div>
-            )}
-
-            {upSellWizardStep === 1 && (
-              <div className="text-center">
-                <input 
-                  type="date" 
-                  className="mx-auto p-2 border rounded" 
-                  value={upSellDate} 
-                  onChange={(e) => setUpSellDate(e.target.value)} 
-                />
-                <div className="mt-4 text-sm text-muted-foreground">
-                  Você selecionou {upSellDate.split('-').reverse().join('/')}
-                </div>
-              </div>
-            )}
-
-            {upSellWizardStep === 2 && (
-              <div className="text-center space-y-4">
-                <div className="flex items-center justify-center gap-4">
-                  {['Pix','Boleto','Cartão','Outro'].map((m) => (
-                    <button 
-                      key={m} 
-                      onClick={() => setUpSellPayment(m)} 
-                      className={`px-4 py-2 rounded ${upSellPayment === m ? 'ring-2 ring-green-500 bg-white' : 'bg-gray-100'}`}
-                    >
-                      {m}
-                    </button>
-                  ))}
-                </div>
-                <div className="mt-2 text-sm">Você selecionou <strong>{upSellPayment}</strong></div>
-              </div>
-            )}
-
-            {upSellWizardStep === 3 && (
-              <div>
-                <label className="block text-sm text-muted-foreground">Diferença de valor do up-sell</label>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
-                  <Input value={upSellValueStr} onChange={(e) => setUpSellValueStr(e.target.value)} />
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Produto original: R$ {Number(upSellSourceItem?.preco_unitario || 0).toFixed(2)}
-                  <br />
-                  Novo produto: R$ {Number(selectedUpSellProduct?.displayPrice || 0).toFixed(2)}
-                </p>
-              </div>
-            )}
-
-            {upSellWizardStep === 4 && !isNormalFlow && !isAumentoGratis && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Selecione o tipo de up-sell</label>
-                <div className="space-y-2">
-                  {statusUpSellOptions.map((status) => (
-                    <button
-                      key={status.id}
-                      onClick={() => setUpSellStatus(String(status.id))}
-                      className={`w-full p-3 rounded border-2 text-left transition-all ${
-                        upSellStatus === String(status.id) 
-                          ? 'border-green-500 bg-green-50' 
-                          : 'border-gray-200 hover:border-gray-300'
-                      }`}
-                    >
-                      <div className="font-medium">{status.status}</div>
-                    </button>
-                  ))}
-                </div>
-                {statusUpSellOptions.length === 0 && (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    Nenhum status de up-sell configurado
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <div className="flex justify-between w-full">
-              <Button 
-                variant="outline" 
+            <DialogFooter>
+              <Button
+                variant="ghost"
                 onClick={() => {
-                  setUpSellWizardOpen(false);
-                  setUpSellModalOpen(true);
+                  setUpSellModalOpen(false);
+                  setUpSellSourceItem(null);
+                  setSelectedVariations({});
                 }}
               >
                 Cancelar
               </Button>
-              <div>
-                {isAumentoGratis ? (
-                  <Button 
-                    className="bg-blue-600 hover:bg-blue-700 text-white" 
-                    disabled={savingUpSell}
-                    onClick={async () => {
-                      if (!pedido || !selectedUpSellProduct) return;
-                      
-                      setSavingUpSell(true);
-                      try {
-                        const itemId = upSellSourceItem._sourceIds?.[0] || upSellSourceItem.id;
-                        const hasVariations = selectedUpSellProduct.variacoes_produto && selectedUpSellProduct.variacoes_produto.length > 0;
-                        
-                        // Buscar dimensões do novo produto ou variação
-                        let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
-                        try {
-                          if (hasVariations && selectedUpSellProduct.selectedVariationId) {
-                            const { data: variacaoData } = await supabase
-                              .from('variacoes_produto')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', selectedUpSellProduct.selectedVariationId)
-                              .maybeSingle();
-                            
-                            if (variacaoData) {
-                              dimensoes = {
-                                altura: variacaoData.altura,
-                                largura: variacaoData.largura,
-                                comprimento: variacaoData.comprimento,
-                                peso: variacaoData.peso
-                              };
-                            }
-                          }
-                          
-                          if (!dimensoes.altura && !dimensoes.peso) {
-                            const { data: produtoData } = await supabase
-                              .from('produtos')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', selectedUpSellProduct.id)
-                              .maybeSingle();
-                            
-                            if (produtoData) {
-                              dimensoes = {
-                                altura: produtoData.altura,
-                                largura: produtoData.largura,
-                                comprimento: produtoData.comprimento,
-                                peso: produtoData.peso
-                              };
-                            }
-                          }
-                        } catch (err) {
-                          console.error('Erro ao buscar dimensões:', err);
-                        }
-                        
-                        // Set status to "Aumento grátis" (ID 4)
-                        const updateData: any = {
-                          produto_id: selectedUpSellProduct.id,
-                          preco_unitario: upSellSourceItem.preco_unitario, // Keep original price
-                          status_up_sell: 4,
-                          altura: dimensoes.altura,
-                          largura: dimensoes.largura,
-                          comprimento: dimensoes.comprimento,
-                          peso: dimensoes.peso,
-                        };
-                        
-                        if (hasVariations && selectedUpSellProduct.selectedVariationId) {
-                          updateData.variacao_id = selectedUpSellProduct.selectedVariationId;
-                        } else {
-                          updateData.variacao_id = null;
-                        }
-                        
-                        const { error: updateError } = await supabase
-                          .from('itens_pedido')
-                          .update(updateData)
-                          .eq('id', itemId);
-                        
-                        if (updateError) throw updateError;
-                        
-                        // Register metric
-                        await supabase.from('metricas_upsell').insert({
-                          responsavel_id: user?.id || null,
-                          status_upsell: 4,
-                          pedido_id: pedido?.id || null,
-                          produto_base: upSellSourceItem.produto?.id || null,
-                          produto_upsell: selectedUpSellProduct.id || null,
-                          variacao_base: upSellSourceItem.variacao?.id || null,
-                          variacao_upsell: selectedUpSellProduct.selectedVariationId || null,
-                          produto_base_nome: upSellSourceItem.produto?.nome || null,
-                          produto_upsell_nome: selectedUpSellProduct.nome || null,
-                          variacao_base_nome: upSellSourceItem.variacao?.nome || null,
-                          variacao_upsell_nome: selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome || null,
-                          empresa_id: empresaId || null,
-                        });
-                        
-                        // Registrar no histórico
-                        try {
-                          const produtoOriginal = upSellSourceItem.variacao?.nome
-                            ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
-                            : upSellSourceItem.produto?.nome || 'Produto';
-                          
-                          const variacaoNome = selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome;
-                          const produtoNovo = variacaoNome
-                            ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
-                            : selectedUpSellProduct.nome;
-                          
-                          await registrarHistoricoMovimentacao(
-                            pedido?.id,
-                            `Aumento grátis: ${produtoOriginal} → ${produtoNovo}`,
-                            user?.id
-                          );
-                        } catch (histErr) {
-                          console.error('Erro ao registrar histórico:', histErr);
-                        }
-                        
-                        toast({
-                          title: 'Aumento grátis realizado!',
-                          description: 'Produto substituído sem alteração de valor',
-                        });
-                        
-                        // Check if all up_cell products are now resolved and auto-liberate
-                        await checkAndAutoLiberatePedido(itemId);
-                        
-                        setUpSellWizardOpen(false);
-                        setUpSellSourceItem(null);
-                        setSelectedUpSellProduct(null);
-                        setSelectedVariations({});
-                        setIsAumentoGratis(false);
-                        navigate(0);
-                      } catch (err: any) {
-                        console.error('Erro ao realizar aumento grátis:', err);
-                        toast({
-                          title: 'Erro',
-                          description: err?.message || 'Não foi possível realizar o aumento grátis',
-                          variant: 'destructive',
-                        });
-                      } finally {
-                        setSavingUpSell(false);
-                      }
-                    }}
-                  >
-                    {savingUpSell ? 'Salvando...' : 'Confirmar Aumento Grátis'}
-                  </Button>
-                ) : isNormalFlow && upSellWizardStep < 3 ? (
-                  <Button 
-                    className="bg-green-600 hover:bg-green-700 text-white" 
-                    onClick={() => setUpSellWizardStep(s => s + 1)}
-                  >
-                    Próxima etapa
-                  </Button>
-                ) : isNormalFlow && upSellWizardStep === 3 ? (
-                  <Button 
-                    className="bg-green-600 hover:bg-green-700 text-white" 
-                    disabled={savingUpSell}
-                    onClick={async () => {
-                      if (!pedido || !selectedUpSellProduct) return;
-                      
-                      setSavingUpSell(true);
-                      try {
-                        const itemId = upSellSourceItem._sourceIds?.[0] || upSellSourceItem.id;
-                        const hasVariations = selectedUpSellProduct.variacoes_produto && selectedUpSellProduct.variacoes_produto.length > 0;
-                        
-                        // Buscar dimensões do novo produto ou variação
-                        let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
-                        try {
-                          if (hasVariations && selectedUpSellProduct.selectedVariationId) {
-                            const { data: variacaoData } = await supabase
-                              .from('variacoes_produto')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', selectedUpSellProduct.selectedVariationId)
-                              .maybeSingle();
-                            
-                            if (variacaoData) {
-                              dimensoes = {
-                                altura: variacaoData.altura,
-                                largura: variacaoData.largura,
-                                comprimento: variacaoData.comprimento,
-                                peso: variacaoData.peso
-                              };
-                            }
-                          }
-                          
-                          if (!dimensoes.altura && !dimensoes.peso) {
-                            const { data: produtoData } = await supabase
-                              .from('produtos')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', selectedUpSellProduct.id)
-                              .maybeSingle();
-                            
-                            if (produtoData) {
-                              dimensoes = {
-                                altura: produtoData.altura,
-                                largura: produtoData.largura,
-                                comprimento: produtoData.comprimento,
-                                peso: produtoData.peso
-                              };
-                            }
-                          }
-                        } catch (err) {
-                          console.error('Erro ao buscar dimensões:', err);
-                        }
-                        
-                        // Set status to "Aumentado" (ID 3)
-                        const updateData: any = {
-                          produto_id: selectedUpSellProduct.id,
-                          preco_unitario: selectedUpSellProduct.displayPrice,
-                          status_up_sell: 3,
-                          altura: dimensoes.altura,
-                          largura: dimensoes.largura,
-                          comprimento: dimensoes.comprimento,
-                          peso: dimensoes.peso,
-                        };
-                        
-                        if (hasVariations && selectedUpSellProduct.selectedVariationId) {
-                          updateData.variacao_id = selectedUpSellProduct.selectedVariationId;
-                        } else {
-                          updateData.variacao_id = null;
-                        }
-                        
-                        const { error: updateError } = await supabase
-                          .from('itens_pedido')
-                          .update(updateData)
-                          .eq('id', itemId);
-                        
-                        if (updateError) throw updateError;
-                        
-                        // Update pedido valor_total with the difference
-                        const difference = parseCurrencyBR(upSellValueStr);
-                        const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
-                        const newTotal = Number((currentTotal + difference).toFixed(2));
-                        
-                        const { error: pedidoError } = await supabase
-                          .from('pedidos')
-                          .update({ 
-                            valor_total: newTotal, 
-                            atualizado_em: new Date().toISOString() 
-                          })
-                          .eq('id', pedido.id);
-                        
-                        if (pedidoError) throw pedidoError;
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-                        // Registrar entrada de valor do up-sell
-                        try {
-                          const formaNorm = String(upSellPayment || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-                          let formaPagId: number | null = null;
-                          if (paymentMethods) {
-                            const found = Object.entries(paymentMethods).find(([, nome]) =>
-                              String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === formaNorm
-                            );
-                            if (found) formaPagId = Number(found[0]);
-                          }
-                          if (formaPagId === null) {
-                            const { data: pmData } = await (supabase as any).from('formas_pagamentos').select('id,nome');
-                            const found = (pmData || []).find((item: any) =>
-                              String(item.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === formaNorm
-                            );
-                            if (found) formaPagId = Number(found.id);
-                          }
-                          const { error: entradaErr } = await (supabase as any).from('entrada_valores').insert({
-                            pedido_id: pedido.id,
-                            valor: Number(difference.toFixed(2)),
-                            valor_antigo: Number(currentTotal.toFixed(2)),
-                            responsavel_id: user?.id || null,
-                            forma_pag: formaPagId,
-                            created_at: new Date(`${upSellDate}T12:00:00`).toISOString(),
-                          });
-                          if (entradaErr) console.error('[UpSell] Falha ao inserir entrada_valores:', entradaErr);
-                          else console.log('[UpSell] entrada_valores inserido com sucesso');
-                        } catch (entradaEx) {
-                          console.error('[UpSell] Exceção ao inserir entrada_valores:', entradaEx);
-                        }
-                        
-                        // Register metric
-                        await supabase.from('metricas_upsell').insert({
-                          responsavel_id: user?.id || null,
-                          status_upsell: 3,
-                          pedido_id: pedido?.id || null,
-                          produto_base: upSellSourceItem.produto?.id || null,
-                          produto_upsell: selectedUpSellProduct.id || null,
-                          variacao_base: upSellSourceItem.variacao?.id || null,
-                          variacao_upsell: selectedUpSellProduct.selectedVariationId || null,
-                          produto_base_nome: upSellSourceItem.produto?.nome || null,
-                          produto_upsell_nome: selectedUpSellProduct.nome || null,
-                          variacao_base_nome: upSellSourceItem.variacao?.nome || null,
-                          variacao_upsell_nome: selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome || null,
-                          empresa_id: empresaId || null,
-                        });
-                        
-                        // Registrar no histórico
-                        try {
-                          const produtoOriginal = upSellSourceItem.variacao?.nome
-                            ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
-                            : upSellSourceItem.produto?.nome || 'Produto';
-                          
-                          const variacaoNome = selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome;
-                          const produtoNovo = variacaoNome
-                            ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
-                            : selectedUpSellProduct.nome;
-                          
-                          const valorAdicional = parseCurrencyBR(upSellValueStr);
-                          
-                          await registrarHistoricoMovimentacao(
-                            pedido?.id,
-                            `Up-sell realizado: ${produtoOriginal} → ${produtoNovo} | Valor adicional: R$ ${valorAdicional.toFixed(2).replace('.', ',')}`,
-                            user?.id
-                          );
-                        } catch (histErr) {
-                          console.error('Erro ao registrar histórico:', histErr);
-                        }
-                        
-                        toast({
-                          title: 'Up-sell realizado com sucesso!',
-                          description: `Produto substituído e valor atualizado`,
-                        });
-                        
-                        // Check if all up_cell products are now resolved and auto-liberate
-                        await checkAndAutoLiberatePedido(itemId);
-                        
-                        setUpSellWizardOpen(false);
-                        setUpSellSourceItem(null);
-                        setSelectedUpSellProduct(null);
-                        setSelectedVariations({});
-                        setIsNormalFlow(false);
-                        navigate(0);
-                      } catch (err: any) {
-                        console.error('Erro ao realizar up-sell:', err);
-                        toast({
-                          title: 'Erro',
-                          description: err?.message || 'Não foi possível realizar o up-sell',
-                          variant: 'destructive',
-                        });
-                      } finally {
-                        setSavingUpSell(false);
-                      }
-                    }}
+        {/* Modal de Alerta Up-Sell Pendente */}
+        <Dialog
+          open={pendingUpSellAlertOpen}
+          onOpenChange={setPendingUpSellAlertOpen}
+        >
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle className="text-red-600">
+                ⚠️ Produtos com Up-Sell Pendente
+              </DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-sm text-gray-600 mb-4">
+                Não é possível liberar o pedido. Os seguintes produtos estão com
+                up-sell pendente:
+              </p>
+              <ul className="space-y-2">
+                {pendingUpSellProducts.map((item: any, index: number) => (
+                  <li
+                    key={index}
+                    className="flex items-center gap-2 p-2 bg-orange-50 rounded border border-orange-200"
                   >
-                    {savingUpSell ? 'Salvando...' : 'Confirmar Up-Sell'}
-                  </Button>
-                ) : upSellWizardStep < 4 ? (
-                  <Button 
-                    className="bg-green-600 hover:bg-green-700 text-white" 
-                    onClick={() => setUpSellWizardStep(s => s + 1)}
-                  >
-                    Próxima etapa
-                  </Button>
-                ) : (
-                  <Button 
-                    className="bg-green-600 hover:bg-green-700 text-white" 
-                    disabled={savingUpSell || !upSellStatus}
-                    onClick={async () => {
-                      if (!pedido || !selectedUpSellProduct) return;
-                      
-                      if (!upSellStatus) {
-                        toast({
-                          title: 'Erro',
-                          description: 'Selecione um tipo de up-sell para continuar',
-                          variant: 'destructive',
-                        });
-                        return;
-                      }
-                      
-                      setSavingUpSell(true);
-                      try {
-                        const itemId = upSellSourceItem._sourceIds?.[0] || upSellSourceItem.id;
-                        const hasVariations = selectedUpSellProduct.variacoes_produto && selectedUpSellProduct.variacoes_produto.length > 0;
-                        
-                        // Buscar dimensões do novo produto ou variação
-                        let dimensoes = { altura: null, largura: null, comprimento: null, peso: null };
-                        try {
-                          if (hasVariations && selectedUpSellProduct.selectedVariationId) {
-                            const { data: variacaoData } = await supabase
-                              .from('variacoes_produto')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', selectedUpSellProduct.selectedVariationId)
-                              .maybeSingle();
-                            
-                            if (variacaoData) {
-                              dimensoes = {
-                                altura: variacaoData.altura,
-                                largura: variacaoData.largura,
-                                comprimento: variacaoData.comprimento,
-                                peso: variacaoData.peso
-                              };
-                            }
-                          }
-                          
-                          if (!dimensoes.altura && !dimensoes.peso) {
-                            const { data: produtoData } = await supabase
-                              .from('produtos')
-                              .select('altura, largura, comprimento, peso')
-                              .eq('id', selectedUpSellProduct.id)
-                              .maybeSingle();
-                            
-                            if (produtoData) {
-                              dimensoes = {
-                                altura: produtoData.altura,
-                                largura: produtoData.largura,
-                                comprimento: produtoData.comprimento,
-                                peso: produtoData.peso
-                              };
-                            }
-                          }
-                        } catch (err) {
-                          console.error('Erro ao buscar dimensões:', err);
-                        }
-                        
-                        // Find "Aumentado" status ID
-                        const aumentadoStatus = Object.entries(statusUpSellMap).find(
-                          ([_, name]) => name === 'Aumentado'
-                        );
-                        
-                        // Update the item with the new product and status "Aumentado"
-                        const updateData: any = {
-                          produto_id: selectedUpSellProduct.id,
-                          preco_unitario: selectedUpSellProduct.displayPrice,
-                          status_up_sell: aumentadoStatus ? parseInt(aumentadoStatus[0]) : (upSellStatus ? parseInt(upSellStatus) : null),
-                          altura: dimensoes.altura,
-                          largura: dimensoes.largura,
-                          comprimento: dimensoes.comprimento,
-                          peso: dimensoes.peso,
-                        };
-                        
-                        if (hasVariations && selectedUpSellProduct.selectedVariationId) {
-                          updateData.variacao_id = selectedUpSellProduct.selectedVariationId;
-                        } else {
-                          updateData.variacao_id = null;
-                        }
-                        
-                        const { error: updateError } = await supabase
-                          .from('itens_pedido')
-                          .update(updateData)
-                          .eq('id', itemId);
-                        
-                        if (updateError) throw updateError;
-                        
-                        // Update pedido valor_total with the difference
-                        const difference = parseCurrencyBR(upSellValueStr);
-                        const currentTotal = Number(pedido?.valor_total ?? pedido?.total ?? 0) || 0;
-                        const newTotal = Number((currentTotal + difference).toFixed(2));
-                        
-                        const { error: pedidoError } = await supabase
-                          .from('pedidos')
-                          .update({ 
-                            valor_total: newTotal, 
-                            atualizado_em: new Date().toISOString() 
-                          })
-                          .eq('id', pedido.id);
-                        
-                        if (pedidoError) throw pedidoError;
-
-                        // Registrar entrada de valor do up-sell
-                        try {
-                          const formaNorm = String(upSellPayment || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
-                          let formaPagId: number | null = null;
-                          if (paymentMethods) {
-                            const found = Object.entries(paymentMethods).find(([, nome]) =>
-                              String(nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === formaNorm
-                            );
-                            if (found) formaPagId = Number(found[0]);
-                          }
-                          if (formaPagId === null) {
-                            const { data: pmData } = await (supabase as any).from('formas_pagamentos').select('id,nome');
-                            const found = (pmData || []).find((item: any) =>
-                              String(item.nome || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase() === formaNorm
-                            );
-                            if (found) formaPagId = Number(found.id);
-                          }
-                          const entradaPayload: Record<string, any> = {
-                            pedido_id: pedido.id,
-                            valor: Number(difference.toFixed(2)),
-                            valor_antigo: Number(currentTotal.toFixed(2)),
-                            responsavel_id: user?.id || null,
-                            forma_pag: formaPagId,
-                            created_at: new Date(`${upSellDate}T12:00:00`).toISOString(),
-                          };
-                          const { error: entradaErr } = await (supabase as any).from('entrada_valores').insert({
-                            pedido_id: pedido.id,
-                            valor: Number(difference.toFixed(2)),
-                            valor_antigo: Number(currentTotal.toFixed(2)),
-                            responsavel_id: user?.id || null,
-                            forma_pag: formaPagId,
-                            created_at: new Date(`${upSellDate}T12:00:00`).toISOString(),
-                          });
-                          if (entradaErr) console.error('[UpSell] Falha ao inserir entrada_valores:', entradaErr);
-                          else console.log('[UpSell] entrada_valores inserido com sucesso');
-                        } catch (entradaEx) {
-                          console.error('[UpSell] Exceção ao inserir entrada_valores:', entradaEx);
-                        }
-                        
-                        // Registrar no histórico
-                        try {
-                          const produtoOriginal = upSellSourceItem.variacao?.nome
-                            ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
-                            : upSellSourceItem.produto?.nome || 'Produto';
-                          
-                          const variacaoNome = selectedUpSellProduct.variacoes_produto?.find((v: any) => v.id === selectedUpSellProduct.selectedVariationId)?.nome;
-                          const produtoNovo = variacaoNome
-                            ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
-                            : selectedUpSellProduct.nome;
-                          
-                          const valorAdicional = parseCurrencyBR(upSellValueStr);
-                          const tipoUpSell = statusUpSellMap[parseInt(upSellStatus)] || 'Up-sell';
-                          
-                          await registrarHistoricoMovimentacao(
-                            pedido?.id,
-                            `${tipoUpSell}: ${produtoOriginal} → ${produtoNovo} | Valor adicional: R$ ${valorAdicional.toFixed(2).replace('.', ',')}`,
-                            user?.id
-                          );
-                        } catch (histErr) {
-                          console.error('Erro ao registrar histórico:', histErr);
-                        }
-                        
-                        toast({
-                          title: 'Up-sell realizado com sucesso!',
-                          description: `Produto substituído e valor atualizado`,
-                        });
-                        
-                        setUpSellWizardOpen(false);
-                        setUpSellSourceItem(null);
-                        setSelectedUpSellProduct(null);
-                        setSelectedVariations({});
-                        setIsAumentoGratis(false);
-                        setIsNormalFlow(false);
-                        navigate(0); // Reload page
-                      } catch (err: any) {
-                        console.error('Erro ao realizar up-sell:', err);
-                        toast({
-                          title: 'Erro',
-                          description: err?.message || 'Não foi possível realizar o up-sell',
-                          variant: 'destructive',
-                        });
-                      } finally {
-                        setSavingUpSell(false);
-                      }
-                    }}
-                  >
-                    {savingUpSell ? 'Salvando...' : 'Confirmar Up-Sell'}
-                  </Button>
-                )}
-              </div>
+                    {item.produto?.img_url && (
+                      <img
+                        src={item.produto.img_url}
+                        alt={item.produto?.nome}
+                        className="w-8 h-8 rounded object-cover"
+                      />
+                    )}
+                    <div>
+                      <span className="font-medium">
+                        {item.produto?.nome || "Produto"}
+                      </span>
+                      {item.variacao?.nome && (
+                        <span className="text-sm text-gray-500 ml-1">
+                          ({item.variacao.nome})
+                        </span>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-sm text-gray-500 mt-4">
+                Por favor, resolva o up-sell de cada produto (UpSell ou Manter)
+                antes de liberar o pedido.
+              </p>
             </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+            <DialogFooter>
+              <Button
+                onClick={() => {
+                  setPendingUpSellAlertOpen(false);
+                  setPendingUpSellProducts([]);
+                }}
+              >
+                Entendi
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de Confirmação Manter */}
+        <Dialog open={confirmManterOpen} onOpenChange={setConfirmManterOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Confirmar Manter Produto</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <p className="text-sm text-gray-600">
+                Tem certeza que deseja manter o produto{" "}
+                <strong>{itemToKeep?.produto?.nome}</strong> sem fazer up-sell?
+              </p>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setConfirmManterOpen(false);
+                  setItemToKeep(null);
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="bg-red-600 hover:bg-red-700 text-white"
+                onClick={async () => {
+                  try {
+                    const itemId = itemToKeep._sourceIds?.[0] || itemToKeep.id;
+
+                    // Set status to "Não aumentado" (ID 2)
+                    const { error } = await supabase
+                      .from("itens_pedido")
+                      .update({ status_up_sell: 2 })
+                      .eq("id", itemId);
+
+                    if (error) throw error;
+
+                    // Register metric
+                    await supabase.from("metricas_upsell").insert({
+                      responsavel_id: user?.id || null,
+                      status_upsell: 2,
+                      pedido_id: pedido?.id || null,
+                      produto_base: itemToKeep.produto?.id || null,
+                      produto_upsell: null, // No up-sell, kept original
+                      variacao_base: itemToKeep.variacao?.id || null,
+                      variacao_upsell: null,
+                      produto_base_nome: itemToKeep.produto?.nome || null,
+                      produto_upsell_nome: null,
+                      variacao_base_nome: itemToKeep.variacao?.nome || null,
+                      variacao_upsell_nome: null,
+                      empresa_id: empresaId || null,
+                    });
+
+                    // Registrar no histórico
+                    try {
+                      const nomeProduto = itemToKeep.variacao?.nome
+                        ? `${itemToKeep.produto?.nome} - ${itemToKeep.variacao.nome}`
+                        : itemToKeep.produto?.nome || "Produto";
+
+                      await registrarHistoricoMovimentacao(
+                        pedido?.id,
+                        `Produto mantido sem up-sell: ${nomeProduto}`,
+                        user?.id,
+                      );
+                    } catch (histErr) {
+                      console.error("Erro ao registrar histórico:", histErr);
+                    }
+
+                    toast({
+                      title: "Produto mantido",
+                      description: "O produto original foi mantido no pedido",
+                    });
+
+                    // Check if all up_cell products are now resolved and auto-liberate
+                    await checkAndAutoLiberatePedido(itemId);
+
+                    setConfirmManterOpen(false);
+                    setItemToKeep(null);
+                    navigate(0);
+                  } catch (err: any) {
+                    console.error("Erro ao manter produto:", err);
+                    toast({
+                      title: "Erro",
+                      description:
+                        err?.message || "Não foi possível manter o produto",
+                      variant: "destructive",
+                    });
+                  }
+                }}
+              >
+                Confirmar
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Wizard Up-Sell: Data -> Forma de Pagamento -> Valor -> Status Up-Sell */}
+        <Dialog open={upSellWizardOpen} onOpenChange={setUpSellWizardOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {isAumentoGratis
+                  ? "Selecionar Data do Aumento Grátis"
+                  : isNormalFlow
+                    ? upSellWizardStep === 1
+                      ? "Selecionar Data"
+                      : upSellWizardStep === 2
+                        ? "Selecionar Forma de Pagamento"
+                        : "Definir Valor"
+                    : upSellWizardStep === 1
+                      ? "Selecionar Data"
+                      : upSellWizardStep === 2
+                        ? "Selecionar Forma de Pagamento"
+                        : upSellWizardStep === 3
+                          ? "Definir Valor"
+                          : "Tipo de Up-Sell"}
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="py-4">
+              {/* Step indicator */}
+              {isAumentoGratis ? (
+                <div className="flex items-center justify-center mb-4 text-xs">
+                  <div
+                    className="font-semibold text-blue-600 cursor-pointer hover:underline"
+                    onClick={() => setUpSellWizardStep(1)}
+                  >
+                    Data
+                  </div>
+                </div>
+              ) : isNormalFlow ? (
+                <div className="flex items-center justify-between mb-4 text-xs">
+                  <div
+                    className={`flex-1 text-center ${upSellWizardStep >= 1 ? "font-semibold text-green-600 cursor-pointer hover:underline" : "text-gray-400"}`}
+                    onClick={() =>
+                      upSellWizardStep > 1 && setUpSellWizardStep(1)
+                    }
+                  >
+                    Data
+                  </div>
+                  <div
+                    className={`flex-1 text-center ${upSellWizardStep >= 2 ? "font-semibold text-green-600 cursor-pointer hover:underline" : "text-gray-400"}`}
+                    onClick={() =>
+                      upSellWizardStep > 2 && setUpSellWizardStep(2)
+                    }
+                  >
+                    Forma Pag.
+                  </div>
+                  <div
+                    className={`flex-1 text-center ${upSellWizardStep >= 3 ? "font-semibold text-green-600" : "text-gray-400"}`}
+                  >
+                    Valor
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between mb-4 text-xs">
+                  <div
+                    className={`flex-1 text-center ${upSellWizardStep >= 1 ? "font-semibold text-green-600 cursor-pointer hover:underline" : "text-gray-400"}`}
+                    onClick={() =>
+                      upSellWizardStep > 1 && setUpSellWizardStep(1)
+                    }
+                  >
+                    Data
+                  </div>
+                  <div
+                    className={`flex-1 text-center ${upSellWizardStep >= 2 ? "font-semibold text-green-600 cursor-pointer hover:underline" : "text-gray-400"}`}
+                    onClick={() =>
+                      upSellWizardStep > 2 && setUpSellWizardStep(2)
+                    }
+                  >
+                    Forma Pag.
+                  </div>
+                  <div
+                    className={`flex-1 text-center ${upSellWizardStep >= 3 ? "font-semibold text-green-600 cursor-pointer hover:underline" : "text-gray-400"}`}
+                    onClick={() =>
+                      upSellWizardStep > 3 && setUpSellWizardStep(3)
+                    }
+                  >
+                    Valor
+                  </div>
+                  <div
+                    className={`flex-1 text-center ${upSellWizardStep >= 4 ? "font-semibold text-green-600" : "text-gray-400"}`}
+                  >
+                    Status
+                  </div>
+                </div>
+              )}
+
+              {upSellWizardStep === 1 && (
+                <div className="text-center">
+                  <input
+                    type="date"
+                    className="mx-auto p-2 border rounded"
+                    value={upSellDate}
+                    onChange={(e) => setUpSellDate(e.target.value)}
+                  />
+                  <div className="mt-4 text-sm text-muted-foreground">
+                    Você selecionou {upSellDate.split("-").reverse().join("/")}
+                  </div>
+                </div>
+              )}
+
+              {upSellWizardStep === 2 && (
+                <div className="text-center space-y-4">
+                  <div className="flex items-center justify-center gap-4">
+                    {["Pix", "Boleto", "Cartão", "Outro"].map((m) => (
+                      <button
+                        key={m}
+                        onClick={() => setUpSellPayment(m)}
+                        className={`px-4 py-2 rounded ${upSellPayment === m ? "ring-2 ring-green-500 bg-white" : "bg-gray-100"}`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2 text-sm">
+                    Você selecionou <strong>{upSellPayment}</strong>
+                  </div>
+                </div>
+              )}
+
+              {upSellWizardStep === 3 && (
+                <div>
+                  <label className="block text-sm text-muted-foreground">
+                    Diferença de valor do up-sell
+                  </label>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="px-3 py-2 bg-gray-100 rounded-l">R$</span>
+                    <Input
+                      value={upSellValueStr}
+                      onChange={(e) => setUpSellValueStr(e.target.value)}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Produto original: R${" "}
+                    {Number(upSellSourceItem?.preco_unitario || 0).toFixed(2)}
+                    <br />
+                    Novo produto: R${" "}
+                    {Number(selectedUpSellProduct?.displayPrice || 0).toFixed(
+                      2,
+                    )}
+                  </p>
+                </div>
+              )}
+
+              {upSellWizardStep === 4 && !isNormalFlow && !isAumentoGratis && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Selecione o tipo de up-sell
+                  </label>
+                  <div className="space-y-2">
+                    {statusUpSellOptions.map((status) => (
+                      <button
+                        key={status.id}
+                        onClick={() => setUpSellStatus(String(status.id))}
+                        className={`w-full p-3 rounded border-2 text-left transition-all ${
+                          upSellStatus === String(status.id)
+                            ? "border-green-500 bg-green-50"
+                            : "border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        <div className="font-medium">{status.status}</div>
+                      </button>
+                    ))}
+                  </div>
+                  {statusUpSellOptions.length === 0 && (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      Nenhum status de up-sell configurado
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <DialogFooter>
+              <div className="flex justify-between w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setUpSellWizardOpen(false);
+                    setUpSellModalOpen(true);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <div>
+                  {isAumentoGratis ? (
+                    <Button
+                      className="bg-blue-600 hover:bg-blue-700 text-white"
+                      disabled={savingUpSell}
+                      onClick={async () => {
+                        if (!pedido || !selectedUpSellProduct) return;
+
+                        setSavingUpSell(true);
+                        try {
+                          const itemId =
+                            upSellSourceItem._sourceIds?.[0] ||
+                            upSellSourceItem.id;
+                          const hasVariations =
+                            selectedUpSellProduct.variacoes_produto &&
+                            selectedUpSellProduct.variacoes_produto.length > 0;
+
+                          // Buscar dimensões do novo produto ou variação
+                          let dimensoes = {
+                            altura: null,
+                            largura: null,
+                            comprimento: null,
+                            peso: null,
+                          };
+                          try {
+                            if (
+                              hasVariations &&
+                              selectedUpSellProduct.selectedVariationId
+                            ) {
+                              const { data: variacaoData } = await supabase
+                                .from("variacoes_produto")
+                                .select("altura, largura, comprimento, peso")
+                                .eq(
+                                  "id",
+                                  selectedUpSellProduct.selectedVariationId,
+                                )
+                                .maybeSingle();
+
+                              if (variacaoData) {
+                                dimensoes = {
+                                  altura: variacaoData.altura,
+                                  largura: variacaoData.largura,
+                                  comprimento: variacaoData.comprimento,
+                                  peso: variacaoData.peso,
+                                };
+                              }
+                            }
+
+                            if (!dimensoes.altura && !dimensoes.peso) {
+                              const { data: produtoData } = await supabase
+                                .from("produtos")
+                                .select("altura, largura, comprimento, peso")
+                                .eq("id", selectedUpSellProduct.id)
+                                .maybeSingle();
+
+                              if (produtoData) {
+                                dimensoes = {
+                                  altura: produtoData.altura,
+                                  largura: produtoData.largura,
+                                  comprimento: produtoData.comprimento,
+                                  peso: produtoData.peso,
+                                };
+                              }
+                            }
+                          } catch (err) {
+                            console.error("Erro ao buscar dimensões:", err);
+                          }
+
+                          // Set status to "Aumento grátis" (ID 4)
+                          const updateData: any = {
+                            produto_id: selectedUpSellProduct.id,
+                            preco_unitario: upSellSourceItem.preco_unitario, // Keep original price
+                            status_up_sell: 4,
+                            altura: dimensoes.altura,
+                            largura: dimensoes.largura,
+                            comprimento: dimensoes.comprimento,
+                            peso: dimensoes.peso,
+                          };
+
+                          if (
+                            hasVariations &&
+                            selectedUpSellProduct.selectedVariationId
+                          ) {
+                            updateData.variacao_id =
+                              selectedUpSellProduct.selectedVariationId;
+                          } else {
+                            updateData.variacao_id = null;
+                          }
+
+                          const { error: updateError } = await supabase
+                            .from("itens_pedido")
+                            .update(updateData)
+                            .eq("id", itemId);
+
+                          if (updateError) throw updateError;
+
+                          // Register metric
+                          await supabase.from("metricas_upsell").insert({
+                            responsavel_id: user?.id || null,
+                            status_upsell: 4,
+                            pedido_id: pedido?.id || null,
+                            produto_base: upSellSourceItem.produto?.id || null,
+                            produto_upsell: selectedUpSellProduct.id || null,
+                            variacao_base:
+                              upSellSourceItem.variacao?.id || null,
+                            variacao_upsell:
+                              selectedUpSellProduct.selectedVariationId || null,
+                            produto_base_nome:
+                              upSellSourceItem.produto?.nome || null,
+                            produto_upsell_nome:
+                              selectedUpSellProduct.nome || null,
+                            variacao_base_nome:
+                              upSellSourceItem.variacao?.nome || null,
+                            variacao_upsell_nome:
+                              selectedUpSellProduct.variacoes_produto?.find(
+                                (v: any) =>
+                                  v.id ===
+                                  selectedUpSellProduct.selectedVariationId,
+                              )?.nome || null,
+                            empresa_id: empresaId || null,
+                          });
+
+                          // Registrar no histórico
+                          try {
+                            const produtoOriginal = upSellSourceItem.variacao
+                              ?.nome
+                              ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
+                              : upSellSourceItem.produto?.nome || "Produto";
+
+                            const variacaoNome =
+                              selectedUpSellProduct.variacoes_produto?.find(
+                                (v: any) =>
+                                  v.id ===
+                                  selectedUpSellProduct.selectedVariationId,
+                              )?.nome;
+                            const produtoNovo = variacaoNome
+                              ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
+                              : selectedUpSellProduct.nome;
+
+                            await registrarHistoricoMovimentacao(
+                              pedido?.id,
+                              `Aumento grátis: ${produtoOriginal} → ${produtoNovo}`,
+                              user?.id,
+                            );
+                          } catch (histErr) {
+                            console.error(
+                              "Erro ao registrar histórico:",
+                              histErr,
+                            );
+                          }
+
+                          toast({
+                            title: "Aumento grátis realizado!",
+                            description:
+                              "Produto substituído sem alteração de valor",
+                          });
+
+                          // Check if all up_cell products are now resolved and auto-liberate
+                          await checkAndAutoLiberatePedido(itemId);
+
+                          setUpSellWizardOpen(false);
+                          setUpSellSourceItem(null);
+                          setSelectedUpSellProduct(null);
+                          setSelectedVariations({});
+                          setIsAumentoGratis(false);
+                          navigate(0);
+                        } catch (err: any) {
+                          console.error(
+                            "Erro ao realizar aumento grátis:",
+                            err,
+                          );
+                          toast({
+                            title: "Erro",
+                            description:
+                              err?.message ||
+                              "Não foi possível realizar o aumento grátis",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setSavingUpSell(false);
+                        }
+                      }}
+                    >
+                      {savingUpSell
+                        ? "Salvando..."
+                        : "Confirmar Aumento Grátis"}
+                    </Button>
+                  ) : isNormalFlow && upSellWizardStep < 3 ? (
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => setUpSellWizardStep((s) => s + 1)}
+                    >
+                      Próxima etapa
+                    </Button>
+                  ) : isNormalFlow && upSellWizardStep === 3 ? (
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      disabled={savingUpSell}
+                      onClick={async () => {
+                        if (!pedido || !selectedUpSellProduct) return;
+
+                        setSavingUpSell(true);
+                        try {
+                          const itemId =
+                            upSellSourceItem._sourceIds?.[0] ||
+                            upSellSourceItem.id;
+                          const hasVariations =
+                            selectedUpSellProduct.variacoes_produto &&
+                            selectedUpSellProduct.variacoes_produto.length > 0;
+
+                          // Buscar dimensões do novo produto ou variação
+                          let dimensoes = {
+                            altura: null,
+                            largura: null,
+                            comprimento: null,
+                            peso: null,
+                          };
+                          try {
+                            if (
+                              hasVariations &&
+                              selectedUpSellProduct.selectedVariationId
+                            ) {
+                              const { data: variacaoData } = await supabase
+                                .from("variacoes_produto")
+                                .select("altura, largura, comprimento, peso")
+                                .eq(
+                                  "id",
+                                  selectedUpSellProduct.selectedVariationId,
+                                )
+                                .maybeSingle();
+
+                              if (variacaoData) {
+                                dimensoes = {
+                                  altura: variacaoData.altura,
+                                  largura: variacaoData.largura,
+                                  comprimento: variacaoData.comprimento,
+                                  peso: variacaoData.peso,
+                                };
+                              }
+                            }
+
+                            if (!dimensoes.altura && !dimensoes.peso) {
+                              const { data: produtoData } = await supabase
+                                .from("produtos")
+                                .select("altura, largura, comprimento, peso")
+                                .eq("id", selectedUpSellProduct.id)
+                                .maybeSingle();
+
+                              if (produtoData) {
+                                dimensoes = {
+                                  altura: produtoData.altura,
+                                  largura: produtoData.largura,
+                                  comprimento: produtoData.comprimento,
+                                  peso: produtoData.peso,
+                                };
+                              }
+                            }
+                          } catch (err) {
+                            console.error("Erro ao buscar dimensões:", err);
+                          }
+
+                          // Set status to "Aumentado" (ID 3)
+                          const updateData: any = {
+                            produto_id: selectedUpSellProduct.id,
+                            preco_unitario: selectedUpSellProduct.displayPrice,
+                            status_up_sell: 3,
+                            altura: dimensoes.altura,
+                            largura: dimensoes.largura,
+                            comprimento: dimensoes.comprimento,
+                            peso: dimensoes.peso,
+                          };
+
+                          if (
+                            hasVariations &&
+                            selectedUpSellProduct.selectedVariationId
+                          ) {
+                            updateData.variacao_id =
+                              selectedUpSellProduct.selectedVariationId;
+                          } else {
+                            updateData.variacao_id = null;
+                          }
+
+                          const { error: updateError } = await supabase
+                            .from("itens_pedido")
+                            .update(updateData)
+                            .eq("id", itemId);
+
+                          if (updateError) throw updateError;
+
+                          // Update pedido valor_total with the difference
+                          const difference = parseCurrencyBR(upSellValueStr);
+                          const currentTotal =
+                            Number(pedido?.valor_total ?? pedido?.total ?? 0) ||
+                            0;
+                          const newTotal = Number(
+                            (currentTotal + difference).toFixed(2),
+                          );
+
+                          const { error: pedidoError } = await supabase
+                            .from("pedidos")
+                            .update({
+                              valor_total: newTotal,
+                              atualizado_em: new Date().toISOString(),
+                            })
+                            .eq("id", pedido.id);
+
+                          if (pedidoError) throw pedidoError;
+
+                          // Registrar entrada de valor do up-sell
+                          try {
+                            const formaNorm = String(upSellPayment || "")
+                              .normalize("NFD")
+                              .replace(/[\u0300-\u036f]/g, "")
+                              .trim()
+                              .toLowerCase();
+                            let formaPagId: number | null = null;
+                            if (paymentMethods) {
+                              const found = Object.entries(paymentMethods).find(
+                                ([, nome]) =>
+                                  String(nome || "")
+                                    .normalize("NFD")
+                                    .replace(/[\u0300-\u036f]/g, "")
+                                    .trim()
+                                    .toLowerCase() === formaNorm,
+                              );
+                              if (found) formaPagId = Number(found[0]);
+                            }
+                            if (formaPagId === null) {
+                              const { data: pmData } = await (supabase as any)
+                                .from("formas_pagamentos")
+                                .select("id,nome");
+                              const found = (pmData || []).find(
+                                (item: any) =>
+                                  String(item.nome || "")
+                                    .normalize("NFD")
+                                    .replace(/[\u0300-\u036f]/g, "")
+                                    .trim()
+                                    .toLowerCase() === formaNorm,
+                              );
+                              if (found) formaPagId = Number(found.id);
+                            }
+                            const { error: entradaErr } = await (
+                              supabase as any
+                            )
+                              .from("entrada_valores")
+                              .insert({
+                                pedido_id: pedido.id,
+                                valor: Number(difference.toFixed(2)),
+                                valor_antigo: Number(currentTotal.toFixed(2)),
+                                responsavel_id: user?.id || null,
+                                forma_pag: formaPagId,
+                                created_at: new Date(
+                                  `${upSellDate}T12:00:00`,
+                                ).toISOString(),
+                              });
+                            if (entradaErr)
+                              console.error(
+                                "[UpSell] Falha ao inserir entrada_valores:",
+                                entradaErr,
+                              );
+                            else
+                              console.log(
+                                "[UpSell] entrada_valores inserido com sucesso",
+                              );
+                          } catch (entradaEx) {
+                            console.error(
+                              "[UpSell] Exceção ao inserir entrada_valores:",
+                              entradaEx,
+                            );
+                          }
+
+                          // Register metric
+                          await supabase.from("metricas_upsell").insert({
+                            responsavel_id: user?.id || null,
+                            status_upsell: 3,
+                            pedido_id: pedido?.id || null,
+                            produto_base: upSellSourceItem.produto?.id || null,
+                            produto_upsell: selectedUpSellProduct.id || null,
+                            variacao_base:
+                              upSellSourceItem.variacao?.id || null,
+                            variacao_upsell:
+                              selectedUpSellProduct.selectedVariationId || null,
+                            produto_base_nome:
+                              upSellSourceItem.produto?.nome || null,
+                            produto_upsell_nome:
+                              selectedUpSellProduct.nome || null,
+                            variacao_base_nome:
+                              upSellSourceItem.variacao?.nome || null,
+                            variacao_upsell_nome:
+                              selectedUpSellProduct.variacoes_produto?.find(
+                                (v: any) =>
+                                  v.id ===
+                                  selectedUpSellProduct.selectedVariationId,
+                              )?.nome || null,
+                            empresa_id: empresaId || null,
+                          });
+
+                          // Registrar no histórico
+                          try {
+                            const produtoOriginal = upSellSourceItem.variacao
+                              ?.nome
+                              ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
+                              : upSellSourceItem.produto?.nome || "Produto";
+
+                            const variacaoNome =
+                              selectedUpSellProduct.variacoes_produto?.find(
+                                (v: any) =>
+                                  v.id ===
+                                  selectedUpSellProduct.selectedVariationId,
+                              )?.nome;
+                            const produtoNovo = variacaoNome
+                              ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
+                              : selectedUpSellProduct.nome;
+
+                            const valorAdicional =
+                              parseCurrencyBR(upSellValueStr);
+
+                            await registrarHistoricoMovimentacao(
+                              pedido?.id,
+                              `Up-sell realizado: ${produtoOriginal} → ${produtoNovo} | Valor adicional: R$ ${valorAdicional.toFixed(2).replace(".", ",")}`,
+                              user?.id,
+                            );
+                          } catch (histErr) {
+                            console.error(
+                              "Erro ao registrar histórico:",
+                              histErr,
+                            );
+                          }
+
+                          toast({
+                            title: "Up-sell realizado com sucesso!",
+                            description: `Produto substituído e valor atualizado`,
+                          });
+
+                          // Check if all up_cell products are now resolved and auto-liberate
+                          await checkAndAutoLiberatePedido(itemId);
+
+                          setUpSellWizardOpen(false);
+                          setUpSellSourceItem(null);
+                          setSelectedUpSellProduct(null);
+                          setSelectedVariations({});
+                          setIsNormalFlow(false);
+                          navigate(0);
+                        } catch (err: any) {
+                          console.error("Erro ao realizar up-sell:", err);
+                          toast({
+                            title: "Erro",
+                            description:
+                              err?.message ||
+                              "Não foi possível realizar o up-sell",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setSavingUpSell(false);
+                        }
+                      }}
+                    >
+                      {savingUpSell ? "Salvando..." : "Confirmar Up-Sell"}
+                    </Button>
+                  ) : upSellWizardStep < 4 ? (
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={() => setUpSellWizardStep((s) => s + 1)}
+                    >
+                      Próxima etapa
+                    </Button>
+                  ) : (
+                    <Button
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      disabled={savingUpSell || !upSellStatus}
+                      onClick={async () => {
+                        if (!pedido || !selectedUpSellProduct) return;
+
+                        if (!upSellStatus) {
+                          toast({
+                            title: "Erro",
+                            description:
+                              "Selecione um tipo de up-sell para continuar",
+                            variant: "destructive",
+                          });
+                          return;
+                        }
+
+                        setSavingUpSell(true);
+                        try {
+                          const itemId =
+                            upSellSourceItem._sourceIds?.[0] ||
+                            upSellSourceItem.id;
+                          const hasVariations =
+                            selectedUpSellProduct.variacoes_produto &&
+                            selectedUpSellProduct.variacoes_produto.length > 0;
+
+                          // Buscar dimensões do novo produto ou variação
+                          let dimensoes = {
+                            altura: null,
+                            largura: null,
+                            comprimento: null,
+                            peso: null,
+                          };
+                          try {
+                            if (
+                              hasVariations &&
+                              selectedUpSellProduct.selectedVariationId
+                            ) {
+                              const { data: variacaoData } = await supabase
+                                .from("variacoes_produto")
+                                .select("altura, largura, comprimento, peso")
+                                .eq(
+                                  "id",
+                                  selectedUpSellProduct.selectedVariationId,
+                                )
+                                .maybeSingle();
+
+                              if (variacaoData) {
+                                dimensoes = {
+                                  altura: variacaoData.altura,
+                                  largura: variacaoData.largura,
+                                  comprimento: variacaoData.comprimento,
+                                  peso: variacaoData.peso,
+                                };
+                              }
+                            }
+
+                            if (!dimensoes.altura && !dimensoes.peso) {
+                              const { data: produtoData } = await supabase
+                                .from("produtos")
+                                .select("altura, largura, comprimento, peso")
+                                .eq("id", selectedUpSellProduct.id)
+                                .maybeSingle();
+
+                              if (produtoData) {
+                                dimensoes = {
+                                  altura: produtoData.altura,
+                                  largura: produtoData.largura,
+                                  comprimento: produtoData.comprimento,
+                                  peso: produtoData.peso,
+                                };
+                              }
+                            }
+                          } catch (err) {
+                            console.error("Erro ao buscar dimensões:", err);
+                          }
+
+                          // Find "Aumentado" status ID
+                          const aumentadoStatus = Object.entries(
+                            statusUpSellMap,
+                          ).find(([_, name]) => name === "Aumentado");
+
+                          // Update the item with the new product and status "Aumentado"
+                          const updateData: any = {
+                            produto_id: selectedUpSellProduct.id,
+                            preco_unitario: selectedUpSellProduct.displayPrice,
+                            status_up_sell: aumentadoStatus
+                              ? parseInt(aumentadoStatus[0])
+                              : upSellStatus
+                                ? parseInt(upSellStatus)
+                                : null,
+                            altura: dimensoes.altura,
+                            largura: dimensoes.largura,
+                            comprimento: dimensoes.comprimento,
+                            peso: dimensoes.peso,
+                          };
+
+                          if (
+                            hasVariations &&
+                            selectedUpSellProduct.selectedVariationId
+                          ) {
+                            updateData.variacao_id =
+                              selectedUpSellProduct.selectedVariationId;
+                          } else {
+                            updateData.variacao_id = null;
+                          }
+
+                          const { error: updateError } = await supabase
+                            .from("itens_pedido")
+                            .update(updateData)
+                            .eq("id", itemId);
+
+                          if (updateError) throw updateError;
+
+                          // Update pedido valor_total with the difference
+                          const difference = parseCurrencyBR(upSellValueStr);
+                          const currentTotal =
+                            Number(pedido?.valor_total ?? pedido?.total ?? 0) ||
+                            0;
+                          const newTotal = Number(
+                            (currentTotal + difference).toFixed(2),
+                          );
+
+                          const { error: pedidoError } = await supabase
+                            .from("pedidos")
+                            .update({
+                              valor_total: newTotal,
+                              atualizado_em: new Date().toISOString(),
+                            })
+                            .eq("id", pedido.id);
+
+                          if (pedidoError) throw pedidoError;
+
+                          // Registrar entrada de valor do up-sell
+                          try {
+                            const formaNorm = String(upSellPayment || "")
+                              .normalize("NFD")
+                              .replace(/[\u0300-\u036f]/g, "")
+                              .trim()
+                              .toLowerCase();
+                            let formaPagId: number | null = null;
+                            if (paymentMethods) {
+                              const found = Object.entries(paymentMethods).find(
+                                ([, nome]) =>
+                                  String(nome || "")
+                                    .normalize("NFD")
+                                    .replace(/[\u0300-\u036f]/g, "")
+                                    .trim()
+                                    .toLowerCase() === formaNorm,
+                              );
+                              if (found) formaPagId = Number(found[0]);
+                            }
+                            if (formaPagId === null) {
+                              const { data: pmData } = await (supabase as any)
+                                .from("formas_pagamentos")
+                                .select("id,nome");
+                              const found = (pmData || []).find(
+                                (item: any) =>
+                                  String(item.nome || "")
+                                    .normalize("NFD")
+                                    .replace(/[\u0300-\u036f]/g, "")
+                                    .trim()
+                                    .toLowerCase() === formaNorm,
+                              );
+                              if (found) formaPagId = Number(found.id);
+                            }
+                            const entradaPayload: Record<string, any> = {
+                              pedido_id: pedido.id,
+                              valor: Number(difference.toFixed(2)),
+                              valor_antigo: Number(currentTotal.toFixed(2)),
+                              responsavel_id: user?.id || null,
+                              forma_pag: formaPagId,
+                              created_at: new Date(
+                                `${upSellDate}T12:00:00`,
+                              ).toISOString(),
+                            };
+                            const { error: entradaErr } = await (
+                              supabase as any
+                            )
+                              .from("entrada_valores")
+                              .insert({
+                                pedido_id: pedido.id,
+                                valor: Number(difference.toFixed(2)),
+                                valor_antigo: Number(currentTotal.toFixed(2)),
+                                responsavel_id: user?.id || null,
+                                forma_pag: formaPagId,
+                                created_at: new Date(
+                                  `${upSellDate}T12:00:00`,
+                                ).toISOString(),
+                              });
+                            if (entradaErr)
+                              console.error(
+                                "[UpSell] Falha ao inserir entrada_valores:",
+                                entradaErr,
+                              );
+                            else
+                              console.log(
+                                "[UpSell] entrada_valores inserido com sucesso",
+                              );
+                          } catch (entradaEx) {
+                            console.error(
+                              "[UpSell] Exceção ao inserir entrada_valores:",
+                              entradaEx,
+                            );
+                          }
+
+                          // Registrar no histórico
+                          try {
+                            const produtoOriginal = upSellSourceItem.variacao
+                              ?.nome
+                              ? `${upSellSourceItem.produto?.nome} - ${upSellSourceItem.variacao.nome}`
+                              : upSellSourceItem.produto?.nome || "Produto";
+
+                            const variacaoNome =
+                              selectedUpSellProduct.variacoes_produto?.find(
+                                (v: any) =>
+                                  v.id ===
+                                  selectedUpSellProduct.selectedVariationId,
+                              )?.nome;
+                            const produtoNovo = variacaoNome
+                              ? `${selectedUpSellProduct.nome} - ${variacaoNome}`
+                              : selectedUpSellProduct.nome;
+
+                            const valorAdicional =
+                              parseCurrencyBR(upSellValueStr);
+                            const tipoUpSell =
+                              statusUpSellMap[parseInt(upSellStatus)] ||
+                              "Up-sell";
+
+                            await registrarHistoricoMovimentacao(
+                              pedido?.id,
+                              `${tipoUpSell}: ${produtoOriginal} → ${produtoNovo} | Valor adicional: R$ ${valorAdicional.toFixed(2).replace(".", ",")}`,
+                              user?.id,
+                            );
+                          } catch (histErr) {
+                            console.error(
+                              "Erro ao registrar histórico:",
+                              histErr,
+                            );
+                          }
+
+                          toast({
+                            title: "Up-sell realizado com sucesso!",
+                            description: `Produto substituído e valor atualizado`,
+                          });
+
+                          setUpSellWizardOpen(false);
+                          setUpSellSourceItem(null);
+                          setSelectedUpSellProduct(null);
+                          setSelectedVariations({});
+                          setIsAumentoGratis(false);
+                          setIsNormalFlow(false);
+                          navigate(0); // Reload page
+                        } catch (err: any) {
+                          console.error("Erro ao realizar up-sell:", err);
+                          toast({
+                            title: "Erro",
+                            description:
+                              err?.message ||
+                              "Não foi possível realizar o up-sell",
+                            variant: "destructive",
+                          });
+                        } finally {
+                          setSavingUpSell(false);
+                        }
+                      }}
+                    >
+                      {savingUpSell ? "Salvando..." : "Confirmar Up-Sell"}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
     </>
   );
 }

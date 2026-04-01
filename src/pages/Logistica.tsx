@@ -410,7 +410,7 @@ export function Logistica() {
     }
   };
 
-  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
 
   const fetchPedidosPorIds = async (ids: string[]): Promise<any[]> => {
     if (!ids.length) return [];
@@ -1013,7 +1013,7 @@ export function Logistica() {
       // fetch pedido details (responsável, plataforma, itens)
       const { data: pedidoData, error: pedErr } = await supabase
         .from('pedidos')
-        .select(`id,id_externo,plataforma_id,urgente,remetente_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
+        .select(`id,id_externo,plataforma_id,urgente,remetente_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
         .eq('id', row.pedido_id)
         .single();
 
@@ -1102,7 +1102,7 @@ export function Logistica() {
 
     setLoadingPedidoManual(true);
     try {
-      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,link_etiqueta,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
+      const selectQuery = `id,id_externo,plataforma_id,urgente,shipping_id,remetente_id,status_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`;
 
       // Tentar buscar por id_externo primeiro
       let { data: pedidoData, error: pedErr } = await supabase
@@ -1195,6 +1195,26 @@ export function Logistica() {
   const handleImprimirEtiqueta = async () => {
     try {
       setLoadingScan(true);
+
+      // Atalho: pedido tem PDFs de etiqueta enviados manualmente
+      const etiquetasUploads = Array.isArray((foundPedido as any)?.etiquetas_uploads)
+        ? ((foundPedido as any).etiquetas_uploads as string[]).filter(Boolean)
+        : [];
+      if (etiquetasUploads.length > 0) {
+        // Abrir cada PDF em nova aba
+        etiquetasUploads.forEach((url) => window.open(url, '_blank'));
+        setConfirmEnvioModal({
+          open: true,
+          link: etiquetasUploads[0],
+          pedidoId: foundPedido.id,
+          pedidoIdExterno: foundPedido.id_externo ?? null,
+          updatePayload: {
+            status_id: ENVIADO_STATUS_ID,
+            data_enviado: new Date().toISOString(),
+          },
+        });
+        return;
+      }
 
       // Atalho: pedido já tem link_etiqueta
       if (foundPedido?.link_etiqueta && String(foundPedido.link_etiqueta).trim() !== '') {
