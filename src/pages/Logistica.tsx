@@ -1622,18 +1622,35 @@ export function Logistica() {
                 return its !== undefined && its.length > 1;
               });
 
-              // ── Pedidos Urgentes ──
+              // ── Pedidos Urgentes (apenas flag urgente=true, excluindo Shopee e ML-org) ──
               const pedidosUrgentes = todosOsPedidos.filter((p: any) => {
-                if (p.urgente) return true;
-                if (p.plataforma_id === SHOPEE_PLATAFORMA_ID) return true;
+                if (p.plataforma_id === SHOPEE_PLATAFORMA_ID) return false;
                 if (p.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID) {
                   const items = platformOrderItems[p.id] || [];
-                  return items.some((it: any) => /organizador/i.test(it.nome || ''));
+                  if (items.some((it: any) => /organizador/i.test(it.nome || ''))) return false;
                 }
-                return false;
+                return p.urgente === true;
               });
 
-              if (pedidosComuns.length === 0 && pedidosIncomuns.length === 0 && pedidosUrgentes.length === 0) return null;
+              // ── Shopee (seção própria) ──
+              const pedidosShopeeUrgentes = todosOsPedidos.filter((p: any) =>
+                p.plataforma_id === SHOPEE_PLATAFORMA_ID
+              );
+
+              // ── Mercado Livre Organizador (seção própria) ──
+              const pedidosMLOrganizador = todosOsPedidos.filter((p: any) => {
+                if (p.plataforma_id !== MERCADO_LIVRE_PLATAFORMA_ID) return false;
+                const items = platformOrderItems[p.id] || [];
+                return items.some((it: any) => /organizador/i.test(it.nome || ''));
+              });
+
+              if (
+                pedidosComuns.length === 0 &&
+                pedidosIncomuns.length === 0 &&
+                pedidosUrgentes.length === 0 &&
+                pedidosShopeeUrgentes.length === 0 &&
+                pedidosMLOrganizador.length === 0
+              ) return null;
 
               // mapa pedido id -> info da plataforma/card
               const plataformaInfoMap = new Map(
@@ -1685,9 +1702,10 @@ export function Logistica() {
                 } catch (err) { console.error(err); }
               };
 
-              const abrirListaUrgentes = async () => {
+              const abrirListaUrgentes = async (pedidos?: any[]) => {
                 try {
-                  const ids = pedidosUrgentes.map((x: any) => x.id).filter(Boolean);
+                  const lista = pedidos ?? pedidosUrgentes;
+                  const ids = lista.map((x: any) => x.id).filter(Boolean);
                   const fullList = sortPedidos(await fetchPedidosPorIds(ids));
                   setOpenPlatformId(null);
                   setModoListaPorPlataforma(true);
@@ -1701,6 +1719,26 @@ export function Logistica() {
                   setTimeout(() => barcodeRef.current?.focus(), 50);
                 } catch (err) { console.error(err); }
               };
+
+              // Agrupar urgentes por plataforma
+              type GrupoUrgente = { plataformaId: string; nome: string; img_url: string | null; pedidos: any[] };
+              const gruposUrgentesMap = new Map<string, GrupoUrgente>();
+              for (const p of pedidosUrgentes) {
+                const info = plataformaInfoMap.get(p.id) as any;
+                const pid = info?.cardId || p.plataforma_id || 'outros';
+                const existing = gruposUrgentesMap.get(pid);
+                if (existing) {
+                  existing.pedidos.push(p);
+                } else {
+                  gruposUrgentesMap.set(pid, {
+                    plataformaId: pid,
+                    nome: info?.nome || 'Outros',
+                    img_url: info?.img_url || null,
+                    pedidos: [p],
+                  });
+                }
+              }
+              const gruposUrgentesArray = Array.from(gruposUrgentesMap.values()).sort((a, b) => b.pedidos.length - a.pedidos.length);
 
               // ── Pacotes Comuns: agrupar por produto ──
               type GrupoComum = { key: string; nomeProduto: string; nomeVariacao: string | null; img_url: string | null; count: number; pedidos: any[] };
@@ -1756,6 +1794,30 @@ export function Logistica() {
                       {grupo.nomeVariacao}
                     </p>
                   )}
+
+                  {/* Plataformas distintas do grupo */}
+                  {(() => {
+                    const plats = Array.from(
+                      new Map(
+                        grupo.pedidos
+                          .map((p: any) => plataformaInfoMap.get(p.id) as any)
+                          .filter(Boolean)
+                          .map((info: any) => [info.cardId ?? info.nome, info])
+                      ).values()
+                    );
+                    if (plats.length === 0) return null;
+                    return (
+                      <div className="flex items-center gap-0.5 flex-wrap justify-center w-full -mt-0.5">
+                        {plats.map((info: any) =>
+                          info.img_url ? (
+                            <img key={info.cardId ?? info.nome} src={info.img_url} alt={info.nome} title={info.nome} className="w-3 h-3 rounded object-cover" />
+                          ) : (
+                            <span key={info.cardId ?? info.nome} className="text-[8px] text-muted-foreground">{info.nome}</span>
+                          )
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
               );
 
@@ -1814,56 +1876,165 @@ export function Logistica() {
 
               return (
                 <>
-                  {/* Urgentes */}
+                  {/* Urgentes — agrupados por plataforma */}
                   {pedidosUrgentes.length > 0 && (
                     <div className="mb-8">
                       <div className="flex items-center justify-between mb-4">
                         <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600, color: '#ef4444' }}>🚨 URGENTES</h3>
-                        <span className="text-sm text-muted-foreground">{pedidosUrgentes.length} pedido(s)</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm text-muted-foreground">{pedidosUrgentes.length} pedido(s) • {gruposUrgentesArray.length} plataforma(s)</span>
+                          <button
+                            className="text-xs text-red-600 hover:underline font-medium"
+                            onClick={() => abrirListaUrgentes()}
+                          >
+                            Ver todos
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-3">
-                        {pedidosUrgentes.map((p: any) => {
-                          const plataformaInfo = plataformaInfoMap.get(p.id) as any;
-                          const items = platformOrderItems[p.id] || [];
-                          const primeiraImg = items[0]?.img_url || null;
-                          const labelMotivo = p.urgente
-                            ? 'Urgente'
-                            : p.plataforma_id === SHOPEE_PLATAFORMA_ID
-                            ? 'Shopee'
-                            : 'ML Org.';
 
-                          return (
+                      <div className="space-y-5">
+                        {gruposUrgentesArray.map((grupo) => (
+                          <div key={grupo.plataformaId}>
+                            {/* Cabeçalho da plataforma */}
                             <div
-                              key={p.id}
-                              className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-red-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                              onClick={abrirListaUrgentes}
+                              className="flex items-center gap-2 mb-2 cursor-pointer group"
+                              onClick={() => abrirListaUrgentes(grupo.pedidos)}
                             >
-                              <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-red-500 text-white font-bold text-[9px] px-1.5 py-0.5 shadow">
-                                {labelMotivo}
-                              </span>
-
-                              {primeiraImg ? (
-                                <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
+                              {grupo.img_url ? (
+                                <img src={grupo.img_url} alt={grupo.nome} className="w-5 h-5 rounded object-cover" />
                               ) : (
-                                <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
+                                <div className="w-5 h-5 rounded bg-red-100 flex items-center justify-center text-[9px] text-red-600 font-bold">
+                                  {grupo.nome.slice(0, 2).toUpperCase()}
+                                </div>
                               )}
-
-                              <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                                {p.id_externo || p.id}
-                              </p>
-
-                              <div className="flex items-center gap-1 -mt-0.5">
-                                {plataformaInfo?.img_url ? (
-                                  <img src={plataformaInfo.img_url} alt={plataformaInfo.nome} className="w-3 h-3 rounded object-cover" />
-                                ) : null}
-                                <span className="text-[9px] text-muted-foreground truncate">{plataformaInfo?.nome || ''}</span>
-                              </div>
+                              <span className="text-sm font-semibold text-red-700 group-hover:underline">
+                                {grupo.nome}
+                              </span>
+                              <span className="text-xs text-muted-foreground">({grupo.pedidos.length})</span>
+                              <span className="text-xs text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">→ abrir lista</span>
                             </div>
-                          );
-                        })}
+
+                            {/* Cards dos pedidos do grupo */}
+                            <div className="flex flex-wrap gap-3">
+                              {grupo.pedidos.map((p: any) => {
+                                const items = platformOrderItems[p.id] || [];
+                                const primeiraImg = items[0]?.img_url || null;
+                                const labelMotivo = p.urgente
+                                  ? 'Urgente'
+                                  : p.plataforma_id === SHOPEE_PLATAFORMA_ID
+                                  ? 'Shopee'
+                                  : 'ML Org.';
+
+                                return (
+                                  <div
+                                    key={p.id}
+                                    className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-red-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                    onClick={() => abrirListaUrgentes(grupo.pedidos)}
+                                  >
+                                    <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-red-500 text-white font-bold text-[9px] px-1.5 py-0.5 shadow">
+                                      {labelMotivo}
+                                    </span>
+
+                                    {primeiraImg ? (
+                                      <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
+                                    ) : (
+                                      <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
+                                    )}
+
+                                    <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                      {p.id_externo || p.id}
+                                    </p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )}
+
+                  {/* Shopee */}
+                  {pedidosShopeeUrgentes.length > 0 && (() => {
+                    const shopeeInfo = plataformaInfoMap.get(pedidosShopeeUrgentes[0].id) as any;
+                    return (
+                      <div className="mb-8">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            {shopeeInfo?.img_url && (
+                              <img src={shopeeInfo.img_url} alt="Shopee" className="w-5 h-5 rounded object-cover" />
+                            )}
+                            <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600, color: '#ee4d2d' }}>SHOPEE</h3>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-muted-foreground">{pedidosShopeeUrgentes.length} pedido(s)</span>
+                            <button className="text-xs text-orange-600 hover:underline font-medium" onClick={() => abrirListaUrgentes(pedidosShopeeUrgentes)}>Abrir todos</button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {pedidosShopeeUrgentes.map((p: any) => {
+                            const items = platformOrderItems[p.id] || [];
+                            const primeiraImg = items[0]?.img_url || null;
+                            return (
+                              <div
+                                key={p.id}
+                                className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-orange-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                onClick={() => abrirListaUrgentes(pedidosShopeeUrgentes)}
+                              >
+                                {primeiraImg ? (
+                                  <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
+                                ) : (
+                                  <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
+                                )}
+                                <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">{p.id_externo || p.id}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Mercado Livre Organizador */}
+                  {pedidosMLOrganizador.length > 0 && (() => {
+                    const mlInfo = plataformaInfoMap.get(pedidosMLOrganizador[0].id) as any;
+                    return (
+                      <div className="mb-8">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            {mlInfo?.img_url && (
+                              <img src={mlInfo.img_url} alt="Mercado Livre" className="w-5 h-5 rounded object-cover" />
+                            )}
+                            <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600, color: '#ffe600', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>MERCADO LIVRE <span style={{ fontSize: '13px', fontWeight: 400, color: '#888' }}>organizador</span></h3>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-sm text-muted-foreground">{pedidosMLOrganizador.length} pedido(s)</span>
+                            <button className="text-xs text-yellow-600 hover:underline font-medium" onClick={() => abrirListaUrgentes(pedidosMLOrganizador)}>Abrir todos</button>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap gap-3">
+                          {pedidosMLOrganizador.map((p: any) => {
+                            const items = platformOrderItems[p.id] || [];
+                            const primeiraImg = items[0]?.img_url || null;
+                            return (
+                              <div
+                                key={p.id}
+                                className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-yellow-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                onClick={() => abrirListaUrgentes(pedidosMLOrganizador)}
+                              >
+                                {primeiraImg ? (
+                                  <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
+                                ) : (
+                                  <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
+                                )}
+                                <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">{p.id_externo || p.id}</p>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Pacotes Comuns */}
                   <div className="mb-8">
