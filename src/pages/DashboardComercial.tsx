@@ -137,6 +137,30 @@ type ConversaoLeadsPorResponsavelRow = {
   ticket_medio_convertido: number;
 };
 
+type VendasPlanilhaRow = {
+  id: number;
+  created_at: string;
+  updated_at: string;
+  id_externo: string | null;
+  obs: string | null;
+  data_venda: string | null;
+  pedido: string | null;
+  cliente: string | null;
+  contato: string | null;
+  item: string | null;
+  descricao: string | null;
+  valor: number;
+  frete: number;
+  pagto: string | null;
+  tx: number;
+  venda: number;
+  prop: number;
+  nf_e: string | null;
+  vendedora_id: string | null;
+  sheet_name: string | null;
+  row_number: number | null;
+};
+
 type DailyChartStyle = 'linha' | 'barras' | 'pizza';
 
 // Mapeamento id DB → chave local (fora do componente para evitar recriação)
@@ -175,6 +199,9 @@ export function DashboardComercial() {
   const [conversaoModalOpen, setConversaoModalOpen] = useState(false);
   const [conversaoMeses, setConversaoMeses] = useState<{ label: string; dados: ConversaoLeadsPorResponsavelRow[] }[]>([]);
   const [loadingConversaoModal, setLoadingConversaoModal] = useState(false);
+  const [vendasPlanilha, setVendasPlanilha] = useState<VendasPlanilhaRow[]>([]);
+  const [vendasPlanilhaNomes, setVendasPlanilhaNomes] = useState<Record<string, string>>({});
+  const [vendasPlanilhaExpanded, setVendasPlanilhaExpanded] = useState<Set<string>>(new Set());
   const [loadingPixDashboard, setLoadingPixDashboard] = useState(false);
   const [pixDashboardError, setPixDashboardError] = useState<string | null>(null);
   const [pixDailyChartStyle, setPixDailyChartStyle] = useState<DailyChartStyle>('linha');
@@ -290,6 +317,7 @@ export function DashboardComercial() {
           { data: metricasCarrinhoData, error: metricasCarrinhoError },
           { data: spreadFreteRpcData, error: spreadFreteRpcError },
           { data: pixRecuperacaoData, error: pixRecuperacaoError },
+          { data: vendasPlanilhaData, error: vendasPlanilhaError },
         ] = await Promise.all([
           (supabase as any).rpc('comercial_get_metricas_leads_pix', {
             p_empresa_id: empresaId ?? null,
@@ -387,6 +415,10 @@ export function DashboardComercial() {
             p_data_fim: endDate.toISOString(),
             p_timezone: 'America/Sao_Paulo',
           }),
+          (supabase as any).rpc('get_vendas_planilha', {
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -405,6 +437,7 @@ export function DashboardComercial() {
         if (metricasCarrinhoError) throw metricasCarrinhoError;
         if (spreadFreteRpcError) console.warn('[SpreadFrete] RPC error:', spreadFreteRpcError);
         if (pixRecuperacaoError) console.warn('[PixRecuperacaoYampi] RPC error:', pixRecuperacaoError);
+        if (vendasPlanilhaError) console.warn('[VendasPlanilha] RPC error:', vendasPlanilhaError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -422,6 +455,7 @@ export function DashboardComercial() {
         setTopProdutosUpsell((topProdutosData || []) as TopProdutosUpsellRow[]);
         setCarrinhoMetrics((metricasCarrinhoData?.[0] || null) as PixMetricsRow | null);
         setPixRecuperacaoYampi((pixRecuperacaoData?.[0] || null) as PixRecuperacaoYampiRow | null);
+        setVendasPlanilha((vendasPlanilhaData || []) as VendasPlanilhaRow[]);
         const _sf = (spreadFreteRpcData as any)?.[0] ?? null;
         setSpreadFreteData(_sf ? {
           receitaFrete: Number(_sf.receita_frete),
@@ -450,6 +484,7 @@ export function DashboardComercial() {
         setTopProdutosUpsell([]);
         setCarrinhoMetrics(null);
         setSpreadFreteData(null);
+        setVendasPlanilha([]);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -479,6 +514,22 @@ export function DashboardComercial() {
         if (!error && data) setConversaoHoje(data as ConversaoLeadsPorResponsavelRow[]);
       });
   }, [empresaId]);
+
+  // Carrega nomes das vendedoras quando os dados de vendas_planilha mudam
+  useEffect(() => {
+    const ids = [...new Set(vendasPlanilha.map(r => r.vendedora_id).filter(Boolean))] as string[];
+    if (ids.length === 0) return;
+    supabase
+      .from('usuarios')
+      .select('id, nome')
+      .in('id', ids)
+      .then(({ data }) => {
+        if (!data) return;
+        const map: Record<string, string> = {};
+        data.forEach((u: { id: string; nome: string }) => { map[u.id] = u.nome; });
+        setVendasPlanilhaNomes(map);
+      });
+  }, [vendasPlanilha]);
 
   const handleOpenConversaoModal = async () => {
     setConversaoModalOpen(true);
@@ -1043,6 +1094,149 @@ export function DashboardComercial() {
                     })()}
                       </div>
                     )}
+
+                    {/* ── VENDAS PLANILHA ──────────────────────────────────── */}
+                    {vendasPlanilha.length > 0 && (() => {
+                      // Agregações globais
+                      const totalBruto = vendasPlanilha.reduce((a, r) => a + Number(r.valor ?? 0), 0);
+                      const totalLiq   = vendasPlanilha.reduce((a, r) => a + Number(r.venda ?? 0), 0);
+                      const ticketMedioGlobal = vendasPlanilha.length > 0 ? totalLiq / vendasPlanilha.length : 0;
+
+                      // Agrupar por vendedora_id
+                      const porVendedora = vendasPlanilha.reduce<Record<string, VendasPlanilhaRow[]>>((acc, row) => {
+                        const key = row.vendedora_id ?? '__sem_vendedora__';
+                        if (!acc[key]) acc[key] = [];
+                        acc[key].push(row);
+                        return acc;
+                      }, {});
+
+                      const grupos = Object.entries(porVendedora)
+                        .map(([vid, rows]) => ({
+                          vendedora_id: vid,
+                          nome: vendasPlanilhaNomes[vid] ?? (vid === '__sem_vendedora__' ? 'Sem vendedora' : vid.substring(0, 8) + '…'),
+                          qtd: rows.length,
+                          bruto: rows.reduce((a, r) => a + Number(r.valor ?? 0), 0),
+                          liq:   rows.reduce((a, r) => a + Number(r.venda ?? 0), 0),
+                          rows,
+                        }))
+                        .sort((a, b) => b.liq - a.liq);
+
+                      return (
+                        <div className="rounded-xl bg-custom-800 border-2 border-custom-500 p-5 space-y-4">
+                          {/* Header */}
+                          <div className="flex items-center justify-between">
+                            <p className="text-[11px] font-bold uppercase tracking-widest text-custom-200">Vendas Planilha</p>
+                            <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-white/20 text-white/60">
+                              {vendasPlanilha.length} registros
+                            </span>
+                          </div>
+
+                          {/* Metric cards */}
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[10px] text-custom-200 uppercase tracking-wide">Valor Bruto Total</p>
+                              <p className="text-xl font-bold text-white mt-1">{formatCurrency(totalBruto)}</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[10px] text-custom-200 uppercase tracking-wide">Venda Líquida Total</p>
+                              <p className="text-xl font-bold text-emerald-400 mt-1">{formatCurrency(totalLiq)}</p>
+                            </div>
+                            <div className="rounded-xl bg-custom-700/40 border border-custom-600 px-4 py-3">
+                              <p className="text-[10px] text-custom-200 uppercase tracking-wide">Ticket Médio</p>
+                              <p className="text-xl font-bold text-white mt-1">{formatCurrency(ticketMedioGlobal)}</p>
+                            </div>
+                          </div>
+
+                          {/* Rows por vendedora */}
+                          <div className="space-y-2">
+                            {grupos.map((g) => {
+                              const pct      = totalLiq > 0 ? (g.liq / totalLiq) * 100 : 0;
+                              const ticket   = g.qtd > 0 ? g.liq / g.qtd : 0;
+                              const expanded = vendasPlanilhaExpanded.has(g.vendedora_id);
+                              return (
+                                <div key={g.vendedora_id} className="rounded-xl bg-custom-700/30 border border-custom-600 overflow-hidden">
+                                  {/* Row header */}
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setVendasPlanilhaExpanded(prev => {
+                                        const next = new Set(prev);
+                                        if (next.has(g.vendedora_id)) next.delete(g.vendedora_id);
+                                        else next.add(g.vendedora_id);
+                                        return next;
+                                      })
+                                    }
+                                    className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-custom-700/40 transition-colors"
+                                  >
+                                    <span className="flex-1 text-sm font-semibold text-white truncate">{g.nome}</span>
+                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-primary/20 border border-primary/30 text-primary/90 flex-shrink-0">
+                                      {g.qtd} {g.qtd === 1 ? 'venda' : 'vendas'}
+                                    </span>
+                                    {/* Metrics */}
+                                    <div className="hidden sm:flex items-center gap-6 flex-shrink-0 text-right ml-4">
+                                      <div>
+                                        <p className="text-[10px] text-custom-200">Valor bruto</p>
+                                        <p className="text-xs font-bold text-white">{formatCurrency(g.bruto)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[10px] text-custom-200">Venda líquida</p>
+                                        <p className="text-xs font-bold text-emerald-400">{formatCurrency(g.liq)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[10px] text-custom-200">Ticket médio</p>
+                                        <p className="text-xs font-bold text-white">{formatCurrency(ticket)}</p>
+                                      </div>
+                                      <div>
+                                        <p className="text-[10px] text-custom-200">Part.</p>
+                                        <p className="text-xs font-bold text-white">{pct.toFixed(0)}%</p>
+                                      </div>
+                                    </div>
+                                    <ChevronDown
+                                      className={`h-4 w-4 text-custom-200 flex-shrink-0 ml-2 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`}
+                                    />
+                                  </button>
+
+                                  {/* Progress bar */}
+                                  <div className="px-4 pb-2">
+                                    <div className="h-1 w-full rounded-full bg-custom-600 overflow-hidden">
+                                      <div
+                                        className="h-full rounded-full bg-primary transition-all duration-500"
+                                        style={{ width: `${Math.min(pct, 100)}%` }}
+                                      />
+                                    </div>
+                                  </div>
+
+                                  {/* Expanded: detalhe das linhas */}
+                                  {expanded && (
+                                    <div className="border-t border-custom-600 divide-y divide-custom-600/40">
+                                      <div className="grid grid-cols-6 px-4 py-1.5 text-[10px] font-semibold text-custom-200 uppercase tracking-wider">
+                                        <span className="col-span-2">Descrição / Cliente</span>
+                                        <span className="text-right">Valor</span>
+                                        <span className="text-right">Frete</span>
+                                        <span className="text-right">Tx</span>
+                                        <span className="text-right">Venda Líq.</span>
+                                      </div>
+                                      {g.rows.map((row, idx) => (
+                                        <div key={`${row.id}-${idx}`} className="grid grid-cols-6 px-4 py-2 text-xs">
+                                          <div className="col-span-2 truncate pr-2 text-white">
+                                            <span className="font-medium">{row.descricao || row.item || '—'}</span>
+                                            {row.cliente && <span className="text-custom-200 ml-1">· {row.cliente}</span>}
+                                          </div>
+                                          <span className="text-right text-custom-200">{formatCurrency(row.valor)}</span>
+                                          <span className="text-right text-custom-200">{formatCurrency(row.frete)}</span>
+                                          <span className="text-right text-custom-200">{formatCurrency(row.tx)}</span>
+                                          <span className="text-right text-emerald-400 font-semibold">{formatCurrency(row.venda)}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* ── RESUMO RECUPERAÇÃO: removido – mantido apenas o formato compacto abaixo ── */}
                     {false && (() => {
