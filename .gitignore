@@ -29,6 +29,8 @@ PROMPT_REPLICAR_POPUP_PERMISSOES.md
 *.sw?
 *.env
 
+.prettier.json
+.eslintrc.json
 # Supabase migrations
 supabase/migrations/
 

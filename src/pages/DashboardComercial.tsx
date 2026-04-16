@@ -267,6 +267,8 @@ export function DashboardComercial() {
     useState<PixConvertedByResponsavelRow[]>([]);
   const [pixRecuperacaoYampi, setPixRecuperacaoYampi] =
     useState<PixRecuperacaoYampiRow | null>(null);
+  const [pixMetricsRecuperados, setPixMetricsRecuperados] =
+    useState<PixRecuperacaoYampiRow | null>(null);
   const [yampiUpsellMetrics, setYampiUpsellMetrics] =
     useState<YampiUpsellMetricsRow | null>(null);
   const [yampiUpsellIncrementoMetrics, setYampiUpsellIncrementoMetrics] =
@@ -468,6 +470,7 @@ export function DashboardComercial() {
           { data: spreadFreteRpcData, error: spreadFreteRpcError },
           { data: pixRecuperacaoData, error: pixRecuperacaoError },
           { data: vendasPlanilhaData, error: vendasPlanilhaError },
+          { data: pixMetricsRecuperadosData, error: pixMetricsRecuperadosError },
         ] = await Promise.all([
           (supabase as any).rpc("comercial_get_metricas_leads_pix", {
             p_empresa_id: empresaId ?? null,
@@ -587,6 +590,12 @@ export function DashboardComercial() {
             p_data_inicio: startDate.toISOString(),
             p_data_fim: endDate.toISOString(),
           }),
+          (supabase as any).rpc("comercial_get_metricas_leads_pix_recuperados", {
+            p_empresa_id: empresaId ?? null,
+            p_data_inicio: startDate.toISOString(),
+            p_data_fim: endDate.toISOString(),
+            p_timezone: "America/Sao_Paulo",
+          }),
         ]);
 
         if (metricasError) throw metricasError;
@@ -614,6 +623,8 @@ export function DashboardComercial() {
           console.warn("[PixRecuperacaoYampi] RPC error:", pixRecuperacaoError);
         if (vendasPlanilhaError)
           console.warn("[VendasPlanilha] RPC error:", vendasPlanilhaError);
+        if (pixMetricsRecuperadosError)
+          console.warn("[PixMetricsRecuperados] RPC error:", pixMetricsRecuperadosError);
         if (!mounted) return;
 
         setPixMetrics((metricasData?.[0] || null) as PixMetricsRow | null);
@@ -650,6 +661,9 @@ export function DashboardComercial() {
           (pixRecuperacaoData?.[0] || null) as PixRecuperacaoYampiRow | null,
         );
         setVendasPlanilha((vendasPlanilhaData || []) as VendasPlanilhaRow[]);
+        setPixMetricsRecuperados(
+          (pixMetricsRecuperadosData?.[0] || null) as PixRecuperacaoYampiRow | null,
+        );
         const _sf = (spreadFreteRpcData as any)?.[0] ?? null;
         setSpreadFreteData(
           _sf
@@ -683,6 +697,7 @@ export function DashboardComercial() {
         setCarrinhoMetrics(null);
         setSpreadFreteData(null);
         setVendasPlanilha([]);
+        setPixMetricsRecuperados(null);
       } finally {
         if (mounted) setLoadingPixDashboard(false);
       }
@@ -1329,6 +1344,11 @@ export function DashboardComercial() {
                     : faturamentoCarrinho > 0 && ticketCarrinho > 0
                       ? Math.round(faturamentoCarrinho / ticketCarrinho)
                       : 0;
+                // Total de carrinhos recuperados baseado em total_convertidos dos responsáveis
+                const totalConvertidosCarrinho = carrinhoConvertedByResponsavel.reduce(
+                  (acc, r) => acc + Number(r.total_convertidos || 0),
+                  0,
+                );
                 // Taxa efetiva de recuperação carrinho
                 const taxaCarrinhoEff =
                   taxaCarrinho > 0
@@ -2178,7 +2198,7 @@ export function DashboardComercial() {
                                     </div>
                                     <div className="flex-shrink-0 text-right">
                                       <span className="text-sm font-bold text-white">
-                                        {totalVendCarrinho}
+                                        {totalConvertidosCarrinho}
                                       </span>
                                       <span className="text-[10px] text-custom-200 ml-0.5">
                                         QTD
@@ -2212,7 +2232,7 @@ export function DashboardComercial() {
                                     </div>
                                     <div className="flex-shrink-0 text-right">
                                       <span className="text-sm font-bold text-white">
-                                        {totalVendCarrinho}
+                                        {totalConvertidosCarrinho}
                                       </span>
                                       <span className="text-[10px] text-custom-200 ml-0.5">
                                         QTD
@@ -2722,9 +2742,9 @@ export function DashboardComercial() {
                               pixMetrics?.total_periodo ??
                               0,
                           );
-                          // Recuperados: via id_yampi → pedidos.id_externo (function comercial_get_recuperacao_pix_yampi)
+                          // Recuperados: via comercial_get_metricas_leads_pix_recuperados
                           const _pixRec2 = Number(
-                            pixRecuperacaoYampi?.total_recuperados ?? 0,
+                            pixMetricsRecuperados?.total_recuperados ?? pixRecuperacaoYampi?.total_recuperados ?? 0,
                           );
                           const _faturamentoPixRec = Number(
                             pixRecuperacaoYampi?.valor_total_recuperado ?? 0,
@@ -2851,7 +2871,7 @@ export function DashboardComercial() {
                                   Carrinhos Recuperados
                                 </p>
                                 <p className="text-2xl font-bold text-white leading-tight">
-                                  {totalVendCarrinhoEff}
+                                  {totalConvertidosCarrinho}
                                 </p>
                               </div>
                             </div>
