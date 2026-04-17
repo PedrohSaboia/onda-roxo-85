@@ -1,0 +1,216 @@
+==============================================================
+  PROMPT — LÓGICA DE UP-SELL NOS ITENS DE PEDIDO (ERP)
+==============================================================
+
+Você está trabalhando em um sistema ERP construído com React + TypeScript
+(Vite) e banco de dados Supabase (PostgreSQL). O sistema possui uma lógica
+de Up-Sell integrada aos itens de pedido. Abaixo está a descrição completa
+desta lógica.
+
+--------------------------------------------------------------
+1. CONCEITO DE PRODUTO COM UP-CELL
+--------------------------------------------------------------
+Um produto pode ter a flag `up_cell = true` na tabela `produtos`.
+Isso indica que ele é um produto candidato a up-sell — ou seja, quando
+adicionado a um pedido, o operador precisa resolver se fará o up-sell
+(substituição por um produto de maior valor ou diferente), se manterá o
+produto original ou se oferecerá um upgrade gratuito.
+
+Cada produto marcado como `up_cell` também possui o campo
+`lista_id_upsell: UUID[]` — um array de IDs de produtos que podem ser
+oferecidos como substituição de up-sell.
+
+--------------------------------------------------------------
+2. STATUS DO UP-SELL (`status_up_sell` em `itens_pedido`)
+--------------------------------------------------------------
+A coluna `status_up_sell` (FK → tabela `status_upsell`) rastreia o estado
+de cada item individualmente. Os IDs padrão são:
+
+  ID 1 → "Aguardando aumento"   — padrão ao adicionar produto up_cell
+  ID 2 → "Não aumentado"        — operador decidiu MANTER o produto original
+  ID 3 → "Aumentado"            — up-sell pago realizado com sucesso
+  ID 4 → "Aumento grátis"       — up-sell gratuito (sem cobrança adicional)
+
+--------------------------------------------------------------
+3. AO ADICIONAR UM PRODUTO AO PEDIDO
+--------------------------------------------------------------
+Quando um produto com `up_cell = true` é adicionado ao pedido via modal:
+
+  a) Busca-se o ID do status "Aguardando aumento" na tabela `status_upsell`
+     filtrando pelo nome (status ILIKE '%aguardando%').
+  b) O campo `status_up_sell` do item inserido em `itens_pedido` recebe
+     esse ID automaticamente.
+  c) Produtos com `up_cell = true` NÃO são agrupados com outros itens
+     idênticos na exibição — cada unidade aparece separadamente para
+     permitir up-sell individual.
+
+--------------------------------------------------------------
+4. FLUXO DE UP-SELL (MODAL DE SELEÇÃO)
+--------------------------------------------------------------
+O operador clica no botão de up-sell de um item (visível apenas para
+itens com `up_cell = true` e `status_up_sell = 1 | null`).
+
+  Passo 1 — Modal de seleção:
+    - Carrega `lista_id_upsell` do produto base.
+    - Busca os produtos substituintes na tabela `produtos`.
+    - O operador seleciona o produto de up-sell (e variação, se houver).
+
+  Passo 2 — Escolha do tipo de up-sell:
+    Existem 3 caminhos após selecionar o produto:
+
+    A) "Up-sell normal" (fluxo de 4 etapas — isNormalFlow = false):
+       Etapa 1 → Selecionar Data do pagamento
+       Etapa 2 → Forma de Pagamento (Pix / Boleto / Cartão / Outro)
+       Etapa 3 → Valor adicional (diferença)
+       Etapa 4 → Tipo de Up-Sell (opções cadastradas em `status_upsell`)
+
+    B) "Up-sell rápido" (fluxo de 3 etapas — isNormalFlow = true):
+       Etapa 1 → Selecionar Data
+       Etapa 2 → Forma de Pagamento
+       Etapa 3 → Valor adicional
+       (status é determinado automaticamente como "Aumentado")
+
+    C) "Aumento grátis" (fluxo de 1 etapa — isAumentoGratis = true):
+       Etapa 1 → Selecionar Data
+       (sem cobrança adicional, preço original mantido)
+
+    D) "Manter produto" (sem wizard):
+       O operador confirma que NÃO fará o up-sell.
+
+--------------------------------------------------------------
+5. O QUE ACONTECE AO CONFIRMAR CADA TIPO
+--------------------------------------------------------------
+
+  ► Up-sell pago (fluxos A e B):
+    - Atualiza `itens_pedido`:
+        produto_id      → novo produto selecionado
+        variacao_id     → nova variação (ou null)
+        preco_unitario  → preço do novo produto (selectedUpSellProduct.displayPrice)
+        status_up_sell  → 3 ("Aumentado")
+        altura/largura/comprimento/peso → dimensões do novo produto/variação
+    - Atualiza `pedidos.valor_total` somando a diferença de valor.
+    - Insere registro em `entrada_valores`:
+        pedido_id, valor (diferença), valor_antigo, responsavel_id,
+        forma_pag (FK → formas_pagamentos), created_at (data selecionada)
+    - Insere métrica em `metricas_upsell` com `status_upsell = 3`.
+    - Registra histórico: "Up-sell realizado: Produto A → Produto B | Valor adicional: R$ X,XX"
+
+  ► Aumento grátis (fluxo C):
+    - Atualiza `itens_pedido`:
+        produto_id      → novo produto
+        variacao_id     → nova variação (ou null)
+        preco_unitario  → MANTÉM o preço original (sem cobrança)
+        status_up_sell  → 4 ("Aumento grátis")
+        dimensões       → do novo produto/variação
+    - NÃO atualiza `valor_total` nem insere `entrada_valores`.
+    - Insere métrica em `metricas_upsell` com `status_upsell = 4`.
+    - Registra histórico indicando aumento grátis.
+
+  ► Manter produto (opção D):
+    - Atualiza `itens_pedido.status_up_sell = 2` ("Não aumentado").
+    - NÃO troca produto, NÃO altera preço.
+    - Insere métrica em `metricas_upsell` com `status_upsell = 2`,
+      produto_upsell = null.
+    - Registra histórico de manutenção do produto original.
+
+--------------------------------------------------------------
+6. LÓGICA DE AUTO-LIBERAÇÃO DO PEDIDO (`checkAndAutoLiberatePedido`)
+--------------------------------------------------------------
+Após cada resolução de up-sell (UpSell pago / grátis / Manter), a função
+`checkAndAutoLiberatePedido(excludeItemId)` é chamada automaticamente.
+
+  Regra 1: Se o pedido tem pelo menos 1 produto SEM `up_cell`
+    → NÃO auto-libera. O botão manual "Liberar Pedido" ficará visível.
+
+  Regra 2: Se TODOS os produtos do pedido têm `up_cell`
+    → Auto-libera quando TODOS saem do status 1 (aguardando).
+
+  Regra 3 (caso especial): Se há apenas 1 item no pedido e é `up_cell`
+    → Auto-libera imediatamente ao resolver esse único item.
+
+  Ao auto-liberar:
+    - pedidos.pedido_liberado  → true
+    - pedidos.status_id        → LOGISTICA_STATUS_ID
+    - pedidos.etiqueta_envio_id → ETIQUETA_PENDENTE_ID
+    - Registra no histórico: "Pedido liberado automaticamente (up-sell resolvido)"
+
+--------------------------------------------------------------
+7. LIBERAÇÃO MANUAL DO PEDIDO
+--------------------------------------------------------------
+O botão "Liberar Pedido" aparece apenas quando:
+  - pedido_liberado = false
+  - Existe ao menos 1 item SEM `up_cell`
+
+Ao clicar:
+  1. Verifica se há itens com `up_cell = true` e `status_up_sell = 1 | null`.
+  2. Se houver pendentes → exibe modal de alerta listando os produtos não resolvidos.
+  3. Se todos resolvidos → libera o pedido (pedido_liberado, status, etiqueta).
+
+--------------------------------------------------------------
+8. TABELA `metricas_upsell` — ESTRUTURA DOS REGISTROS
+--------------------------------------------------------------
+Campos registrados a cada ação de up-sell:
+
+  responsavel_id       — UUID do usuário que realizou a ação
+  status_upsell        — 2 (manter), 3 (aumentado), 4 (grátis)
+  pedido_id            — UUID do pedido
+  produto_base         — UUID do produto original
+  produto_upsell       — UUID do produto substituto (null se "manter")
+  variacao_base        — UUID da variação original
+  variacao_upsell      — UUID da nova variação (null se "manter")
+  produto_base_nome    — nome do produto original
+  produto_upsell_nome  — nome do novo produto
+  variacao_base_nome   — nome da variação original
+  variacao_upsell_nome — nome da nova variação
+  empresa_id           — UUID da empresa
+
+--------------------------------------------------------------
+9. INTEGRAÇÃO YAMPI (Edge Function `pedido-pago-yampi`)
+--------------------------------------------------------------
+Quando um webhook da Yampi sinaliza um pedido com `resource.is_upsell = true`:
+
+  1. Busca o cliente mais recente com o mesmo CPF em `clientes`.
+  2. Recupera o `pedido_id` do pedido original desse cliente.
+  3. Adiciona os novos itens do webhook diretamente nesse pedido existente
+     (em `itens_pedido`), sem criar um novo pedido.
+
+Isso garante que pedidos de up-sell originados pela Yampi sejam agregados
+ao pedido principal do cliente no ERP.
+
+--------------------------------------------------------------
+10. PÁGINAS QUE IMPLEMENTAM ESTA LÓGICA
+--------------------------------------------------------------
+  - src/pages/Pedido.tsx            → visão do time Comercial
+  - src/pages/PedidoContabilidade.tsx → visão do time de Contabilidade
+
+Ambas compartilham a mesma lógica de up-sell descrita acima.
+A função `checkAndAutoLiberatePedido` está duplicada nas duas páginas
+com comportamento idêntico.
+
+--------------------------------------------------------------
+11. ESTADOS REACT ENVOLVIDOS (UP-SELL)
+--------------------------------------------------------------
+  upSellModalOpen         — controla abertura do modal de seleção de produto
+  upSellSourceItem        — item de pedido de origem (produto com up_cell)
+  upSellProducts          — lista de produtos substitutos disponíveis
+  selectedUpSellProduct   — produto substituto selecionado
+  selectedVariations      — variações selecionadas por produto
+  upSellWizardOpen        — controla abertura do wizard de confirmação
+  upSellWizardStep        — etapa atual do wizard (1–4)
+  isNormalFlow            — true = fluxo de 3 etapas; false = 4 etapas
+  isAumentoGratis         — true = fluxo de 1 etapa (grátis)
+  upSellDate              — data selecionada no wizard
+  upSellPayment           — forma de pagamento selecionada
+  upSellValueStr          — valor adicional digitado (string BR)
+  upSellStatus            — ID do tipo de up-sell selecionado na etapa 4
+  statusUpSellOptions     — opções da tabela `status_upsell`
+  statusUpSellMap         — Map { id → nome } para lookup rápido
+  savingUpSell            — loading enquanto salva
+  pendingUpSellAlertOpen  — alerta de itens com up-sell pendente
+  pendingUpSellProducts   — lista de itens ainda pendentes
+  itemToKeep              — item selecionado para "Manter" (confirmação)
+  confirmManterOpen       — modal de confirmação de "Manter"
+
+==============================================================
+FIM DO PROMPT
+==============================================================
