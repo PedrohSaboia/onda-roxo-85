@@ -2,7 +2,7 @@ export interface Usuario {
   id: string;
   nome: string;
   email: string;
-  papel: 'admin' | 'operador';
+  papel: "admin" | "operador";
   avatar?: string;
   ativo: boolean;
   criadoEm: string;
@@ -73,7 +73,7 @@ export interface ItemPedido {
   atualizadoEm: string;
 }
 
-export type EtiquetaEnvio = 'NAO_LIBERADO' | 'PENDENTE' | 'DISPONIVEL';
+export type EtiquetaEnvio = "NAO_LIBERADO" | "PENDENTE" | "DISPONIVEL";
 
 export interface TipoEtiqueta {
   id: string;
@@ -103,10 +103,16 @@ export interface Pedido {
   itens: ItemPedido[];
   responsavel?: Usuario;
   plataforma?: Plataforma;
-  transportadora?: { id?: string; nome?: string; imagemUrl?: string; raw?: any };
+  transportadora?: {
+    id?: string;
+    nome?: string;
+    imagemUrl?: string;
+    raw?: any;
+  };
   status?: Status;
   corDoPedido?: string;
   foiDuplicado?: boolean;
+  retirada?: boolean;
   etiqueta_ml?: boolean;
   criadoEm: string;
   atualizadoEm: string;

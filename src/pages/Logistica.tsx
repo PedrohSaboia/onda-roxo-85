@@ -1,36 +1,74 @@
-import { useState, useEffect, useRef } from 'react';
-import { supabase } from '@/integrations/supabase/client';
-import { Truck, CheckCircle, Clock, XCircle, RefreshCw, X, ChevronLeft, ChevronRight, ChevronDown, Users, TriangleAlert, Copy, Check } from 'lucide-react';
-import { FaBoxesStacked } from 'react-icons/fa6';
-import { HiFilter } from 'react-icons/hi';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { mockPedidos } from '@/data/mockData';
-import { Pedido, EtiquetaEnvio } from '@/types';
-import { useToast } from '@/hooks/use-toast';
-import { Avatar } from '@/components/ui/avatar';
-import { useAuth } from '@/hooks/useAuth';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { LogisticaSidebar } from '@/components/layout/LogisticaSidebar';
-import { registrarHistoricoMovimentacao } from '@/lib/historicoMovimentacoes';
+import { useState, useEffect, useRef } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  Truck,
+  CheckCircle,
+  Clock,
+  XCircle,
+  RefreshCw,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ChevronDown,
+  Users,
+  TriangleAlert,
+  Copy,
+  Check,
+} from "lucide-react";
+import { FaBoxesStacked } from "react-icons/fa6";
+import { HiFilter } from "react-icons/hi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { mockPedidos } from "@/data/mockData";
+import { Pedido, EtiquetaEnvio } from "@/types";
+import { useToast } from "@/hooks/use-toast";
+import { Avatar } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/useAuth";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { LogisticaSidebar } from "@/components/layout/LogisticaSidebar";
+import { registrarHistoricoMovimentacao } from "@/lib/historicoMovimentacoes";
 
 export function Logistica() {
-  const MERCADO_LIVRE_PLATAFORMA_ID = '3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec';
-  const SHOPEE_PLATAFORMA_ID = 'c22b2def-47fc-4fbb-aab1-660c951734c7';
-  const ENVIADO_STATUS_ID = 'fa6b38ba-1d67-4bc3-821e-ab089d641a25';
-  const LOGISTICA_STATUS_ID = '3473cae9-47c8-4b85-96af-b41fe0e15fa9';
-  const ITEM_PRIORITARIO_ML_ID = 'ab8a89a1-aa95-4a98-99c2-eaa3de670462';
+  const MERCADO_LIVRE_PLATAFORMA_ID = "3e5a2b44-245a-4be9-a0b1-ef67d83fd8ec";
+  const SHOPEE_PLATAFORMA_ID = "c22b2def-47fc-4fbb-aab1-660c951734c7";
+  const ENVIADO_STATUS_ID = "fa6b38ba-1d67-4bc3-821e-ab089d641a25";
+  const LOGISTICA_STATUS_ID = "3473cae9-47c8-4b85-96af-b41fe0e15fa9";
+  const ITEM_PRIORITARIO_ML_ID = "ab8a89a1-aa95-4a98-99c2-eaa3de670462";
 
-  type ProdutoFiltro = { id: string; nome: string; tipo: 'produto' | 'variacao'; variacaoNome?: string };
+  type ProdutoFiltro = {
+    id: string;
+    nome: string;
+    tipo: "produto" | "variacao";
+    variacaoNome?: string;
+  };
 
-  const [barcode, setBarcode] = useState('');
+  const [barcode, setBarcode] = useState("");
   const barcodeRef = useRef<HTMLInputElement | null>(null);
   const { user, empresaId } = useAuth();
-  
+
   // Estados para a etiqueta ML
   const [gerandoEtiquetaML, setGerandoEtiquetaML] = useState(false);
   const [etiquetaMLModalOpen, setEtiquetaMLModalOpen] = useState(false);
@@ -46,11 +84,12 @@ export function Logistica() {
 
   // Estados para envio por pedido
   const [pedidoIdModalOpen, setPedidoIdModalOpen] = useState(false);
-  const [pedidoIdInput, setPedidoIdInput] = useState('');
+  const [pedidoIdInput, setPedidoIdInput] = useState("");
   const [loadingPedidoManual, setLoadingPedidoManual] = useState(false);
-  
+
   // Estados para pedido já enviado
-  const [pedidoJaEnviadoModalOpen, setPedidoJaEnviadoModalOpen] = useState(false);
+  const [pedidoJaEnviadoModalOpen, setPedidoJaEnviadoModalOpen] =
+    useState(false);
   const [pedidoJaEnviado, setPedidoJaEnviado] = useState<any | null>(null);
 
   // Modal de confirmação de envio (após abrir link da etiqueta)
@@ -61,7 +100,8 @@ export function Logistica() {
     pedidoIdExterno: string | null;
     updatePayload: Record<string, any>;
   };
-  const [confirmEnvioModal, setConfirmEnvioModal] = useState<ConfirmEnvioData | null>(null);
+  const [confirmEnvioModal, setConfirmEnvioModal] =
+    useState<ConfirmEnvioData | null>(null);
   const confirmBtnRef = useRef<HTMLButtonElement | null>(null);
 
   // User ID para histórico
@@ -72,34 +112,41 @@ export function Logistica() {
     setLoadingSaldo(true);
     try {
       // Obter token de sessão do usuário autenticado
-      const { data: { session } } = await supabase.auth.getSession();
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
       if (!session) {
-        console.error('Usuário não autenticado');
+        console.error("Usuário não autenticado");
         return;
       }
-      
-      const response = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+
+      const response = await fetch(
+        "https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
         },
-      });
+      );
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Erro desconhecido' }));
-        throw new Error(errorData.message || 'Erro ao buscar saldo');
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: "Erro desconhecido" }));
+        throw new Error(errorData.message || "Erro ao buscar saldo");
       }
 
       const data = await response.json();
-      console.log('Saldo Melhor Envio:', data);
-      
+      console.log("Saldo Melhor Envio:", data);
+
       if (data?.balance !== undefined) {
         setSaldoMelhorEnvio(data.balance);
       }
     } catch (error) {
-      console.error('Erro ao buscar saldo do Melhor Envio:', error);
+      console.error("Erro ao buscar saldo do Melhor Envio:", error);
     } finally {
       setLoadingSaldo(false);
     }
@@ -111,34 +158,55 @@ export function Logistica() {
   const [foundItemIds, setFoundItemIds] = useState<string[]>([]);
   const [itemInputs, setItemInputs] = useState<Record<string, string>>({});
   const itemRefs = useRef<Record<string, HTMLInputElement | null>>({});
-  const [itemStatus, setItemStatus] = useState<Record<string, 'idle' | 'success' | 'error'>>({});
-  
+  const [itemStatus, setItemStatus] = useState<
+    Record<string, "idle" | "success" | "error">
+  >({});
+
   // Estado para dados agrupados da view (usado na seção de bipagem de itens)
-  const [gruposAgrupados, setGruposAgrupados] = useState<Record<string, { nome_completo: string; quantidade_total: number }>>({});
+  const [gruposAgrupados, setGruposAgrupados] = useState<
+    Record<string, { nome_completo: string; quantidade_total: number }>
+  >({});
 
   // logística view items (cards)
-  type LogItem = { produto_id: string | null; variacao_id: string | null; quantidade_total: number; produto?: any; variacao?: any };
+  type LogItem = {
+    produto_id: string | null;
+    variacao_id: string | null;
+    quantidade_total: number;
+    produto?: any;
+    variacao?: any;
+  };
   const [logItems, setLogItems] = useState<LogItem[]>([]);
   const [loadingLogItems, setLoadingLogItems] = useState(false);
   const [logItemsError, setLogItemsError] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
-  const [plataformasList, setPlataformasList] = useState<Array<{ id: string; nome: string }>>([]);
+  const [plataformasList, setPlataformasList] = useState<
+    Array<{ id: string; nome: string }>
+  >([]);
   // cards por plataforma (nova exibição de itens a enviar)
   const [plataformasCards, setPlataformasCards] = useState<Array<any>>([]);
   const [loadingPlataformaCards, setLoadingPlataformaCards] = useState(false);
   const [openPlatformId, setOpenPlatformId] = useState<string | null>(null);
-  const [platformOrderItems, setPlatformOrderItems] = useState<Record<string, any[]>>({});
+  const [platformOrderItems, setPlatformOrderItems] = useState<
+    Record<string, any[]>
+  >({});
   const PLATFORM_PAGE_SIZE = 4;
   const [platformPage, setPlatformPage] = useState<Record<string, number>>({});
-  const [filterPlataformaId, setFilterPlataformaId] = useState('');
-  const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState('');
-  const [produtosList, setProdutosList] = useState<Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>>([]);
-  const [produtoSearchTerm, setProdutoSearchTerm] = useState('');
+  const [filterPlataformaId, setFilterPlataformaId] = useState("");
+  const [tempFilterPlataformaId, setTempFilterPlataformaId] = useState("");
+  const [produtosList, setProdutosList] = useState<
+    Array<{ id: string; nome: string; sku: string; temVariacoes: boolean }>
+  >([]);
+  const [produtoSearchTerm, setProdutoSearchTerm] = useState("");
   const [filterProdutos, setFilterProdutos] = useState<ProdutoFiltro[]>([]);
-  const [tempFilterProdutos, setTempFilterProdutos] = useState<ProdutoFiltro[]>([]);
+  const [tempFilterProdutos, setTempFilterProdutos] = useState<ProdutoFiltro[]>(
+    [],
+  );
   const [showVariacoesModal, setShowVariacoesModal] = useState(false);
-  const [variacoesList, setVariacoesList] = useState<Array<{ id: string; nome: string; produtoId: string; produtoNome: string }>>([]);
-  const [selectedProdutoParaVariacao, setSelectedProdutoParaVariacao] = useState<{ id: string; nome: string } | null>(null);
+  const [variacoesList, setVariacoesList] = useState<
+    Array<{ id: string; nome: string; produtoId: string; produtoNome: string }>
+  >([]);
+  const [selectedProdutoParaVariacao, setSelectedProdutoParaVariacao] =
+    useState<{ id: string; nome: string } | null>(null);
   const [modoListaPorPlataforma, setModoListaPorPlataforma] = useState(false);
   const [pedidosFiltrados, setPedidosFiltrados] = useState<any[]>([]);
   const [loadingPedidosFiltrados, setLoadingPedidosFiltrados] = useState(false);
@@ -148,25 +216,44 @@ export function Logistica() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   // Modal: Pedidos do Produto
-  type ProdutoModalItem = { produto_id: string | null; variacao_id: string | null; nomeProduto: string; nomeVariacao: string | null; imgUrl: string | null };
-  const [produtoPedidosModal, setProdutoPedidosModal] = useState<{ open: boolean; item: ProdutoModalItem | null; pedidos: any[]; loading: boolean }>({ open: false, item: null, pedidos: [], loading: false });
+  type ProdutoModalItem = {
+    produto_id: string | null;
+    variacao_id: string | null;
+    nomeProduto: string;
+    nomeVariacao: string | null;
+    imgUrl: string | null;
+  };
+  const [produtoPedidosModal, setProdutoPedidosModal] = useState<{
+    open: boolean;
+    item: ProdutoModalItem | null;
+    pedidos: any[];
+    loading: boolean;
+  }>({ open: false, item: null, pedidos: [], loading: false });
   const [copiedPedidoId, setCopiedPedidoId] = useState<string | null>(null);
 
   const handleCopyPedidoId = (id: string) => {
-    navigator.clipboard.writeText(id).then(() => {
-      setCopiedPedidoId(id);
-      setTimeout(() => setCopiedPedidoId(null), 2000);
-    }).catch(() => {
-      toast({ title: 'Erro', description: 'Não foi possível copiar o ID', variant: 'destructive' });
-    });
+    navigator.clipboard
+      .writeText(id)
+      .then(() => {
+        setCopiedPedidoId(id);
+        setTimeout(() => setCopiedPedidoId(null), 2000);
+      })
+      .catch(() => {
+        toast({
+          title: "Erro",
+          description: "Não foi possível copiar o ID",
+          variant: "destructive",
+        });
+      });
   };
 
   const pedidoTemItemPrioritario = (pedido: any) => {
     const itens = pedido?.itens_pedido || [];
-    return itens.some((item: any) =>
-      item?.id === ITEM_PRIORITARIO_ML_ID ||
-      item?.produto_id === ITEM_PRIORITARIO_ML_ID ||
-      item?.variacao_id === ITEM_PRIORITARIO_ML_ID
+    return itens.some(
+      (item: any) =>
+        item?.id === ITEM_PRIORITARIO_ML_ID ||
+        item?.produto_id === ITEM_PRIORITARIO_ML_ID ||
+        item?.variacao_id === ITEM_PRIORITARIO_ML_ID,
     );
   };
 
@@ -174,13 +261,21 @@ export function Logistica() {
   const sortPedidos = (pedidos: any[]): any[] => {
     return [...pedidos].sort((a, b) => {
       // 1. Itens prioritários do ML (só disponível com dados completos)
-      const aItemML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(a);
-      const bItemML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && pedidoTemItemPrioritario(b);
+      const aItemML =
+        a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID &&
+        pedidoTemItemPrioritario(a);
+      const bItemML =
+        b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID &&
+        pedidoTemItemPrioritario(b);
       if (aItemML !== bItemML) return aItemML ? -1 : 1;
 
       // 2. ML com shipping_id (só disponível com dados completos)
-      const aShipML = a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(a?.shipping_id || '').trim();
-      const bShipML = b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID && !!String(b?.shipping_id || '').trim();
+      const aShipML =
+        a?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID &&
+        !!String(a?.shipping_id || "").trim();
+      const bShipML =
+        b?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID &&
+        !!String(b?.shipping_id || "").trim();
       if (aShipML !== bShipML) return aShipML ? -1 : 1;
 
       // 3. Urgente primeiro
@@ -194,11 +289,14 @@ export function Logistica() {
       if (aTime !== bTime) return aTime - bTime;
 
       // 5. Tiebreaker estável: UUID
-      return String(a?.id || '').localeCompare(String(b?.id || ''));
+      return String(a?.id || "").localeCompare(String(b?.id || ""));
     });
   };
 
-  const filterProdutosKey = filterProdutos.map((p) => `${p.tipo}:${p.id}`).sort().join('|');
+  const filterProdutosKey = filterProdutos
+    .map((p) => `${p.tipo}:${p.id}`)
+    .sort()
+    .join("|");
 
   const buscarProdutos = async (termo: string) => {
     if (!termo || termo.length < 2) {
@@ -208,9 +306,9 @@ export function Logistica() {
 
     try {
       const { data, error } = await supabase
-        .from('produtos')
-        .select('id, nome, sku, variacoes_produto(id)')
-        .ilike('nome', `%${termo}%`)
+        .from("produtos")
+        .select("id, nome, sku, variacoes_produto(id)")
+        .ilike("nome", `%${termo}%`)
         .limit(20);
 
       if (error) throw error;
@@ -218,24 +316,28 @@ export function Logistica() {
       const produtos = (data || []).map((p: any) => ({
         id: p.id,
         nome: p.nome,
-        sku: p.sku || '',
-        temVariacoes: (p.variacoes_produto && p.variacoes_produto.length > 0),
+        sku: p.sku || "",
+        temVariacoes: p.variacoes_produto && p.variacoes_produto.length > 0,
       }));
 
       setProdutosList(produtos);
     } catch (err) {
-      console.error('Erro ao buscar produtos:', err);
-      toast({ title: 'Erro', description: 'Não foi possível buscar produtos', variant: 'destructive' });
+      console.error("Erro ao buscar produtos:", err);
+      toast({
+        title: "Erro",
+        description: "Não foi possível buscar produtos",
+        variant: "destructive",
+      });
     }
   };
 
   const carregarVariacoes = async (produtoId: string, produtoNome: string) => {
     try {
       const { data, error } = await supabase
-        .from('variacoes_produto')
-        .select('id, nome')
-        .eq('produto_id', produtoId)
-        .order('ordem');
+        .from("variacoes_produto")
+        .select("id, nome")
+        .eq("produto_id", produtoId)
+        .order("ordem");
 
       if (error) throw error;
 
@@ -250,70 +352,115 @@ export function Logistica() {
       setSelectedProdutoParaVariacao({ id: produtoId, nome: produtoNome });
       setShowVariacoesModal(true);
     } catch (err) {
-      console.error('Erro ao carregar variações:', err);
-      toast({ title: 'Erro', description: 'Não foi possível carregar variações', variant: 'destructive' });
+      console.error("Erro ao carregar variações:", err);
+      toast({
+        title: "Erro",
+        description: "Não foi possível carregar variações",
+        variant: "destructive",
+      });
     }
   };
 
-  const selecionarProduto = async (produto: { id: string; nome: string; temVariacoes: boolean }) => {
+  const selecionarProduto = async (produto: {
+    id: string;
+    nome: string;
+    temVariacoes: boolean;
+  }) => {
     if (produto.temVariacoes) {
       await carregarVariacoes(produto.id, produto.nome);
       return;
     }
 
-    if (!tempFilterProdutos.find((p) => p.id === produto.id && p.tipo === 'produto')) {
-      setTempFilterProdutos((prev) => [...prev, { id: produto.id, nome: produto.nome, tipo: 'produto' }]);
+    if (
+      !tempFilterProdutos.find(
+        (p) => p.id === produto.id && p.tipo === "produto",
+      )
+    ) {
+      setTempFilterProdutos((prev) => [
+        ...prev,
+        { id: produto.id, nome: produto.nome, tipo: "produto" },
+      ]);
     }
-    setProdutoSearchTerm('');
+    setProdutoSearchTerm("");
     setProdutosList([]);
   };
 
-  const selecionarVariacao = (variacao: { id: string; nome: string; produtoId: string; produtoNome: string }) => {
-    if (!tempFilterProdutos.find((p) => p.id === variacao.id && p.tipo === 'variacao')) {
+  const selecionarVariacao = (variacao: {
+    id: string;
+    nome: string;
+    produtoId: string;
+    produtoNome: string;
+  }) => {
+    if (
+      !tempFilterProdutos.find(
+        (p) => p.id === variacao.id && p.tipo === "variacao",
+      )
+    ) {
       setTempFilterProdutos((prev) => [
         ...prev,
         {
           id: variacao.id,
           nome: variacao.produtoNome,
-          tipo: 'variacao',
+          tipo: "variacao",
           variacaoNome: variacao.nome,
         },
       ]);
     }
     setShowVariacoesModal(false);
-    setProdutoSearchTerm('');
+    setProdutoSearchTerm("");
     setProdutosList([]);
   };
 
-  const removerProdutoFiltro = (id: string, tipo: 'produto' | 'variacao') => {
-    setTempFilterProdutos((prev) => prev.filter((p) => !(p.id === id && p.tipo === tipo)));
+  const removerProdutoFiltro = (id: string, tipo: "produto" | "variacao") => {
+    setTempFilterProdutos((prev) =>
+      prev.filter((p) => !(p.id === id && p.tipo === tipo)),
+    );
   };
 
   const fetchLogItems = async () => {
     setLoadingLogItems(true);
     setLogItemsError(null);
     try {
-      let rows: Array<{ produto_id: string | null; variacao_id: string | null; quantidade_total: number }> = [];
+      let rows: Array<{
+        produto_id: string | null;
+        variacao_id: string | null;
+        quantidade_total: number;
+      }> = [];
 
-      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+      const TARGET_ETIQUETA_ID = "466958dd-e525-4e8d-95f1-067124a5ea7f";
 
       if (filterPlataformaId) {
-        const { data: pedidosData, error: pedidosError } = await (supabase as any)
-          .from('pedidos')
-          .select('id, status_id, plataforma_id, itens_pedido(produto_id, variacao_id, quantidade)')
-          .eq('plataforma_id', filterPlataformaId)
-          .eq('status_id', LOGISTICA_STATUS_ID)
-          .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
+        const { data: pedidosData, error: pedidosError } = await (
+          supabase as any
+        )
+          .from("pedidos")
+          .select(
+            "id, status_id, plataforma_id, itens_pedido(produto_id, variacao_id, quantidade)",
+          )
+          .eq("plataforma_id", filterPlataformaId)
+          .eq("status_id", LOGISTICA_STATUS_ID)
+          .eq("etiqueta_envio_id", TARGET_ETIQUETA_ID);
 
         if (pedidosError) throw pedidosError;
 
-        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number }>();
+        const aggregate = new Map<
+          string,
+          {
+            produto_id: string | null;
+            variacao_id: string | null;
+            quantidade_total: number;
+          }
+        >();
         const pedidos = (pedidosData ?? []) as Array<any>;
 
         for (const pedido of pedidos) {
-          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null }>;
+          const itens = (pedido?.itens_pedido ?? []) as Array<{
+            produto_id: string | null;
+            variacao_id: string | null;
+            quantidade: number | null;
+          }>;
           for (const item of itens) {
-            const key = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
+            const key = `${item.produto_id ?? "p"}-${item.variacao_id ?? "v"}`;
             const quantidade = Number(item.quantidade ?? 0);
             const existing = aggregate.get(key);
             if (existing) {
@@ -332,20 +479,31 @@ export function Logistica() {
       } else {
         // Busca pedidos com status logística E etiqueta disponível, depois agrega os itens
         let pedidosQuery = (supabase as any)
-          .from('pedidos')
-          .select('itens_pedido(produto_id, variacao_id, quantidade)')
-          .eq('status_id', LOGISTICA_STATUS_ID)
-          .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
-        if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+          .from("pedidos")
+          .select("itens_pedido(produto_id, variacao_id, quantidade)")
+          .eq("status_id", LOGISTICA_STATUS_ID)
+          .eq("etiqueta_envio_id", TARGET_ETIQUETA_ID);
+        if (empresaId) pedidosQuery = pedidosQuery.eq("empresa_id", empresaId);
 
         const { data: pedidosData, error: pedidosError } = await pedidosQuery;
         if (pedidosError) throw pedidosError;
 
-        const aggregate = new Map<string, { produto_id: string | null; variacao_id: string | null; quantidade_total: number }>();
-        for (const pedido of (pedidosData ?? [])) {
-          const itens = (pedido?.itens_pedido ?? []) as Array<{ produto_id: string | null; variacao_id: string | null; quantidade: number | null }>;
+        const aggregate = new Map<
+          string,
+          {
+            produto_id: string | null;
+            variacao_id: string | null;
+            quantidade_total: number;
+          }
+        >();
+        for (const pedido of pedidosData ?? []) {
+          const itens = (pedido?.itens_pedido ?? []) as Array<{
+            produto_id: string | null;
+            variacao_id: string | null;
+            quantidade: number | null;
+          }>;
           for (const item of itens) {
-            const key = `${item.produto_id ?? 'p'}-${item.variacao_id ?? 'v'}`;
+            const key = `${item.produto_id ?? "p"}-${item.variacao_id ?? "v"}`;
             const quantidade = Number(item.quantidade ?? 0);
             const existing = aggregate.get(key);
             if (existing) {
@@ -363,30 +521,52 @@ export function Logistica() {
       }
 
       // collect ids
-      const produtoIds = Array.from(new Set(rows.map(r => r.produto_id).filter(Boolean))) as string[];
-      const variacaoIds = Array.from(new Set(rows.map(r => r.variacao_id).filter(Boolean))) as string[];
+      const produtoIds = Array.from(
+        new Set(rows.map((r) => r.produto_id).filter(Boolean)),
+      ) as string[];
+      const variacaoIds = Array.from(
+        new Set(rows.map((r) => r.variacao_id).filter(Boolean)),
+      ) as string[];
 
       // fetch products and variations in parallel
       const [prodRes, varRes] = await Promise.all([
-        produtoIds.length ? (supabase as any).from('produtos').select('id, nome, sku, img_url').in('id', produtoIds) : Promise.resolve({ data: [], error: null }),
-        variacaoIds.length ? (supabase as any).from('variacoes_produto').select('id, nome, sku, img_url, produto_id').in('id', variacaoIds) : Promise.resolve({ data: [], error: null })
+        produtoIds.length
+          ? (supabase as any)
+              .from("produtos")
+              .select("id, nome, sku, img_url")
+              .in("id", produtoIds)
+          : Promise.resolve({ data: [], error: null }),
+        variacaoIds.length
+          ? (supabase as any)
+              .from("variacoes_produto")
+              .select("id, nome, sku, img_url, produto_id")
+              .in("id", variacaoIds)
+          : Promise.resolve({ data: [], error: null }),
       ] as const);
 
       if (prodRes?.error) throw prodRes.error;
       if (varRes?.error) throw varRes.error;
 
-      const prodMap = new Map<string, any>((prodRes?.data ?? []).map((p: any) => [p.id, p]));
-      const varMap = new Map<string, any>((varRes?.data ?? []).map((v: any) => [v.id, v]));
+      const prodMap = new Map<string, any>(
+        (prodRes?.data ?? []).map((p: any) => [p.id, p]),
+      );
+      const varMap = new Map<string, any>(
+        (varRes?.data ?? []).map((v: any) => [v.id, v]),
+      );
 
-      const enriched = rows.map(r => ({
+      const enriched = rows.map((r) => ({
         ...r,
         produto: r.produto_id ? prodMap.get(r.produto_id) : undefined,
         variacao: r.variacao_id ? varMap.get(r.variacao_id) : undefined,
       }));
 
       if (filterProdutos.length > 0) {
-        const produtoIds = new Set(filterProdutos.filter((p) => p.tipo === 'produto').map((p) => p.id));
-        const variacaoIds = new Set(filterProdutos.filter((p) => p.tipo === 'variacao').map((p) => p.id));
+        const produtoIds = new Set(
+          filterProdutos.filter((p) => p.tipo === "produto").map((p) => p.id),
+        );
+        const variacaoIds = new Set(
+          filterProdutos.filter((p) => p.tipo === "variacao").map((p) => p.id),
+        );
 
         const filtradosPorProduto = enriched.filter((item: any) => {
           const variacaoProdutoId = item.variacao?.produto_id;
@@ -402,7 +582,7 @@ export function Logistica() {
         setLogItems(enriched);
       }
     } catch (err) {
-      console.error('Erro ao buscar itens de logística:', err);
+      console.error("Erro ao buscar itens de logística:", err);
       setLogItemsError(String(err));
       setLogItems([]);
     } finally {
@@ -410,14 +590,14 @@ export function Logistica() {
     }
   };
 
-  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
+  const FULL_PEDIDO_SELECT = `id,id_externo,plataforma_id,shipping_id,urgente,status_id,criado_em,remetente_id,link_etiqueta,etiquetas_uploads,retirada,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url),itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado,produto:produtos(id,nome,sku,img_url),variacao:variacoes_produto(id,nome,sku,img_url))`;
 
   const fetchPedidosPorIds = async (ids: string[]): Promise<any[]> => {
     if (!ids.length) return [];
     const { data, error } = await (supabase as any)
-      .from('pedidos')
+      .from("pedidos")
       .select(FULL_PEDIDO_SELECT)
-      .in('id', ids);
+      .in("id", ids);
     if (error) throw error;
     return data || [];
   };
@@ -429,23 +609,33 @@ export function Logistica() {
 
       let pedidoIdsFiltroProduto: string[] | null = null;
       if (filterProdutos.length > 0) {
-        const produtoIds = filterProdutos.filter((p) => p.tipo === 'produto').map((p) => p.id);
-        const variacaoIds = filterProdutos.filter((p) => p.tipo === 'variacao').map((p) => p.id);
+        const produtoIds = filterProdutos
+          .filter((p) => p.tipo === "produto")
+          .map((p) => p.id);
+        const variacaoIds = filterProdutos
+          .filter((p) => p.tipo === "variacao")
+          .map((p) => p.id);
 
-        let itemsQuery: any = (supabase as any).from('itens_pedido').select('pedido_id');
+        let itemsQuery: any = (supabase as any)
+          .from("itens_pedido")
+          .select("pedido_id");
 
         if (produtoIds.length > 0 && variacaoIds.length > 0) {
-          itemsQuery = itemsQuery.or(`produto_id.in.(${produtoIds.join(',')}),variacao_id.in.(${variacaoIds.join(',')})`);
+          itemsQuery = itemsQuery.or(
+            `produto_id.in.(${produtoIds.join(",")}),variacao_id.in.(${variacaoIds.join(",")})`,
+          );
         } else if (produtoIds.length > 0) {
-          itemsQuery = itemsQuery.in('produto_id', produtoIds);
+          itemsQuery = itemsQuery.in("produto_id", produtoIds);
         } else if (variacaoIds.length > 0) {
-          itemsQuery = itemsQuery.in('variacao_id', variacaoIds);
+          itemsQuery = itemsQuery.in("variacao_id", variacaoIds);
         }
 
         const { data: itemsData, error: itemsError } = await itemsQuery;
         if (itemsError) throw itemsError;
 
-        pedidoIdsFiltroProduto = [...new Set((itemsData || []).map((item: any) => item.pedido_id))] as string[];
+        pedidoIdsFiltroProduto = [
+          ...new Set((itemsData || []).map((item: any) => item.pedido_id)),
+        ] as string[];
 
         if (pedidoIdsFiltroProduto.length === 0) {
           setPedidosFiltrados([]);
@@ -456,18 +646,18 @@ export function Logistica() {
       }
 
       let query: any = (supabase as any)
-        .from('pedidos')
+        .from("pedidos")
         .select(selectQuery)
-        .eq('plataforma_id', plataformaId)
-        .eq('status_id', LOGISTICA_STATUS_ID)
-        .eq('etiqueta_envio_id', '466958dd-e525-4e8d-95f1-067124a5ea7f');
+        .eq("plataforma_id", plataformaId)
+        .eq("status_id", LOGISTICA_STATUS_ID)
+        .eq("etiqueta_envio_id", "466958dd-e525-4e8d-95f1-067124a5ea7f");
 
       if (pedidoIdsFiltroProduto && pedidoIdsFiltroProduto.length > 0) {
-        query = query.in('id', pedidoIdsFiltroProduto);
+        query = query.in("id", pedidoIdsFiltroProduto);
       }
 
       if (empresaId) {
-        query = query.eq('empresa_id', empresaId);
+        query = query.eq("empresa_id", empresaId);
       }
 
       const { data, error } = await query;
@@ -478,7 +668,9 @@ export function Logistica() {
 
       const targetId = targetPedidoIdRef.current;
       targetPedidoIdRef.current = null;
-      const targetIdx = targetId ? priorizados.findIndex((p: any) => p.id === targetId) : -1;
+      const targetIdx = targetId
+        ? priorizados.findIndex((p: any) => p.id === targetId)
+        : -1;
       const startIdx = targetIdx >= 0 ? targetIdx : 0;
 
       setPedidosFiltrados(priorizados);
@@ -488,7 +680,7 @@ export function Logistica() {
       setItemStatus({});
       setFoundPedido(priorizados[startIdx] || null);
     } catch (err) {
-      console.error('Erro ao buscar pedidos por plataforma:', err);
+      console.error("Erro ao buscar pedidos por plataforma:", err);
       setPedidosFiltrados([]);
       setPedidoAtualIndex(0);
       setFoundPedido(null);
@@ -507,7 +699,9 @@ export function Logistica() {
     setTimeout(() => barcodeRef.current?.focus(), 50);
   };
 
-  const avancarParaProximoPedidoAposConclusao = (pedidoConcluidoId?: string) => {
+  const avancarParaProximoPedidoAposConclusao = (
+    pedidoConcluidoId?: string,
+  ) => {
     if (!modoListaPorPlataforma) {
       setFoundPedido(null);
       setFoundItemIds([]);
@@ -574,9 +768,9 @@ export function Logistica() {
     const loadPlataformas = async () => {
       try {
         let query = supabase
-          .from('plataformas')
-          .select('id, nome, empresa_id')
-          .order('nome');
+          .from("plataformas")
+          .select("id, nome, empresa_id")
+          .order("nome");
 
         if (empresaId) {
           query = query.or(`empresa_id.eq.${empresaId},empresa_id.is.null`);
@@ -586,7 +780,10 @@ export function Logistica() {
         if (error) throw error;
         if (!mounted) return;
 
-        const plataformasOrdenadas = (data || []).map((p: any) => ({ id: p.id, nome: p.nome }));
+        const plataformasOrdenadas = (data || []).map((p: any) => ({
+          id: p.id,
+          nome: p.nome,
+        }));
         setPlataformasList(plataformasOrdenadas);
         // também buscar os cards por plataforma (contagens de pedidos em logística com etiqueta disponível)
         try {
@@ -595,7 +792,7 @@ export function Logistica() {
           // ignore
         }
       } catch (err) {
-        console.error('Erro ao carregar plataformas:', err);
+        console.error("Erro ao carregar plataformas:", err);
         if (!mounted) return;
         setPlataformasList([]);
       }
@@ -613,82 +810,97 @@ export function Logistica() {
     try {
       // obter plataformas (já carregadas normalmente) e pedidos que estão em status LOGISTICA
       const { data: plataformas } = await supabase
-        .from('plataformas')
-        .select('id, nome, img_url')
-        .order('nome');
+        .from("plataformas")
+        .select("id, nome, img_url")
+        .order("nome");
 
-      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+      const TARGET_ETIQUETA_ID = "466958dd-e525-4e8d-95f1-067124a5ea7f";
 
       // IDs das plataformas de leads
       const LEADS_PLATFORM_IDS = new Set([
-        '0e27f292-924c-4ffc-a141-bbe00ec00428',
-        'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f',
-        'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+        "0e27f292-924c-4ffc-a141-bbe00ec00428",
+        "c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f",
+        "d83fff08-7ac4-4a15-9e6d-0a9247b24fe4",
       ]);
 
       // buscar pedidos com status LOGISTICA e etiqueta_envio_id exatos (filtros aplicados no servidor)
       let pedidosQuery = (supabase as any)
-        .from('pedidos')
-        .select('id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id')
-        .eq('status_id', LOGISTICA_STATUS_ID)
-        .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
-      if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+        .from("pedidos")
+        .select(
+          "id,id_externo,plataforma_id,link_etiqueta,etiqueta_envio_id,status_id,urgente,etiqueta_ml,criado_em,shipping_id",
+        )
+        .eq("status_id", LOGISTICA_STATUS_ID)
+        .eq("etiqueta_envio_id", TARGET_ETIQUETA_ID);
+      if (empresaId) pedidosQuery = pedidosQuery.eq("empresa_id", empresaId);
 
       const { data: pedidosData, error: pedidosErr } = await pedidosQuery;
       if (pedidosErr) throw pedidosErr;
       const pedidosComEtiqueta = pedidosData || [];
 
-      const platformMap = new Map((plataformas || []).map((p: any) => [p.id, p]));
+      const platformMap = new Map(
+        (plataformas || []).map((p: any) => [p.id, p]),
+      );
 
       // identificar plataformas principais
-      const yampiPlatform = (plataformas || []).find((p: any) => /yampi/i.test(p.nome));
-      const mlPlatform = (plataformas || []).find((p: any) => p.id === MERCADO_LIVRE_PLATAFORMA_ID || /mercado livre/i.test(p.nome));
+      const yampiPlatform = (plataformas || []).find((p: any) =>
+        /yampi/i.test(p.nome),
+      );
+      const mlPlatform = (plataformas || []).find(
+        (p: any) =>
+          p.id === MERCADO_LIVRE_PLATAFORMA_ID || /mercado livre/i.test(p.nome),
+      );
 
       // nomes de plataformas urgentes (exceto ML e Yampi)
-      const urgentPlatformNames = ['shopee', 'tiktok', 'magalu'];
+      const urgentPlatformNames = ["shopee", "tiktok", "magalu"];
 
-      const yampiPedidos = pedidosComEtiqueta.filter((p: any) =>
-        p.plataforma_id === yampiPlatform?.id && !p.urgente,
+      const yampiPedidos = pedidosComEtiqueta.filter(
+        (p: any) => p.plataforma_id === yampiPlatform?.id && !p.urgente,
       );
-      const mlPedidos = pedidosComEtiqueta.filter((p: any) =>
-        p.plataforma_id === mlPlatform?.id && !p.etiqueta_ml && !p.urgente,
+      const mlPedidos = pedidosComEtiqueta.filter(
+        (p: any) =>
+          p.plataforma_id === mlPlatform?.id && !p.etiqueta_ml && !p.urgente,
       );
       const leadsPedidos = pedidosComEtiqueta.filter((p: any) =>
         LEADS_PLATFORM_IDS.has(p.plataforma_id),
       );
       const urgentesPedidos = pedidosComEtiqueta.filter((p: any) => {
-        const pname = String(platformMap.get(p.plataforma_id)?.nome || '').toLowerCase();
-        const isUrgentPlatform = urgentPlatformNames.some((n) => pname.includes(n));
-        const isMLComEtiquetaML = p.plataforma_id === mlPlatform?.id && !!p.etiqueta_ml;
+        const pname = String(
+          platformMap.get(p.plataforma_id)?.nome || "",
+        ).toLowerCase();
+        const isUrgentPlatform = urgentPlatformNames.some((n) =>
+          pname.includes(n),
+        );
+        const isMLComEtiquetaML =
+          p.plataforma_id === mlPlatform?.id && !!p.etiqueta_ml;
         const isUrgente = !!p.urgente;
         return isUrgentPlatform || isMLComEtiquetaML || isUrgente;
       });
 
       const cards = [
         {
-          id: yampiPlatform?.id || 'yampi-card',
-          nome: yampiPlatform?.nome || 'Yampi',
+          id: yampiPlatform?.id || "yampi-card",
+          nome: yampiPlatform?.nome || "Yampi",
           img_url: yampiPlatform?.img_url,
           count: yampiPedidos.length,
           pedidos: sortPedidos(yampiPedidos),
         },
         {
           id: mlPlatform?.id || MERCADO_LIVRE_PLATAFORMA_ID,
-          nome: mlPlatform?.nome || 'Mercado Livre',
+          nome: mlPlatform?.nome || "Mercado Livre",
           img_url: mlPlatform?.img_url,
           count: mlPedidos.length,
           pedidos: sortPedidos(mlPedidos),
         },
         {
-          id: 'leads',
-          nome: 'Leads',
+          id: "leads",
+          nome: "Leads",
           img_url: null,
           count: leadsPedidos.length,
           pedidos: sortPedidos(leadsPedidos),
         },
         {
-          id: 'urgentes',
-          nome: 'Urgentes',
+          id: "urgentes",
+          nome: "Urgentes",
           img_url: null,
           count: urgentesPedidos.length,
           pedidos: sortPedidos(urgentesPedidos),
@@ -698,13 +910,17 @@ export function Logistica() {
       setPlataformasCards(cards);
 
       // Auto-carregar itens de todos os pedidos para popular platformOrderItems (usado nas seções de comuns/incomuns)
-      const todosIds = (pedidosComEtiqueta || []).map((p: any) => p.id).filter(Boolean);
+      const todosIds = (pedidosComEtiqueta || [])
+        .map((p: any) => p.id)
+        .filter(Boolean);
       if (todosIds.length > 0) {
         try {
           const { data: itemsData } = await (supabase as any)
-            .from('itens_pedido')
-            .select('pedido_id, quantidade, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url)')
-            .in('pedido_id', todosIds);
+            .from("itens_pedido")
+            .select(
+              "pedido_id, quantidade, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url)",
+            )
+            .in("pedido_id", todosIds);
           const grouped: Record<string, any[]> = {};
           (itemsData || []).forEach((it: any) => {
             const pid = it.pedido_id;
@@ -722,7 +938,7 @@ export function Logistica() {
         } catch (_) {}
       }
     } catch (err) {
-      console.error('Erro ao buscar cards por plataforma:', err);
+      console.error("Erro ao buscar cards por plataforma:", err);
       setPlataformasCards([]);
     } finally {
       setLoadingPlataformaCards(false);
@@ -731,17 +947,20 @@ export function Logistica() {
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (filterDropdownRef.current && !filterDropdownRef.current.contains(event.target as Node)) {
+      if (
+        filterDropdownRef.current &&
+        !filterDropdownRef.current.contains(event.target as Node)
+      ) {
         setShowFilters(false);
       }
     };
 
     if (showFilters) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
 
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [showFilters]);
 
@@ -749,9 +968,11 @@ export function Logistica() {
     if (!pedidoIds || pedidoIds.length === 0) return;
     try {
       const { data: itemsData, error: itemsErr } = await (supabase as any)
-        .from('itens_pedido')
-        .select('pedido_id, quantidade, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url)')
-        .in('pedido_id', pedidoIds);
+        .from("itens_pedido")
+        .select(
+          "pedido_id, quantidade, produto:produtos(id,nome,img_url), variacao:variacoes_produto(id,nome,img_url)",
+        )
+        .in("pedido_id", pedidoIds);
       if (itemsErr) throw itemsErr;
       const grouped: Record<string, any[]> = {};
       (itemsData || []).forEach((it: any) => {
@@ -768,57 +989,76 @@ export function Logistica() {
       });
       setPlatformOrderItems((prev) => ({ ...prev, ...grouped }));
     } catch (err) {
-      console.error('Erro ao buscar itens para pedidos:', err);
+      console.error("Erro ao buscar itens para pedidos:", err);
     }
   };
 
   const fetchPedidosDoProduto = async (item: ProdutoModalItem) => {
     setProdutoPedidosModal({ open: true, item, pedidos: [], loading: true });
     try {
-      const TARGET_ETIQUETA_ID = '466958dd-e525-4e8d-95f1-067124a5ea7f';
+      const TARGET_ETIQUETA_ID = "466958dd-e525-4e8d-95f1-067124a5ea7f";
 
       // 1. Busca pedidos já filtrados por status + etiqueta (mesma lógica do fetchLogItems)
       let pedidosQuery: any = (supabase as any)
-        .from('pedidos')
-        .select('id, id_externo, criado_em, urgente, plataformas(id, nome, img_url)')
-        .eq('status_id', LOGISTICA_STATUS_ID)
-        .eq('etiqueta_envio_id', TARGET_ETIQUETA_ID);
-      if (empresaId) pedidosQuery = pedidosQuery.eq('empresa_id', empresaId);
+        .from("pedidos")
+        .select(
+          "id, id_externo, criado_em, urgente, plataformas(id, nome, img_url)",
+        )
+        .eq("status_id", LOGISTICA_STATUS_ID)
+        .eq("etiqueta_envio_id", TARGET_ETIQUETA_ID);
+      if (empresaId) pedidosQuery = pedidosQuery.eq("empresa_id", empresaId);
 
       const { data: pedidosData, error: pedidosErr } = await pedidosQuery;
       if (pedidosErr) throw pedidosErr;
 
-      const todosPedidoIds = (pedidosData || []).map((p: any) => p.id) as string[];
+      const todosPedidoIds = (pedidosData || []).map(
+        (p: any) => p.id,
+      ) as string[];
       if (!todosPedidoIds.length) {
-        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+        setProdutoPedidosModal((prev) => ({
+          ...prev,
+          pedidos: [],
+          loading: false,
+        }));
         return;
       }
 
       // 2. Busca itens desses pedidos filtrados pelo produto/variação específico
       let itensQuery: any = (supabase as any)
-        .from('itens_pedido')
-        .select('pedido_id, quantidade')
-        .in('pedido_id', todosPedidoIds);
+        .from("itens_pedido")
+        .select("pedido_id, quantidade")
+        .in("pedido_id", todosPedidoIds);
 
       if (item.variacao_id) {
-        itensQuery = itensQuery.eq('variacao_id', item.variacao_id);
+        itensQuery = itensQuery.eq("variacao_id", item.variacao_id);
       } else if (item.produto_id) {
-        itensQuery = itensQuery.eq('produto_id', item.produto_id).is('variacao_id', null);
+        itensQuery = itensQuery
+          .eq("produto_id", item.produto_id)
+          .is("variacao_id", null);
       }
 
       const { data: itensData, error: itensErr } = await itensQuery;
       if (itensErr) throw itensErr;
 
-      const pedidoIdsComItem = new Set((itensData || []).map((i: any) => i.pedido_id));
+      const pedidoIdsComItem = new Set(
+        (itensData || []).map((i: any) => i.pedido_id),
+      );
       if (!pedidoIdsComItem.size) {
-        setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+        setProdutoPedidosModal((prev) => ({
+          ...prev,
+          pedidos: [],
+          loading: false,
+        }));
         return;
       }
 
       // 3. Monta mapa de quantidades e cruza com pedidos
       const quantMap = new Map<string, number>();
       (itensData || []).forEach((i: any) => {
-        quantMap.set(i.pedido_id, (quantMap.get(i.pedido_id) || 0) + Number(i.quantidade || 0));
+        quantMap.set(
+          i.pedido_id,
+          (quantMap.get(i.pedido_id) || 0) + Number(i.quantidade || 0),
+        );
       });
 
       const pedidosComQtd = (pedidosData || [])
@@ -828,10 +1068,18 @@ export function Logistica() {
           quantidade_item: quantMap.get(p.id) || 0,
         }));
 
-      setProdutoPedidosModal((prev) => ({ ...prev, pedidos: pedidosComQtd, loading: false }));
+      setProdutoPedidosModal((prev) => ({
+        ...prev,
+        pedidos: pedidosComQtd,
+        loading: false,
+      }));
     } catch (err) {
-      console.error('Erro ao buscar pedidos do produto:', err);
-      setProdutoPedidosModal((prev) => ({ ...prev, pedidos: [], loading: false }));
+      console.error("Erro ao buscar pedidos do produto:", err);
+      setProdutoPedidosModal((prev) => ({
+        ...prev,
+        pedidos: [],
+        loading: false,
+      }));
     }
   };
 
@@ -845,7 +1093,9 @@ export function Logistica() {
   // Buscar userId da sessão
   useEffect(() => {
     const fetchUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session?.user?.id) {
         setUserId(session.user.id);
       }
@@ -857,20 +1107,23 @@ export function Logistica() {
   useEffect(() => {
     if (foundPedido?.id) {
       (supabase as any)
-        .from('itens_pedido_agrupados')
-        .select('*')
-        .eq('pedido_id', foundPedido.id)
+        .from("itens_pedido_agrupados")
+        .select("*")
+        .eq("pedido_id", foundPedido.id)
         .then(({ data, error }) => {
           if (!error && data) {
-            console.log('📊 Dados da view itens_pedido_agrupados:', data);
-            const grupos: Record<string, { nome_completo: string; quantidade_total: number }> = {};
+            console.log("📊 Dados da view itens_pedido_agrupados:", data);
+            const grupos: Record<
+              string,
+              { nome_completo: string; quantidade_total: number }
+            > = {};
             data.forEach((item: any) => {
               grupos[item.item_referencia_id] = {
                 nome_completo: item.nome_completo,
-                quantidade_total: item.quantidade_total
+                quantidade_total: item.quantidade_total,
               };
             });
-            console.log('📦 Grupos processados:', grupos);
+            console.log("📦 Grupos processados:", grupos);
             setGruposAgrupados(grupos);
           }
         });
@@ -880,7 +1133,7 @@ export function Logistica() {
   }, [foundPedido?.id]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === "Enter") {
       e.preventDefault();
       // agora a pesquisa é por id_externo do pedido
       const code = barcode.trim();
@@ -891,22 +1144,25 @@ export function Logistica() {
 
   // derived helpers for UI
   const items = foundPedido?.itens_pedido || [];
-  const allItemsBipado = items.length > 0 && items.every((it: any) => (foundItemIds || []).includes(it.id));
+  const allItemsBipado =
+    items.length > 0 &&
+    items.every((it: any) => (foundItemIds || []).includes(it.id));
   const filteredLogItems = logItems;
-  
+
   // Verifica se deve mostrar o botão da etiqueta ML
   // Prioridade: shipping_id deve ter valor (não null, não vazio)
   // Secundário: deve ser da plataforma Mercado Livre
-  const shouldShowMLButton = foundPedido?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID 
-                            && foundPedido?.shipping_id 
-                            && String(foundPedido.shipping_id).trim() !== '';
+  const shouldShowMLButton =
+    foundPedido?.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID &&
+    foundPedido?.shipping_id &&
+    String(foundPedido.shipping_id).trim() !== "";
 
   const handleGerarEtiquetaML = async () => {
     if (!foundPedido?.id) {
-      toast({ 
-        title: 'Erro', 
-        description: 'O pedido não possui id primário definido',
-        variant: 'destructive'
+      toast({
+        title: "Erro",
+        description: "O pedido não possui id primário definido",
+        variant: "destructive",
       });
       return;
     }
@@ -914,26 +1170,27 @@ export function Logistica() {
     setGerandoEtiquetaML(true);
 
     try {
-      const EDGE_FUNCTION_URL = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/gerar-etiqueta-ml';
+      const EDGE_FUNCTION_URL =
+        "https://rllypkctvckeaczjesht.supabase.co/functions/v1/gerar-etiqueta-ml";
 
       const response = await fetch(EDGE_FUNCTION_URL, {
-        method: 'POST',
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({ pedido_id: foundPedido.id }),
       });
 
       if (!response.ok) {
         const err = await response.json();
-        throw new Error(err.error || 'Erro desconhecido ao gerar etiqueta');
+        throw new Error(err.error || "Erro desconhecido ao gerar etiqueta");
       }
 
       const data = await response.json();
       const pdfBase64 = data.pdf_base64;
 
       if (!pdfBase64) {
-        throw new Error('O Base64 do PDF não foi retornado.');
+        throw new Error("O Base64 do PDF não foi retornado.");
       }
 
       // Converte Base64 para Blob
@@ -943,32 +1200,35 @@ export function Logistica() {
         byteNumbers[i] = byteCharacters.charCodeAt(i);
       }
       const byteArray = new Uint8Array(byteNumbers);
-      const blob = new Blob([byteArray], { type: 'application/pdf' });
-      
+      const blob = new Blob([byteArray], { type: "application/pdf" });
+
       // Cria URL do Blob e abre o modal
       const blobUrl = URL.createObjectURL(blob);
       setEtiquetaMLPdfUrl(blobUrl);
       setEtiquetaMLModalOpen(true);
 
-      toast({ title: 'Sucesso', description: 'Etiqueta gerada! Visualize e imprima.' });
+      toast({
+        title: "Sucesso",
+        description: "Etiqueta gerada! Visualize e imprima.",
+      });
 
       // Manter filtros/paginação e avançar para o próximo pedido (quando aplicável)
       avancarParaProximoPedidoAposConclusao(foundPedido?.id);
-      
+
       // Registrar no histórico
       if (foundPedido?.id && userId) {
         await registrarHistoricoMovimentacao(
           foundPedido.id,
           `Etiqueta Mercado Livre gerada via logística (ID Externo: ${foundPedido.id_externo})`,
-          userId
+          userId,
         );
       }
     } catch (error: any) {
-      console.error('Erro ao processar a etiqueta:', error);
-      toast({ 
-        title: 'Erro', 
+      console.error("Erro ao processar a etiqueta:", error);
+      toast({
+        title: "Erro",
         description: `Erro ao processar a etiqueta: ${error.message}`,
-        variant: 'destructive'
+        variant: "destructive",
       });
     } finally {
       setGerandoEtiquetaML(false);
@@ -987,12 +1247,14 @@ export function Logistica() {
     if (!code) return;
     setLoadingScan(true);
     try {
-
       // Call RPC to find item by barcode (server function `achar_item_por_codigo_bipado`)
       let data: any = null;
       let error: any = null;
       try {
-        const rpcRes: any = await (supabase as any).rpc('achar_item_por_codigo_bipado', { codigo_bipado: code });
+        const rpcRes: any = await (supabase as any).rpc(
+          "achar_item_por_codigo_bipado",
+          { codigo_bipado: code },
+        );
         data = rpcRes?.data ?? rpcRes;
         error = rpcRes?.error ?? null;
       } catch (e: any) {
@@ -1002,7 +1264,11 @@ export function Logistica() {
       if (error) throw error;
 
       if (!data || (Array.isArray(data) && data.length === 0)) {
-        toast({ title: 'Não encontrado', description: 'Nenhum item encontrado para esse código', variant: 'destructive' });
+        toast({
+          title: "Não encontrado",
+          description: "Nenhum item encontrado para esse código",
+          variant: "destructive",
+        });
         setFoundPedido(null);
         setFoundItemIds([]);
         return;
@@ -1012,42 +1278,47 @@ export function Logistica() {
 
       // fetch pedido details (responsável, plataforma, itens)
       const { data: pedidoData, error: pedErr } = await supabase
-        .from('pedidos')
-        .select(`id,id_externo,plataforma_id,urgente,remetente_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`)
-        .eq('id', row.pedido_id)
+        .from("pedidos")
+        .select(
+          `id,id_externo,plataforma_id,urgente,remetente_id,link_etiqueta,etiquetas_uploads,responsavel:usuarios(id,nome,img_url),plataformas(id,nome,img_url), itens_pedido(id,produto_id,variacao_id,quantidade,preco_unitario,codigo_barras,pintado, produto:produtos(id,nome,sku,img_url), variacao:variacoes_produto(id,nome,sku,img_url))`,
+        )
+        .eq("id", row.pedido_id)
         .single();
 
       if (pedErr) throw pedErr;
       const pedidoRow = pedidoData as any;
 
-      console.log('Pedido encontrado:', pedidoRow);
-      console.log('Itens do pedido:', pedidoRow?.itens_pedido?.map((it: any) => ({ 
-        id: it.id, 
-        nome: it.produto?.nome || it.variacao?.nome, 
-        pintado: it.pintado,
-        tipo_pintado: typeof it.pintado 
-      })));
+      console.log("Pedido encontrado:", pedidoRow);
+      console.log(
+        "Itens do pedido:",
+        pedidoRow?.itens_pedido?.map((it: any) => ({
+          id: it.id,
+          nome: it.produto?.nome || it.variacao?.nome,
+          pintado: it.pintado,
+          tipo_pintado: typeof it.pintado,
+        })),
+      );
 
       setFoundPedido(pedidoRow);
-      
+
       // Registrar no histórico que um item foi bipado
       if (pedidoRow?.id && userId) {
-        const itemBipado = pedidoRow.itens_pedido?.find((it: any) => it.id === row.item_pedido_id);
-        const descricao = itemBipado 
-          ? `Item bipado via código de barras: ${itemBipado.produto?.nome || itemBipado.variacao?.nome || 'Item'} (${code})`
-          : `Item bipado via código de barras: ${code}`;
-        await registrarHistoricoMovimentacao(
-          pedidoRow.id,
-          descricao,
-          userId
+        const itemBipado = pedidoRow.itens_pedido?.find(
+          (it: any) => it.id === row.item_pedido_id,
         );
+        const descricao = itemBipado
+          ? `Item bipado via código de barras: ${itemBipado.produto?.nome || itemBipado.variacao?.nome || "Item"} (${code})`
+          : `Item bipado via código de barras: ${code}`;
+        await registrarHistoricoMovimentacao(pedidoRow.id, descricao, userId);
       }
-      
+
       // merge the newly found id into existing state and focus next missing item based on the merged list
       setFoundItemIds((prev) => {
-        const merged = Array.from(new Set([...(prev || []), row.item_pedido_id]));
+        const merged = Array.from(
+          new Set([...(prev || []), row.item_pedido_id]),
+        );
         // clear input for next scan
-        setBarcode('');
+        setBarcode("");
 
         // decide next focus using the merged ids
         const itemsForFocus: any[] = pedidoRow?.itens_pedido || [];
@@ -1080,8 +1351,12 @@ export function Logistica() {
         // ignore — fetchLogItems logs its own errors
       }
     } catch (err: any) {
-      console.error('Erro ao buscar item por código:', err);
-      toast({ title: 'Erro', description: err.message || String(err), variant: 'destructive' });
+      console.error("Erro ao buscar item por código:", err);
+      toast({
+        title: "Erro",
+        description: err.message || String(err),
+        variant: "destructive",
+      });
     } finally {
       setLoadingScan(false);
     }
@@ -1092,10 +1367,10 @@ export function Logistica() {
   const handleBuscarPedidoPorId = async (pedidoIdParam?: string) => {
     const pedidoId = (pedidoIdParam ?? pedidoIdInput).trim();
     if (!pedidoId) {
-      toast({ 
-        title: 'ID inválido', 
-        description: 'Digite um ID de pedido válido', 
-        variant: 'destructive' 
+      toast({
+        title: "ID inválido",
+        description: "Digite um ID de pedido válido",
+        variant: "destructive",
       });
       return;
     }
@@ -1106,19 +1381,19 @@ export function Logistica() {
 
       // Tentar buscar por id_externo primeiro
       let { data: pedidoData, error: pedErr } = await supabase
-        .from('pedidos')
+        .from("pedidos")
         .select(selectQuery)
-        .eq('id_externo', pedidoId)
+        .eq("id_externo", pedidoId)
         .maybeSingle();
 
       // Se não encontrou por id_externo, tenta por id
       if (!pedidoData) {
         const res = await supabase
-          .from('pedidos')
+          .from("pedidos")
           .select(selectQuery)
-          .eq('id', pedidoId)
+          .eq("id", pedidoId)
           .maybeSingle();
-        
+
         pedidoData = res.data;
         pedErr = res.error;
       }
@@ -1126,21 +1401,24 @@ export function Logistica() {
       if (pedErr) throw pedErr;
 
       if (!pedidoData) {
-        throw new Error('Pedido não encontrado');
+        throw new Error("Pedido não encontrado");
       }
 
       const pedidoRow2 = pedidoData as any;
 
-      console.log('Pedido encontrado manualmente:', pedidoRow2);
-      console.log('Itens do pedido manual:', pedidoRow2?.itens_pedido?.map((it: any) => ({ 
-        id: it.id, 
-        nome: it.produto?.nome || it.variacao?.nome, 
-        pintado: it.pintado,
-        tipo_pintado: typeof it.pintado 
-      })));
+      console.log("Pedido encontrado manualmente:", pedidoRow2);
+      console.log(
+        "Itens do pedido manual:",
+        pedidoRow2?.itens_pedido?.map((it: any) => ({
+          id: it.id,
+          nome: it.produto?.nome || it.variacao?.nome,
+          pintado: it.pintado,
+          tipo_pintado: typeof it.pintado,
+        })),
+      );
 
       // Verificar se o pedido já foi enviado
-      if (pedidoRow2.status_id === 'fa6b38ba-1d67-4bc3-821e-ab089d641a25') {
+      if (pedidoRow2.status_id === "fa6b38ba-1d67-4bc3-821e-ab089d641a25") {
         setPedidoJaEnviado(pedidoRow2);
         setPedidoIdModalOpen(false);
         setPedidoJaEnviadoModalOpen(true);
@@ -1150,11 +1428,11 @@ export function Logistica() {
       setFoundPedido(pedidoRow2);
       setFoundItemIds([]);
       setPedidoIdModalOpen(false);
-      setPedidoIdInput('');
+      setPedidoIdInput("");
 
-      toast({ 
-        title: 'Pedido carregado', 
-        description: `Pedido ${pedidoRow2.id_externo || pedidoRow2.id} carregado com sucesso` 
+      toast({
+        title: "Pedido carregado",
+        description: `Pedido ${pedidoRow2.id_externo || pedidoRow2.id} carregado com sucesso`,
       });
 
       // Registrar no histórico
@@ -1162,7 +1440,7 @@ export function Logistica() {
         await registrarHistoricoMovimentacao(
           pedidoRow2.id,
           `Pedido carregado manualmente via logística (ID/ID Externo: ${pedidoId})`,
-          userId
+          userId,
         );
       }
 
@@ -1176,13 +1454,12 @@ export function Logistica() {
           barcodeRef.current?.focus();
         }
       }, 100);
-
     } catch (err: any) {
-      console.error('Erro ao buscar pedido:', err);
-      toast({ 
-        title: 'Erro ao buscar pedido', 
-        description: err.message || String(err), 
-        variant: 'destructive' 
+      console.error("Erro ao buscar pedido:", err);
+      toast({
+        title: "Erro ao buscar pedido",
+        description: err.message || String(err),
+        variant: "destructive",
       });
     } finally {
       setLoadingPedidoManual(false);
@@ -1197,12 +1474,14 @@ export function Logistica() {
       setLoadingScan(true);
 
       // Atalho: pedido tem PDFs de etiqueta enviados manualmente
-      const etiquetasUploads = Array.isArray((foundPedido as any)?.etiquetas_uploads)
+      const etiquetasUploads = Array.isArray(
+        (foundPedido as any)?.etiquetas_uploads,
+      )
         ? ((foundPedido as any).etiquetas_uploads as string[]).filter(Boolean)
         : [];
       if (etiquetasUploads.length > 0) {
         // Abrir cada PDF em nova aba
-        etiquetasUploads.forEach((url) => window.open(url, '_blank'));
+        etiquetasUploads.forEach((url) => window.open(url, "_blank"));
         setConfirmEnvioModal({
           open: true,
           link: etiquetasUploads[0],
@@ -1217,9 +1496,12 @@ export function Logistica() {
       }
 
       // Atalho: pedido já tem link_etiqueta
-      if (foundPedido?.link_etiqueta && String(foundPedido.link_etiqueta).trim() !== '') {
+      if (
+        foundPedido?.link_etiqueta &&
+        String(foundPedido.link_etiqueta).trim() !== ""
+      ) {
         const link = String(foundPedido.link_etiqueta).trim();
-        window.open(link, '_blank');
+        window.open(link, "_blank");
         setConfirmEnvioModal({
           open: true,
           link,
@@ -1233,27 +1515,37 @@ export function Logistica() {
         return;
       }
 
-      if (!empresaId) throw new Error('Empresa do usuário não encontrada');
+      if (!empresaId) throw new Error("Empresa do usuário não encontrada");
 
       // Verificar saldo Melhor Envio
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Usuário não autenticado');
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) throw new Error("Usuário não autenticado");
 
-      const saldoResponse = await fetch('https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}` },
-      });
+      const saldoResponse = await fetch(
+        "https://rllypkctvckeaczjesht.supabase.co/functions/v1/buscar_saldo_melhor_envio",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+          },
+        },
+      );
       if (!saldoResponse.ok) {
-        const e = await saldoResponse.json().catch(() => ({ message: 'Erro ao verificar saldo' }));
-        throw new Error(e.message || 'Erro ao verificar saldo do Melhor Envio');
+        const e = await saldoResponse
+          .json()
+          .catch(() => ({ message: "Erro ao verificar saldo" }));
+        throw new Error(e.message || "Erro ao verificar saldo do Melhor Envio");
       }
       const saldoData = await saldoResponse.json();
       const saldoAtual = saldoData?.balance || 0;
       if (saldoAtual < 50) {
         toast({
-          title: '⚠️ Saldo Insuficiente',
+          title: "⚠️ Saldo Insuficiente",
           description: `Saldo atual: R$ ${saldoAtual.toFixed(2)}. Mínimo necessário: R$ 50,00. Por favor, recarregue sua conta no Melhor Envio.`,
-          variant: 'destructive',
+          variant: "destructive",
           duration: 8000,
         });
         return;
@@ -1264,42 +1556,75 @@ export function Logistica() {
       if (!remetenteId) {
         const plataformaId = foundPedido?.plataforma_id;
         const plataformasEspeciais = [
-          '0e27f292-924c-4ffc-a141-bbe00ec00428',
-          'c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f',
-          'd83fff08-7ac4-4a15-9e6d-0a9247b24fe4',
+          "0e27f292-924c-4ffc-a141-bbe00ec00428",
+          "c85e1fc7-b03e-48a2-92ec-9123dcb3dd4f",
+          "d83fff08-7ac4-4a15-9e6d-0a9247b24fe4",
         ];
         remetenteId = plataformasEspeciais.includes(plataformaId)
-          ? '3fc6839c-e959-4dc1-a983-f61d557e50ec'
-          : '128a7de7-d649-43e1-8ba3-2b54c3496b14';
-        const { error: updateError } = await supabase.from('pedidos').update({ remetente_id: remetenteId } as any).eq('id', foundPedido?.id);
-        if (updateError) throw new Error('Erro ao definir remetente do pedido');
+          ? "3fc6839c-e959-4dc1-a983-f61d557e50ec"
+          : "128a7de7-d649-43e1-8ba3-2b54c3496b14";
+        const { error: updateError } = await supabase
+          .from("pedidos")
+          .update({ remetente_id: remetenteId } as any)
+          .eq("id", foundPedido?.id);
+        if (updateError) throw new Error("Erro ao definir remetente do pedido");
         if (foundPedido?.id && userId) {
-          const plataformaNome = plataformasEspeciais.includes(foundPedido?.plataforma_id) ? 'especial' : 'padrão';
-          await registrarHistoricoMovimentacao(foundPedido.id, `Remetente definido automaticamente via logística (plataforma ${plataformaNome})`, userId);
+          const plataformaNome = plataformasEspeciais.includes(
+            foundPedido?.plataforma_id,
+          )
+            ? "especial"
+            : "padrão";
+          await registrarHistoricoMovimentacao(
+            foundPedido.id,
+            `Remetente definido automaticamente via logística (plataforma ${plataformaNome})`,
+            userId,
+          );
         }
       }
 
       // Chamar Edge Function para processar etiqueta
-      const edgeFunctionUrl = 'https://rllypkctvckeaczjesht.supabase.co/functions/v1/processar_etiqueta_em_envio_de_pedido';
+      const edgeFunctionUrl =
+        "https://rllypkctvckeaczjesht.supabase.co/functions/v1/processar_etiqueta_em_envio_de_pedido";
       const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       const edgeResponse = await fetch(edgeFunctionUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
-        body: JSON.stringify({ pedido_id: foundPedido?.id, empresa_id: empresaId, remetente_id: remetenteId }),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          pedido_id: foundPedido?.id,
+          empresa_id: empresaId,
+          remetente_id: remetenteId,
+        }),
       });
       if (!edgeResponse.ok) {
-        const errorData = await edgeResponse.json().catch(() => ({ error: 'Erro desconhecido' }));
-        throw new Error(errorData.error || `Erro ao processar etiqueta: ${edgeResponse.status}`);
+        const errorData = await edgeResponse
+          .json()
+          .catch(() => ({ error: "Erro desconhecido" }));
+        throw new Error(
+          errorData.error ||
+            `Erro ao processar etiqueta: ${edgeResponse.status}`,
+        );
       }
       const etiquetaData = await edgeResponse.json();
 
       if (etiquetaData?.etiqueta_error) {
-        toast({ title: '❌ Erro ao gerar etiqueta', description: etiquetaData.etiqueta_error, variant: 'destructive', duration: 10000 });
+        toast({
+          title: "❌ Erro ao gerar etiqueta",
+          description: etiquetaData.etiqueta_error,
+          variant: "destructive",
+          duration: 10000,
+        });
         return;
       }
 
       if (foundPedido?.id && userId) {
-        await registrarHistoricoMovimentacao(foundPedido.id, `Etiqueta Melhor Envio gerada via logística (ID Externo: ${foundPedido.id_externo || foundPedido.id})`, userId);
+        await registrarHistoricoMovimentacao(
+          foundPedido.id,
+          `Etiqueta Melhor Envio gerada via logística (ID Externo: ${foundPedido.id_externo || foundPedido.id})`,
+          userId,
+        );
       }
 
       const link = etiquetaData?.etiqueta?.link_etiqueta as string | undefined;
@@ -1307,12 +1632,12 @@ export function Logistica() {
       const updatePayload: Record<string, any> = {
         status_id: ENVIADO_STATUS_ID,
         data_enviado: new Date().toISOString(),
-        etiqueta_envio_id: '466958dd-e525-4e8d-95f1-067124a5ea7f',
+        etiqueta_envio_id: "466958dd-e525-4e8d-95f1-067124a5ea7f",
       };
       if (link) updatePayload.link_etiqueta = link;
 
       // Abrir link da etiqueta
-      if (link) window.open(link, '_blank');
+      if (link) window.open(link, "_blank");
 
       // Mostrar modal de confirmação — o status só muda quando o usuário confirmar
       setConfirmEnvioModal({
@@ -1323,27 +1648,75 @@ export function Logistica() {
         updatePayload,
       });
     } catch (err: any) {
-      console.error('Erro ao processar pedido:', err);
-      toast({ title: 'Erro ao processar pedido', description: err.message || String(err), variant: 'destructive' });
+      console.error("Erro ao processar pedido:", err);
+      toast({
+        title: "Erro ao processar pedido",
+        description: err.message || String(err),
+        variant: "destructive",
+      });
     } finally {
       setLoadingScan(false);
     }
   };
 
   // Confirma o envio: atualiza status e avança para o próximo pedido
+  const handleConcluirRetirada = async () => {
+    if (!foundPedido?.id) return;
+    try {
+      const pedidoId = foundPedido.id;
+      const pedidoIdExterno = foundPedido.id_externo;
+      const { data: dataArray, error } = await supabase
+        .from("pedidos")
+        .update({
+          status_id: ENVIADO_STATUS_ID,
+          data_enviado: new Date().toISOString(),
+        } as any)
+        .eq("id", pedidoId)
+        .select("id, id_externo");
+      if (error) throw error;
+      const data = dataArray?.[0];
+      toast({
+        title: "Pedido concluído",
+        description:
+          "Pedido marcado como retirado e status atualizado para Enviado",
+      });
+      if (data?.id && userId) {
+        await registrarHistoricoMovimentacao(
+          data.id,
+          `Pedido concluído via logística como retirada (sem transportadora) - ${data.id_externo || data.id}`,
+          userId,
+        );
+      }
+      avancarParaProximoPedidoAposConclusao(pedidoId);
+      try {
+        await fetchLogItems();
+      } catch (_) {}
+    } catch (err: any) {
+      console.error("Erro ao concluir retirada:", err);
+      toast({
+        title: "Erro ao atualizar status",
+        description: err.message || String(err),
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleConfirmarEnvio = async () => {
     if (!confirmEnvioModal) return;
     const { pedidoId, pedidoIdExterno, updatePayload } = confirmEnvioModal;
     setConfirmEnvioModal(null);
     try {
       const { data: dataArray, error } = await supabase
-        .from('pedidos')
+        .from("pedidos")
         .update(updatePayload)
-        .eq('id', pedidoId)
-        .select('id, id_externo');
+        .eq("id", pedidoId)
+        .select("id, id_externo");
       if (error) throw error;
       const data = dataArray?.[0];
-      toast({ title: 'Pedido concluído', description: 'Etiqueta processada e status atualizado com sucesso' });
+      toast({
+        title: "Pedido concluído",
+        description: "Etiqueta processada e status atualizado com sucesso",
+      });
       if (data?.id && userId) {
         await registrarHistoricoMovimentacao(
           data.id,
@@ -1352,10 +1725,16 @@ export function Logistica() {
         );
       }
       avancarParaProximoPedidoAposConclusao(pedidoId);
-      try { await fetchLogItems(); } catch (_) {}
+      try {
+        await fetchLogItems();
+      } catch (_) {}
     } catch (err: any) {
-      console.error('Erro ao confirmar envio:', err);
-      toast({ title: 'Erro ao atualizar status', description: err.message || String(err), variant: 'destructive' });
+      console.error("Erro ao confirmar envio:", err);
+      toast({
+        title: "Erro ao atualizar status",
+        description: err.message || String(err),
+        variant: "destructive",
+      });
     }
   };
 
@@ -1364,216 +1743,623 @@ export function Logistica() {
 
     // Carregar o pedido e marcar todos os itens como já bipados
     setFoundPedido(pedidoJaEnviado);
-    const todosIds = (pedidoJaEnviado.itens_pedido || []).map((item: any) => item.id);
+    const todosIds = (pedidoJaEnviado.itens_pedido || []).map(
+      (item: any) => item.id,
+    );
     setFoundItemIds(todosIds);
-    
+
     // Fechar modais e limpar estados
     setPedidoJaEnviadoModalOpen(false);
     setPedidoJaEnviado(null);
-    setPedidoIdInput('');
+    setPedidoIdInput("");
 
-    toast({ 
-      title: 'Pedido carregado', 
-      description: `Pedido ${pedidoJaEnviado.id_externo || pedidoJaEnviado.id} pronto para regerar etiqueta` 
+    toast({
+      title: "Pedido carregado",
+      description: `Pedido ${pedidoJaEnviado.id_externo || pedidoJaEnviado.id} pronto para regerar etiqueta`,
     });
 
     // Focar no input principal já que não precisa bipar
     setTimeout(() => barcodeRef.current?.focus(), 100);
   };
 
- return (
+  return (
     <div className="flex h-full">
       <LogisticaSidebar />
       <div ref={scrollContainerRef} className="flex-1 h-full overflow-y-auto">
         <div className="space-y-6 p-6">
-      <div>
-        <div className="flex items-center justify-between">
           <div>
-            {(modoListaPorPlataforma || !!foundPedido) && (
-              <div className="mb-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="-ml-1"
-                  onClick={() => {
-                    setFoundPedido(null);
-                    setFoundItemIds([]);
-                    setFilterPlataformaId('');
-                    setModoListaPorPlataforma(false);
-                    setPedidosFiltrados([]);
-                    setPedidoAtualIndex(0);
-                    setOpenPlatformId(null);
-                    setItemInputs({});
-                    setItemStatus({});
-                    setTimeout(() => barcodeRef.current?.focus(), 50);
-                  }}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-2" />
-                  Voltar
-                </Button>
-              </div>
-            )}
-            <h1 className="text-2xl font-bold">Logística</h1>
-            <p className="text-muted-foreground">Envio de pedidos</p>
-          </div>
-
-        </div>
-
-        <div className="mt-6">
-          <div className="flex items-center gap-2">
-            <div className="relative" ref={filterDropdownRef}>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="h-12 px-4 bg-card rounded-[16px]"
-                onClick={() => {
-                  setTempFilterPlataformaId(filterPlataformaId);
-                  setTempFilterProdutos(filterProdutos);
-                  setProdutoSearchTerm('');
-                  setProdutosList([]);
-                  setShowFilters((s) => !s);
-                }}
-              >
-                <HiFilter className="h-8 w-8" />
-              </Button>
-
-              {showFilters && (
-                <div className="absolute left-0 top-full mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="text-sm font-medium">Filtros</div>
-                    <button type="button" className="text-muted-foreground hover:text-foreground" onClick={() => setShowFilters(false)}>
-                      <X className="h-4 w-4" />
-                    </button>
-                  </div>
-                  <div className="mb-3">
-                    <label htmlFor="filter-plataforma-logistica" className="text-sm block mb-1">Filtrar por plataforma</label>
-                    <select
-                      id="filter-plataforma-logistica"
-                      value={tempFilterPlataformaId}
-                      onChange={(e) => setTempFilterPlataformaId(e.target.value)}
-                      className="w-full border rounded px-2 py-1 text-sm"
+            <div className="flex items-center justify-between">
+              <div>
+                {(modoListaPorPlataforma || !!foundPedido) && (
+                  <div className="mb-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="-ml-1"
+                      onClick={() => {
+                        setFoundPedido(null);
+                        setFoundItemIds([]);
+                        setFilterPlataformaId("");
+                        setModoListaPorPlataforma(false);
+                        setPedidosFiltrados([]);
+                        setPedidoAtualIndex(0);
+                        setOpenPlatformId(null);
+                        setItemInputs({});
+                        setItemStatus({});
+                        setTimeout(() => barcodeRef.current?.focus(), 50);
+                      }}
                     >
-                      <option value="">Todas</option>
-                      {plataformasList.map((plataforma) => (
-                        <option key={plataforma.id} value={plataforma.id}>{plataforma.nome}</option>
+                      <ChevronLeft className="h-4 w-4 mr-2" />
+                      Voltar
+                    </Button>
+                  </div>
+                )}
+                <h1 className="text-2xl font-bold">Logística</h1>
+                <p className="text-muted-foreground">Envio de pedidos</p>
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <div className="flex items-center gap-2">
+                <div className="relative" ref={filterDropdownRef}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-12 px-4 bg-card rounded-[16px]"
+                    onClick={() => {
+                      setTempFilterPlataformaId(filterPlataformaId);
+                      setTempFilterProdutos(filterProdutos);
+                      setProdutoSearchTerm("");
+                      setProdutosList([]);
+                      setShowFilters((s) => !s);
+                    }}
+                  >
+                    <HiFilter className="h-8 w-8" />
+                  </Button>
+
+                  {showFilters && (
+                    <div className="absolute left-0 top-full mt-2 w-64 bg-white border rounded shadow z-50 p-3 overflow-visible">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="text-sm font-medium">Filtros</div>
+                        <button
+                          type="button"
+                          className="text-muted-foreground hover:text-foreground"
+                          onClick={() => setShowFilters(false)}
+                        >
+                          <X className="h-4 w-4" />
+                        </button>
+                      </div>
+                      <div className="mb-3">
+                        <label
+                          htmlFor="filter-plataforma-logistica"
+                          className="text-sm block mb-1"
+                        >
+                          Filtrar por plataforma
+                        </label>
+                        <select
+                          id="filter-plataforma-logistica"
+                          value={tempFilterPlataformaId}
+                          onChange={(e) =>
+                            setTempFilterPlataformaId(e.target.value)
+                          }
+                          className="w-full border rounded px-2 py-1 text-sm"
+                        >
+                          <option value="">Todas</option>
+                          {plataformasList.map((plataforma) => (
+                            <option key={plataforma.id} value={plataforma.id}>
+                              {plataforma.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setProdutoSearchTerm("");
+                            setProdutosList([]);
+                            setTempFilterPlataformaId("");
+                            setFilterPlataformaId("");
+                            setTempFilterProdutos([]);
+                            setFilterProdutos([]);
+                          }}
+                        >
+                          Limpar
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          onClick={() => {
+                            setProdutoSearchTerm("");
+                            setProdutosList([]);
+                            setFilterPlataformaId(tempFilterPlataformaId);
+                            setFilterProdutos(tempFilterProdutos);
+                            setShowFilters(false);
+                          }}
+                        >
+                          Aplicar
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <div className="relative flex-1">
+                  <input
+                    ref={barcodeRef}
+                    value={barcode}
+                    onChange={(e) => setBarcode(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    onBlur={() =>
+                      setTimeout(() => {
+                        if (showFilters) return;
+                        if (
+                          filterDropdownRef.current?.contains(
+                            document.activeElement,
+                          )
+                        )
+                          return;
+                        // Só re-foca automaticamente quando há um pedido ativo sendo processado
+                        if (!foundPedido) return;
+                        // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
+                        const items = foundPedido?.itens_pedido || [];
+                        const hasMissing = items.some(
+                          (it: any) =>
+                            !foundItemIds.includes(it.id) && !it.bipado,
+                        );
+                        if (!hasMissing) barcodeRef.current?.focus();
+                      }, 0)
+                    }
+                    className="w-full text-2xl py-2 pl-3 pr-24 border-2 rounded-[16px] bg-white focus:outline-none focus:ring-0 focus:border-custom-600 transition-colors"
+                    placeholder="Pesquisar pelo ID do pedido"
+                    aria-label="Leitor de código"
+                  />
+                  <Button
+                    variant="ghost"
+                    onClick={() => {
+                      setFoundPedido(null);
+                      setFoundItemIds([]);
+                      setItemInputs({});
+                      setItemStatus({});
+                      setBarcode("");
+                    }}
+                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-3 text-sm"
+                  >
+                    Limpar
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {/* Cards: itens a enviar (view vw_itens_logistica) - show only when no pedido is active and no filtro por plataforma */}
+            {!foundPedido && !modoListaPorPlataforma && (
+              <div className="mt-4">
+                {/* Seção: Produtos a Embalar */}
+                <div className="mb-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3
+                      className="text-xl font-medium"
+                      style={{ fontSize: "18px", fontWeight: 600 }}
+                    >
+                      PRODUTOS A EMBALAR
+                    </h3>
+                    <span className="text-sm text-muted-foreground">
+                      {loadingLogItems
+                        ? "Carregando..."
+                        : `${filteredLogItems.length} produto(s)`}
+                    </span>
+                  </div>
+
+                  {loadingLogItems ? (
+                    <div className="flex gap-3 flex-wrap">
+                      {[...Array(5)].map((_, i) => (
+                        <div
+                          key={i}
+                          className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse"
+                        />
                       ))}
-                    </select>
-                  </div>
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setProdutoSearchTerm('');
-                        setProdutosList([]);
-                        setTempFilterPlataformaId('');
-                        setFilterPlataformaId('');
-                        setTempFilterProdutos([]);
-                        setFilterProdutos([]);
-                      }}
-                    >
-                      Limpar
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => {
-                        setProdutoSearchTerm('');
-                        setProdutosList([]);
-                        setFilterPlataformaId(tempFilterPlataformaId);
-                        setFilterProdutos(tempFilterProdutos);
-                        setShowFilters(false);
-                      }}
-                    >
-                      Aplicar
-                    </Button>
-                  </div>
+                    </div>
+                  ) : logItemsError ? (
+                    <div className="text-sm text-red-500">
+                      Erro ao carregar produtos: {logItemsError}
+                    </div>
+                  ) : filteredLogItems.length === 0 ? (
+                    <div className="text-sm text-muted-foreground">
+                      Nenhum produto pendente de embalagem.
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-3">
+                      {filteredLogItems
+                        .slice()
+                        .sort((a, b) => b.quantidade_total - a.quantidade_total)
+                        .map((item, idx) => {
+                          const nomeProduto = item.produto?.nome || "—";
+                          const nomeVariacao = item.variacao?.nome || null;
+                          const sku =
+                            item.variacao?.sku || item.produto?.sku || null;
+                          const imgUrl =
+                            item.variacao?.img_url ||
+                            item.produto?.img_url ||
+                            null;
+
+                          return (
+                            <div
+                              key={`${item.produto_id}-${item.variacao_id}-${idx}`}
+                              className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                              onClick={() =>
+                                fetchPedidosDoProduto({
+                                  produto_id: item.produto_id,
+                                  variacao_id: item.variacao_id,
+                                  nomeProduto,
+                                  nomeVariacao,
+                                  imgUrl,
+                                })
+                              }
+                            >
+                              {/* Badge de quantidade */}
+                              <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                                ×{item.quantidade_total}
+                              </span>
+
+                              {/* Imagem */}
+                              {imgUrl ? (
+                                <img
+                                  src={imgUrl}
+                                  alt={nomeProduto}
+                                  className="h-14 w-14 rounded-md object-cover border"
+                                />
+                              ) : (
+                                <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                  sem foto
+                                </div>
+                              )}
+
+                              {/* Nome do produto */}
+                              <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                {nomeProduto}
+                              </p>
+
+                              {/* Variação */}
+                              {nomeVariacao && (
+                                <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
+                                  {nomeVariacao}
+                                </p>
+                              )}
+
+                              {/* SKU */}
+                              {sku && (
+                                <span className="text-[9px] font-mono text-muted-foreground/70 truncate w-full text-center">
+                                  {sku}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-            <div className="relative flex-1">
-              <input
-                ref={barcodeRef}
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                onKeyDown={handleKeyDown}
-                onBlur={() => setTimeout(() => {
-                  if (showFilters) return;
-                  if (filterDropdownRef.current?.contains(document.activeElement)) return;
-                  // Só re-foca automaticamente quando há um pedido ativo sendo processado
-                  if (!foundPedido) return;
-                  // if there's an active pedido with remaining un-bipado items, don't force focus back to main input
-                  const items = foundPedido?.itens_pedido || [];
-                  const hasMissing = items.some((it: any) => !foundItemIds.includes(it.id) && !it.bipado);
-                  if (!hasMissing) barcodeRef.current?.focus();
-                }, 0)}
-                className="w-full text-2xl py-2 pl-3 pr-24 border-2 rounded-[16px] bg-white focus:outline-none focus:ring-0 focus:border-custom-600 transition-colors"
-                placeholder="Pesquisar pelo ID do pedido"
-                aria-label="Leitor de código"
-              />
-              <Button
-                variant="ghost"
-                onClick={() => { setFoundPedido(null); setFoundItemIds([]); setItemInputs({}); setItemStatus({}); setBarcode(''); }}
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 px-3 text-sm"
-              >
-                Limpar
-              </Button>
-            </div>
-          </div>
-        </div>
 
-        {/* Cards: itens a enviar (view vw_itens_logistica) - show only when no pedido is active and no filtro por plataforma */}
-        {!foundPedido && !modoListaPorPlataforma && (
-          <div className="mt-4">
+                {/* ─── Seções: Pacotes Comuns e Incomuns ─── */}
+                {!loadingPlataformaCards &&
+                  plataformasCards.length > 0 &&
+                  (() => {
+                    const todosOsPedidos = [
+                      ...new Map(
+                        plataformasCards
+                          .flatMap((pc: any) => pc.pedidos || [])
+                          .map((p: any) => [p.id, p]),
+                      ).values(),
+                    ];
 
-            {/* Seção: Produtos a Embalar */}
-            <div className="mb-8">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>PRODUTOS A EMBALAR</h3>
-                <span className="text-sm text-muted-foreground">
-                  {loadingLogItems ? 'Carregando...' : `${filteredLogItems.length} produto(s)`}
-                </span>
-              </div>
+                    const pedidosComuns = todosOsPedidos.filter((p: any) => {
+                      const its = platformOrderItems[p.id];
+                      return its !== undefined && its.length <= 1;
+                    });
+                    const pedidosIncomuns = todosOsPedidos.filter((p: any) => {
+                      const its = platformOrderItems[p.id];
+                      return its !== undefined && its.length > 1;
+                    });
 
-              {loadingLogItems ? (
-                <div className="flex gap-3 flex-wrap">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="flex-shrink-0 w-24 h-36 rounded-lg border bg-muted/40 animate-pulse" />
-                  ))}
-                </div>
-              ) : logItemsError ? (
-                <div className="text-sm text-red-500">Erro ao carregar produtos: {logItemsError}</div>
-              ) : filteredLogItems.length === 0 ? (
-                <div className="text-sm text-muted-foreground">Nenhum produto pendente de embalagem.</div>
-              ) : (
-                <div className="flex flex-wrap gap-3">
-                  {filteredLogItems
-                    .slice()
-                    .sort((a, b) => b.quantidade_total - a.quantidade_total)
-                    .map((item, idx) => {
-                      const nomeProduto = item.produto?.nome || '—';
-                      const nomeVariacao = item.variacao?.nome || null;
-                      const sku = item.variacao?.sku || item.produto?.sku || null;
-                      const imgUrl = item.variacao?.img_url || item.produto?.img_url || null;
+                    // ── Pedidos Urgentes (apenas flag urgente=true, excluindo Shopee e ML-org) ──
+                    const pedidosUrgentes = todosOsPedidos.filter((p: any) => {
+                      if (p.plataforma_id === SHOPEE_PLATAFORMA_ID)
+                        return false;
+                      if (p.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID) {
+                        const items = platformOrderItems[p.id] || [];
+                        if (
+                          items.some((it: any) =>
+                            /organizador/i.test(it.nome || ""),
+                          )
+                        )
+                          return false;
+                      }
+                      return p.urgente === true;
+                    });
+
+                    // ── Shopee (seção própria) ──
+                    const pedidosShopeeUrgentes = todosOsPedidos.filter(
+                      (p: any) => p.plataforma_id === SHOPEE_PLATAFORMA_ID,
+                    );
+
+                    // ── Mercado Livre Organizador (seção própria) ──
+                    const pedidosMLOrganizador = todosOsPedidos.filter(
+                      (p: any) => {
+                        if (p.plataforma_id !== MERCADO_LIVRE_PLATAFORMA_ID)
+                          return false;
+                        const items = platformOrderItems[p.id] || [];
+                        return items.some((it: any) =>
+                          /organizador/i.test(it.nome || ""),
+                        );
+                      },
+                    );
+
+                    if (
+                      pedidosComuns.length === 0 &&
+                      pedidosIncomuns.length === 0 &&
+                      pedidosUrgentes.length === 0 &&
+                      pedidosShopeeUrgentes.length === 0 &&
+                      pedidosMLOrganizador.length === 0
+                    )
+                      return null;
+
+                    // mapa pedido id -> info da plataforma/card
+                    const plataformaInfoMap = new Map(
+                      plataformasCards.flatMap((pc: any) =>
+                        (pc.pedidos || []).map((p: any) => [
+                          p.id,
+                          { nome: pc.nome, img_url: pc.img_url, cardId: pc.id },
+                        ]),
+                      ),
+                    );
+
+                    const abrirPedido = async (p: any) => {
+                      const plataformaInfo = plataformaInfoMap.get(p.id) as any;
+                      const isSynCard =
+                        plataformaInfo?.cardId === "urgentes" ||
+                        plataformaInfo?.cardId === "leads";
+                      setOpenPlatformId(null);
+                      if (isSynCard) {
+                        try {
+                          const pc = plataformasCards.find(
+                            (c: any) => c.id === plataformaInfo.cardId,
+                          );
+                          const ids = (pc?.pedidos || [])
+                            .map((x: any) => x.id)
+                            .filter(Boolean);
+                          const fullList = sortPedidos(
+                            await fetchPedidosPorIds(ids),
+                          );
+                          const startIdx = Math.max(
+                            0,
+                            fullList.findIndex((x: any) => x.id === p.id),
+                          );
+                          setModoListaPorPlataforma(true);
+                          setFilterPlataformaId("");
+                          setPedidosFiltrados(fullList);
+                          setPedidoAtualIndex(startIdx);
+                          setFoundPedido(fullList[startIdx] || null);
+                          setFoundItemIds([]);
+                          setItemInputs({});
+                          setItemStatus({});
+                          setTimeout(() => barcodeRef.current?.focus(), 50);
+                        } catch (err) {
+                          console.error(err);
+                        }
+                      } else {
+                        targetPedidoIdRef.current = p.id;
+                        setFilterPlataformaId(plataformaInfo?.cardId || "");
+                      }
+                    };
+
+                    const abrirGrupoComum = async (grupo: GrupoComum) => {
+                      try {
+                        const ids = grupo.pedidos
+                          .map((x: any) => x.id)
+                          .filter(Boolean);
+                        const fullList = sortPedidos(
+                          await fetchPedidosPorIds(ids),
+                        );
+                        setOpenPlatformId(null);
+                        setModoListaPorPlataforma(true);
+                        setFilterPlataformaId("");
+                        setPedidosFiltrados(fullList);
+                        setPedidoAtualIndex(0);
+                        setFoundPedido(fullList[0] || null);
+                        setFoundItemIds([]);
+                        setItemInputs({});
+                        setItemStatus({});
+                        setTimeout(() => barcodeRef.current?.focus(), 50);
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    };
+
+                    const abrirListaUrgentes = async (pedidos?: any[]) => {
+                      try {
+                        const lista = pedidos ?? pedidosUrgentes;
+                        const ids = lista.map((x: any) => x.id).filter(Boolean);
+                        const fullList = sortPedidos(
+                          await fetchPedidosPorIds(ids),
+                        );
+                        setOpenPlatformId(null);
+                        setModoListaPorPlataforma(true);
+                        setFilterPlataformaId("");
+                        setPedidosFiltrados(fullList);
+                        setPedidoAtualIndex(0);
+                        setFoundPedido(fullList[0] || null);
+                        setFoundItemIds([]);
+                        setItemInputs({});
+                        setItemStatus({});
+                        setTimeout(() => barcodeRef.current?.focus(), 50);
+                      } catch (err) {
+                        console.error(err);
+                      }
+                    };
+
+                    // Agrupar urgentes por plataforma
+                    type GrupoUrgente = {
+                      plataformaId: string;
+                      nome: string;
+                      img_url: string | null;
+                      pedidos: any[];
+                    };
+                    const gruposUrgentesMap = new Map<string, GrupoUrgente>();
+                    for (const p of pedidosUrgentes) {
+                      const info = plataformaInfoMap.get(p.id) as any;
+                      const pid = info?.cardId || p.plataforma_id || "outros";
+                      const existing = gruposUrgentesMap.get(pid);
+                      if (existing) {
+                        existing.pedidos.push(p);
+                      } else {
+                        gruposUrgentesMap.set(pid, {
+                          plataformaId: pid,
+                          nome: info?.nome || "Outros",
+                          img_url: info?.img_url || null,
+                          pedidos: [p],
+                        });
+                      }
+                    }
+                    const gruposUrgentesArray = Array.from(
+                      gruposUrgentesMap.values(),
+                    ).sort((a, b) => b.pedidos.length - a.pedidos.length);
+
+                    // ── Pacotes Comuns: agrupar por produto ──
+                    type GrupoComum = {
+                      key: string;
+                      nomeProduto: string;
+                      nomeVariacao: string | null;
+                      img_url: string | null;
+                      count: number;
+                      pedidos: any[];
+                    };
+                    const gruposComuns = new Map<string, GrupoComum>();
+                    for (const p of pedidosComuns) {
+                      const it = (platformOrderItems[p.id] || [])[0];
+                      const key = `${it?.nomeProduto || it?.nome || ""}|||${it?.nomeVariacao || ""}`;
+                      const existente = gruposComuns.get(key);
+                      if (existente) {
+                        existente.count++;
+                        existente.pedidos.push(p);
+                      } else {
+                        gruposComuns.set(key, {
+                          key,
+                          nomeProduto: it?.nomeProduto || it?.nome || "—",
+                          nomeVariacao: it?.nomeVariacao || null,
+                          img_url: it?.img_url || null,
+                          count: 1,
+                          pedidos: [p],
+                        });
+                      }
+                    }
+                    const gruposComunsArray = Array.from(
+                      gruposComuns.values(),
+                    ).sort((a, b) => b.count - a.count);
+
+                    const renderCardComum = (grupo: GrupoComum) => (
+                      <div
+                        key={grupo.key}
+                        className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                        onClick={() => abrirGrupoComum(grupo)}
+                      >
+                        {/* Badge: número de pedidos desse produto */}
+                        <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
+                          ×{grupo.count}
+                        </span>
+
+                        {/* Imagem */}
+                        {grupo.img_url ? (
+                          <img
+                            src={grupo.img_url}
+                            alt={grupo.nomeProduto}
+                            className="h-14 w-14 rounded-md object-cover border"
+                          />
+                        ) : (
+                          <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                            sem foto
+                          </div>
+                        )}
+
+                        {/* Nome do produto */}
+                        <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                          {grupo.nomeProduto}
+                        </p>
+
+                        {/* Variação */}
+                        {grupo.nomeVariacao && (
+                          <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
+                            {grupo.nomeVariacao}
+                          </p>
+                        )}
+
+                        {/* Plataformas distintas do grupo */}
+                        {(() => {
+                          const plats = Array.from(
+                            new Map(
+                              grupo.pedidos
+                                .map(
+                                  (p: any) =>
+                                    plataformaInfoMap.get(p.id) as any,
+                                )
+                                .filter(Boolean)
+                                .map((info: any) => [
+                                  info.cardId ?? info.nome,
+                                  info,
+                                ]),
+                            ).values(),
+                          );
+                          if (plats.length === 0) return null;
+                          return (
+                            <div className="flex items-center gap-0.5 flex-wrap justify-center w-full -mt-0.5">
+                              {plats.map((info: any) =>
+                                info.img_url ? (
+                                  <img
+                                    key={info.cardId ?? info.nome}
+                                    src={info.img_url}
+                                    alt={info.nome}
+                                    title={info.nome}
+                                    className="w-3 h-3 rounded object-cover"
+                                  />
+                                ) : (
+                                  <span
+                                    key={info.cardId ?? info.nome}
+                                    className="text-[8px] text-muted-foreground"
+                                  >
+                                    {info.nome}
+                                  </span>
+                                ),
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    );
+
+                    const renderCardIncomum = (p: any) => {
+                      const items = platformOrderItems[p.id] || [];
+                      const plataformaInfo = plataformaInfoMap.get(p.id) as any;
+                      const primeiraImg = items[0]?.img_url || null;
+                      const totalItens = items.reduce(
+                        (acc: number, it: any) =>
+                          acc + Number(it.quantidade ?? 1),
+                        0,
+                      );
 
                       return (
                         <div
-                          key={`${item.produto_id}-${item.variacao_id}-${idx}`}
+                          key={p.id}
                           className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                          onClick={() => fetchPedidosDoProduto({ produto_id: item.produto_id, variacao_id: item.variacao_id, nomeProduto, nomeVariacao, imgUrl })}
+                          onClick={() => abrirPedido(p)}
                         >
-                          {/* Badge de quantidade */}
                           <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                            ×{item.quantidade_total}
+                            ×{totalItens}
                           </span>
 
-                          {/* Imagem */}
-                          {imgUrl ? (
+                          {primeiraImg ? (
                             <img
-                              src={imgUrl}
-                              alt={nomeProduto}
+                              src={primeiraImg}
+                              alt=""
                               className="h-14 w-14 rounded-md object-cover border"
                             />
                           ) : (
@@ -1582,1244 +2368,1464 @@ export function Logistica() {
                             </div>
                           )}
 
-                          {/* Nome do produto */}
                           <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                            {nomeProduto}
+                            {p.id_externo || p.id}
                           </p>
 
-                          {/* Variação */}
-                          {nomeVariacao && (
-                            <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
-                              {nomeVariacao}
-                            </p>
-                          )}
-
-                          {/* SKU */}
-                          {sku && (
-                            <span className="text-[9px] font-mono text-muted-foreground/70 truncate w-full text-center">
-                              {sku}
+                          <div className="flex items-center gap-1 -mt-0.5">
+                            {plataformaInfo?.img_url ? (
+                              <img
+                                src={plataformaInfo.img_url}
+                                alt={plataformaInfo.nome}
+                                className="w-3 h-3 rounded object-cover"
+                              />
+                            ) : null}
+                            <span className="text-[9px] text-muted-foreground truncate">
+                              {plataformaInfo?.nome || ""}
                             </span>
+                          </div>
+
+                          {items.length > 1 && (
+                            <div className="flex gap-0.5 flex-wrap justify-center w-full">
+                              {items
+                                .slice(1, 4)
+                                .map((it: any, idx: number) =>
+                                  it.img_url ? (
+                                    <img
+                                      key={idx}
+                                      src={it.img_url}
+                                      alt=""
+                                      className="h-5 w-5 rounded object-cover border"
+                                    />
+                                  ) : (
+                                    <div
+                                      key={idx}
+                                      className="h-5 w-5 rounded border bg-muted"
+                                    />
+                                  ),
+                                )}
+                              {items.length > 4 && (
+                                <span className="text-[9px] text-muted-foreground">
+                                  +{items.length - 4}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       );
-                    })}
-                </div>
-              )}
-            </div>
+                    };
 
-            {/* ─── Seções: Pacotes Comuns e Incomuns ─── */}
-            {!loadingPlataformaCards && plataformasCards.length > 0 && (() => {
-              const todosOsPedidos = [...new Map(
-                plataformasCards.flatMap((pc: any) => pc.pedidos || []).map((p: any) => [p.id, p])
-              ).values()];
-
-              const pedidosComuns = todosOsPedidos.filter((p: any) => {
-                const its = platformOrderItems[p.id];
-                return its !== undefined && its.length <= 1;
-              });
-              const pedidosIncomuns = todosOsPedidos.filter((p: any) => {
-                const its = platformOrderItems[p.id];
-                return its !== undefined && its.length > 1;
-              });
-
-              // ── Pedidos Urgentes (apenas flag urgente=true, excluindo Shopee e ML-org) ──
-              const pedidosUrgentes = todosOsPedidos.filter((p: any) => {
-                if (p.plataforma_id === SHOPEE_PLATAFORMA_ID) return false;
-                if (p.plataforma_id === MERCADO_LIVRE_PLATAFORMA_ID) {
-                  const items = platformOrderItems[p.id] || [];
-                  if (items.some((it: any) => /organizador/i.test(it.nome || ''))) return false;
-                }
-                return p.urgente === true;
-              });
-
-              // ── Shopee (seção própria) ──
-              const pedidosShopeeUrgentes = todosOsPedidos.filter((p: any) =>
-                p.plataforma_id === SHOPEE_PLATAFORMA_ID
-              );
-
-              // ── Mercado Livre Organizador (seção própria) ──
-              const pedidosMLOrganizador = todosOsPedidos.filter((p: any) => {
-                if (p.plataforma_id !== MERCADO_LIVRE_PLATAFORMA_ID) return false;
-                const items = platformOrderItems[p.id] || [];
-                return items.some((it: any) => /organizador/i.test(it.nome || ''));
-              });
-
-              if (
-                pedidosComuns.length === 0 &&
-                pedidosIncomuns.length === 0 &&
-                pedidosUrgentes.length === 0 &&
-                pedidosShopeeUrgentes.length === 0 &&
-                pedidosMLOrganizador.length === 0
-              ) return null;
-
-              // mapa pedido id -> info da plataforma/card
-              const plataformaInfoMap = new Map(
-                plataformasCards.flatMap((pc: any) =>
-                  (pc.pedidos || []).map((p: any) => [p.id, { nome: pc.nome, img_url: pc.img_url, cardId: pc.id }])
-                )
-              );
-
-              const abrirPedido = async (p: any) => {
-                const plataformaInfo = plataformaInfoMap.get(p.id) as any;
-                const isSynCard = plataformaInfo?.cardId === 'urgentes' || plataformaInfo?.cardId === 'leads';
-                setOpenPlatformId(null);
-                if (isSynCard) {
-                  try {
-                    const pc = plataformasCards.find((c: any) => c.id === plataformaInfo.cardId);
-                    const ids = (pc?.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                    const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                    const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
-                    setModoListaPorPlataforma(true);
-                    setFilterPlataformaId('');
-                    setPedidosFiltrados(fullList);
-                    setPedidoAtualIndex(startIdx);
-                    setFoundPedido(fullList[startIdx] || null);
-                    setFoundItemIds([]);
-                    setItemInputs({});
-                    setItemStatus({});
-                    setTimeout(() => barcodeRef.current?.focus(), 50);
-                  } catch (err) { console.error(err); }
-                } else {
-                  targetPedidoIdRef.current = p.id;
-                  setFilterPlataformaId(plataformaInfo?.cardId || '');
-                }
-              };
-
-              const abrirGrupoComum = async (grupo: GrupoComum) => {
-                try {
-                  const ids = grupo.pedidos.map((x: any) => x.id).filter(Boolean);
-                  const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                  setOpenPlatformId(null);
-                  setModoListaPorPlataforma(true);
-                  setFilterPlataformaId('');
-                  setPedidosFiltrados(fullList);
-                  setPedidoAtualIndex(0);
-                  setFoundPedido(fullList[0] || null);
-                  setFoundItemIds([]);
-                  setItemInputs({});
-                  setItemStatus({});
-                  setTimeout(() => barcodeRef.current?.focus(), 50);
-                } catch (err) { console.error(err); }
-              };
-
-              const abrirListaUrgentes = async (pedidos?: any[]) => {
-                try {
-                  const lista = pedidos ?? pedidosUrgentes;
-                  const ids = lista.map((x: any) => x.id).filter(Boolean);
-                  const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                  setOpenPlatformId(null);
-                  setModoListaPorPlataforma(true);
-                  setFilterPlataformaId('');
-                  setPedidosFiltrados(fullList);
-                  setPedidoAtualIndex(0);
-                  setFoundPedido(fullList[0] || null);
-                  setFoundItemIds([]);
-                  setItemInputs({});
-                  setItemStatus({});
-                  setTimeout(() => barcodeRef.current?.focus(), 50);
-                } catch (err) { console.error(err); }
-              };
-
-              // Agrupar urgentes por plataforma
-              type GrupoUrgente = { plataformaId: string; nome: string; img_url: string | null; pedidos: any[] };
-              const gruposUrgentesMap = new Map<string, GrupoUrgente>();
-              for (const p of pedidosUrgentes) {
-                const info = plataformaInfoMap.get(p.id) as any;
-                const pid = info?.cardId || p.plataforma_id || 'outros';
-                const existing = gruposUrgentesMap.get(pid);
-                if (existing) {
-                  existing.pedidos.push(p);
-                } else {
-                  gruposUrgentesMap.set(pid, {
-                    plataformaId: pid,
-                    nome: info?.nome || 'Outros',
-                    img_url: info?.img_url || null,
-                    pedidos: [p],
-                  });
-                }
-              }
-              const gruposUrgentesArray = Array.from(gruposUrgentesMap.values()).sort((a, b) => b.pedidos.length - a.pedidos.length);
-
-              // ── Pacotes Comuns: agrupar por produto ──
-              type GrupoComum = { key: string; nomeProduto: string; nomeVariacao: string | null; img_url: string | null; count: number; pedidos: any[] };
-              const gruposComuns = new Map<string, GrupoComum>();
-              for (const p of pedidosComuns) {
-                const it = (platformOrderItems[p.id] || [])[0];
-                const key = `${it?.nomeProduto || it?.nome || ''}|||${it?.nomeVariacao || ''}`;
-                const existente = gruposComuns.get(key);
-                if (existente) {
-                  existente.count++;
-                  existente.pedidos.push(p);
-                } else {
-                  gruposComuns.set(key, {
-                    key,
-                    nomeProduto: it?.nomeProduto || it?.nome || '—',
-                    nomeVariacao: it?.nomeVariacao || null,
-                    img_url: it?.img_url || null,
-                    count: 1,
-                    pedidos: [p],
-                  });
-                }
-              }
-              const gruposComunsArray = Array.from(gruposComuns.values()).sort((a, b) => b.count - a.count);
-
-              const renderCardComum = (grupo: GrupoComum) => (
-                <div
-                  key={grupo.key}
-                  className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => abrirGrupoComum(grupo)}
-                >
-                  {/* Badge: número de pedidos desse produto */}
-                  <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                    ×{grupo.count}
-                  </span>
-
-                  {/* Imagem */}
-                  {grupo.img_url ? (
-                    <img src={grupo.img_url} alt={grupo.nomeProduto} className="h-14 w-14 rounded-md object-cover border" />
-                  ) : (
-                    <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                      sem foto
-                    </div>
-                  )}
-
-                  {/* Nome do produto */}
-                  <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                    {grupo.nomeProduto}
-                  </p>
-
-                  {/* Variação */}
-                  {grupo.nomeVariacao && (
-                    <p className="text-[9px] text-muted-foreground text-center leading-tight line-clamp-1 w-full -mt-0.5">
-                      {grupo.nomeVariacao}
-                    </p>
-                  )}
-
-                  {/* Plataformas distintas do grupo */}
-                  {(() => {
-                    const plats = Array.from(
-                      new Map(
-                        grupo.pedidos
-                          .map((p: any) => plataformaInfoMap.get(p.id) as any)
-                          .filter(Boolean)
-                          .map((info: any) => [info.cardId ?? info.nome, info])
-                      ).values()
-                    );
-                    if (plats.length === 0) return null;
                     return (
-                      <div className="flex items-center gap-0.5 flex-wrap justify-center w-full -mt-0.5">
-                        {plats.map((info: any) =>
-                          info.img_url ? (
-                            <img key={info.cardId ?? info.nome} src={info.img_url} alt={info.nome} title={info.nome} className="w-3 h-3 rounded object-cover" />
-                          ) : (
-                            <span key={info.cardId ?? info.nome} className="text-[8px] text-muted-foreground">{info.nome}</span>
-                          )
-                        )}
-                      </div>
-                    );
-                  })()}
-                </div>
-              );
-
-              const renderCardIncomum = (p: any) => {
-                const items = platformOrderItems[p.id] || [];
-                const plataformaInfo = plataformaInfoMap.get(p.id) as any;
-                const primeiraImg = items[0]?.img_url || null;
-                const totalItens = items.reduce((acc: number, it: any) => acc + Number(it.quantidade ?? 1), 0);
-
-                return (
-                  <div
-                    key={p.id}
-                    className="relative flex flex-col items-center gap-1.5 rounded-lg border bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                    onClick={() => abrirPedido(p)}
-                  >
-                    <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-[10px] px-1.5 py-0.5 min-w-[1.25rem] shadow">
-                      ×{totalItens}
-                    </span>
-
-                    {primeiraImg ? (
-                      <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
-                    ) : (
-                      <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
-                        sem foto
-                      </div>
-                    )}
-
-                    <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                      {p.id_externo || p.id}
-                    </p>
-
-                    <div className="flex items-center gap-1 -mt-0.5">
-                      {plataformaInfo?.img_url ? (
-                        <img src={plataformaInfo.img_url} alt={plataformaInfo.nome} className="w-3 h-3 rounded object-cover" />
-                      ) : null}
-                      <span className="text-[9px] text-muted-foreground truncate">{plataformaInfo?.nome || ''}</span>
-                    </div>
-
-                    {items.length > 1 && (
-                      <div className="flex gap-0.5 flex-wrap justify-center w-full">
-                        {items.slice(1, 4).map((it: any, idx: number) => (
-                          it.img_url ? (
-                            <img key={idx} src={it.img_url} alt="" className="h-5 w-5 rounded object-cover border" />
-                          ) : (
-                            <div key={idx} className="h-5 w-5 rounded border bg-muted" />
-                          )
-                        ))}
-                        {items.length > 4 && (
-                          <span className="text-[9px] text-muted-foreground">+{items.length - 4}</span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                );
-              };
-
-              return (
-                <>
-                  {/* Urgentes — agrupados por plataforma */}
-                  {pedidosUrgentes.length > 0 && (
-                    <div className="mb-8">
-                      <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600, color: '#ef4444' }}>🚨 URGENTES</h3>
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm text-muted-foreground">{pedidosUrgentes.length} pedido(s) • {gruposUrgentesArray.length} plataforma(s)</span>
-                          <button
-                            className="text-xs text-red-600 hover:underline font-medium"
-                            onClick={() => abrirListaUrgentes()}
-                          >
-                            Ver todos
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="space-y-5">
-                        {gruposUrgentesArray.map((grupo) => (
-                          <div key={grupo.plataformaId}>
-                            {/* Cabeçalho da plataforma */}
-                            <div
-                              className="flex items-center gap-2 mb-2 cursor-pointer group"
-                              onClick={() => abrirListaUrgentes(grupo.pedidos)}
-                            >
-                              {grupo.img_url ? (
-                                <img src={grupo.img_url} alt={grupo.nome} className="w-5 h-5 rounded object-cover" />
-                              ) : (
-                                <div className="w-5 h-5 rounded bg-red-100 flex items-center justify-center text-[9px] text-red-600 font-bold">
-                                  {grupo.nome.slice(0, 2).toUpperCase()}
-                                </div>
-                              )}
-                              <span className="text-sm font-semibold text-red-700 group-hover:underline">
-                                {grupo.nome}
-                              </span>
-                              <span className="text-xs text-muted-foreground">({grupo.pedidos.length})</span>
-                              <span className="text-xs text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">→ abrir lista</span>
+                      <>
+                        {/* Urgentes — agrupados por plataforma */}
+                        {pedidosUrgentes.length > 0 && (
+                          <div className="mb-8">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3
+                                className="text-xl font-medium"
+                                style={{
+                                  fontSize: "18px",
+                                  fontWeight: 600,
+                                  color: "#ef4444",
+                                }}
+                              >
+                                🚨 URGENTES
+                              </h3>
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm text-muted-foreground">
+                                  {pedidosUrgentes.length} pedido(s) •{" "}
+                                  {gruposUrgentesArray.length} plataforma(s)
+                                </span>
+                                <button
+                                  className="text-xs text-red-600 hover:underline font-medium"
+                                  onClick={() => abrirListaUrgentes()}
+                                >
+                                  Ver todos
+                                </button>
+                              </div>
                             </div>
 
-                            {/* Cards dos pedidos do grupo */}
-                            <div className="flex flex-wrap gap-3">
-                              {grupo.pedidos.map((p: any) => {
-                                const items = platformOrderItems[p.id] || [];
-                                const primeiraImg = items[0]?.img_url || null;
-                                const labelMotivo = p.urgente
-                                  ? 'Urgente'
-                                  : p.plataforma_id === SHOPEE_PLATAFORMA_ID
-                                  ? 'Shopee'
-                                  : 'ML Org.';
-
-                                return (
+                            <div className="space-y-5">
+                              {gruposUrgentesArray.map((grupo) => (
+                                <div key={grupo.plataformaId}>
+                                  {/* Cabeçalho da plataforma */}
                                   <div
-                                    key={p.id}
-                                    className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-red-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                    onClick={() => abrirListaUrgentes(grupo.pedidos)}
+                                    className="flex items-center gap-2 mb-2 cursor-pointer group"
+                                    onClick={() =>
+                                      abrirListaUrgentes(grupo.pedidos)
+                                    }
                                   >
-                                    <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-red-500 text-white font-bold text-[9px] px-1.5 py-0.5 shadow">
-                                      {labelMotivo}
-                                    </span>
-
-                                    {primeiraImg ? (
-                                      <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
+                                    {grupo.img_url ? (
+                                      <img
+                                        src={grupo.img_url}
+                                        alt={grupo.nome}
+                                        className="w-5 h-5 rounded object-cover"
+                                      />
                                     ) : (
-                                      <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
+                                      <div className="w-5 h-5 rounded bg-red-100 flex items-center justify-center text-[9px] text-red-600 font-bold">
+                                        {grupo.nome.slice(0, 2).toUpperCase()}
+                                      </div>
                                     )}
-
-                                    <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
-                                      {p.id_externo || p.id}
-                                    </p>
+                                    <span className="text-sm font-semibold text-red-700 group-hover:underline">
+                                      {grupo.nome}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ({grupo.pedidos.length})
+                                    </span>
+                                    <span className="text-xs text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      → abrir lista
+                                    </span>
                                   </div>
-                                );
-                              })}
+
+                                  {/* Cards dos pedidos do grupo */}
+                                  <div className="flex flex-wrap gap-3">
+                                    {grupo.pedidos.map((p: any) => {
+                                      const items =
+                                        platformOrderItems[p.id] || [];
+                                      const primeiraImg =
+                                        items[0]?.img_url || null;
+                                      const labelMotivo = p.urgente
+                                        ? "Urgente"
+                                        : p.plataforma_id ===
+                                            SHOPEE_PLATAFORMA_ID
+                                          ? "Shopee"
+                                          : "ML Org.";
+
+                                      return (
+                                        <div
+                                          key={p.id}
+                                          className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-red-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                          onClick={() =>
+                                            abrirListaUrgentes(grupo.pedidos)
+                                          }
+                                        >
+                                          <span className="absolute -top-2 -right-2 z-10 inline-flex items-center justify-center rounded-full bg-red-500 text-white font-bold text-[9px] px-1.5 py-0.5 shadow">
+                                            {labelMotivo}
+                                          </span>
+
+                                          {primeiraImg ? (
+                                            <img
+                                              src={primeiraImg}
+                                              alt=""
+                                              className="h-14 w-14 rounded-md object-cover border"
+                                            />
+                                          ) : (
+                                            <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                              sem foto
+                                            </div>
+                                          )}
+
+                                          <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                            {p.id_externo || p.id}
+                                          </p>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
                             </div>
                           </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Shopee */}
-                  {pedidosShopeeUrgentes.length > 0 && (() => {
-                    const shopeeInfo = plataformaInfoMap.get(pedidosShopeeUrgentes[0].id) as any;
-                    return (
-                      <div className="mb-8">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            {shopeeInfo?.img_url && (
-                              <img src={shopeeInfo.img_url} alt="Shopee" className="w-5 h-5 rounded object-cover" />
-                            )}
-                            <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600, color: '#ee4d2d' }}>SHOPEE</h3>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-muted-foreground">{pedidosShopeeUrgentes.length} pedido(s)</span>
-                            <button className="text-xs text-orange-600 hover:underline font-medium" onClick={() => abrirListaUrgentes(pedidosShopeeUrgentes)}>Abrir todos</button>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                          {pedidosShopeeUrgentes.map((p: any) => {
-                            const items = platformOrderItems[p.id] || [];
-                            const primeiraImg = items[0]?.img_url || null;
-                            return (
-                              <div
-                                key={p.id}
-                                className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-orange-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                onClick={() => abrirListaUrgentes(pedidosShopeeUrgentes)}
-                              >
-                                {primeiraImg ? (
-                                  <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
-                                ) : (
-                                  <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
-                                )}
-                                <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">{p.id_externo || p.id}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Mercado Livre Organizador */}
-                  {pedidosMLOrganizador.length > 0 && (() => {
-                    const mlInfo = plataformaInfoMap.get(pedidosMLOrganizador[0].id) as any;
-                    return (
-                      <div className="mb-8">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-2">
-                            {mlInfo?.img_url && (
-                              <img src={mlInfo.img_url} alt="Mercado Livre" className="w-5 h-5 rounded object-cover" />
-                            )}
-                            <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600, color: '#ffe600', textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}>MERCADO LIVRE <span style={{ fontSize: '13px', fontWeight: 400, color: '#888' }}>organizador</span></h3>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-muted-foreground">{pedidosMLOrganizador.length} pedido(s)</span>
-                            <button className="text-xs text-yellow-600 hover:underline font-medium" onClick={() => abrirListaUrgentes(pedidosMLOrganizador)}>Abrir todos</button>
-                          </div>
-                        </div>
-                        <div className="flex flex-wrap gap-3">
-                          {pedidosMLOrganizador.map((p: any) => {
-                            const items = platformOrderItems[p.id] || [];
-                            const primeiraImg = items[0]?.img_url || null;
-                            return (
-                              <div
-                                key={p.id}
-                                className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-yellow-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
-                                onClick={() => abrirListaUrgentes(pedidosMLOrganizador)}
-                              >
-                                {primeiraImg ? (
-                                  <img src={primeiraImg} alt="" className="h-14 w-14 rounded-md object-cover border" />
-                                ) : (
-                                  <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">sem foto</div>
-                                )}
-                                <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">{p.id_externo || p.id}</p>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-
-                  {/* Pacotes Comuns */}
-                  <div className="mb-8">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>PACOTES COMUNS</h3>
-                      <span className="text-sm text-muted-foreground">{pedidosComuns.length} pedido(s) • {gruposComunsArray.length} tipo(s)</span>
-                    </div>
-                    {gruposComunsArray.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">Nenhum pacote comum pendente.</div>
-                    ) : (
-                      <div className="flex flex-wrap gap-3">
-                        {gruposComunsArray.map(renderCardComum)}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Pacotes Incomuns */}
-                  <div className="mb-8">
-                    <div className="flex items-center justify-between mb-4">
-                      <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>PACOTES INCOMUNS</h3>
-                      <span className="text-sm text-muted-foreground">{pedidosIncomuns.length} pedido(s)</span>
-                    </div>
-                    {pedidosIncomuns.length === 0 ? (
-                      <div className="text-sm text-muted-foreground">Nenhum pacote incomum pendente.</div>
-                    ) : (
-                      <div className="flex flex-wrap gap-3">
-                        {pedidosIncomuns.map(renderCardIncomum)}
-                      </div>
-                    )}
-                  </div>
-                </>
-              );
-            })()}
-
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-medium" style={{ fontSize: '18px', fontWeight: 600 }}>ITENS A ENVIAR</h3>
-                      <div className="flex items-center gap-2">
-                        <Button variant="ghost" onClick={() => fetchLogItems()} className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2">
-                          <RefreshCw className="h-4 w-4" />
-                          Atualizar
-                        </Button>
-                      </div>
-            </div>
-
-            {loadingPlataformaCards ? (
-              <div className="text-sm text-muted-foreground">Carregando plataformas...</div>
-            ) : plataformasCards.length === 0 ? (
-              <div className="text-sm text-muted-foreground">Nenhuma plataforma com pedidos prontos para etiqueta.</div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full mx-auto">
-                {plataformasCards.map((pc) => {
-                  const isSyntheticCard = pc.id === 'urgentes' || pc.id === 'leads';
-
-                  return (
-                  <Card
-                    key={pc.id}
-                    className="p-4 cursor-pointer select-none"
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      const next = openPlatformId === pc.id ? null : pc.id;
-                      setOpenPlatformId(next);
-                      if (next) {
-                        setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
-                        try {
-                          const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                          if (ids.length > 0) await fetchItemsForPedidoIds(ids);
-                        } catch (err) { console.error(err); }
-                      }
-                    }}
-                  >
-                    <CardContent className="flex items-center gap-4 p-0">
-                      <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
-                        {pc.img_url ? (
-                          <img src={pc.img_url} alt={pc.nome} className="w-9 h-9 object-cover" />
-                        ) : pc.id === 'urgentes' ? (
-                          <TriangleAlert className="w-5 h-5 text-red-500" />
-                        ) : pc.id === 'leads' ? (
-                          <Users className="w-5 h-5 text-gray-600" />
-                        ) : (
-                          <FaBoxesStacked className="w-5 h-5 text-gray-500" />
                         )}
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-semibold text-base">{pc.nome}</div>
-                        <div className="text-sm text-muted-foreground">{pc.count} pedido(s)</div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
+
+                        {/* Shopee */}
+                        {pedidosShopeeUrgentes.length > 0 &&
+                          (() => {
+                            const shopeeInfo = plataformaInfoMap.get(
+                              pedidosShopeeUrgentes[0].id,
+                            ) as any;
+                            return (
+                              <div className="mb-8">
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="flex items-center gap-2">
+                                    {shopeeInfo?.img_url && (
+                                      <img
+                                        src={shopeeInfo.img_url}
+                                        alt="Shopee"
+                                        className="w-5 h-5 rounded object-cover"
+                                      />
+                                    )}
+                                    <h3
+                                      className="text-xl font-medium"
+                                      style={{
+                                        fontSize: "18px",
+                                        fontWeight: 600,
+                                        color: "#ee4d2d",
+                                      }}
+                                    >
+                                      SHOPEE
+                                    </h3>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-sm text-muted-foreground">
+                                      {pedidosShopeeUrgentes.length} pedido(s)
+                                    </span>
+                                    <button
+                                      className="text-xs text-orange-600 hover:underline font-medium"
+                                      onClick={() =>
+                                        abrirListaUrgentes(
+                                          pedidosShopeeUrgentes,
+                                        )
+                                      }
+                                    >
+                                      Abrir todos
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-3">
+                                  {pedidosShopeeUrgentes.map((p: any) => {
+                                    const items =
+                                      platformOrderItems[p.id] || [];
+                                    const primeiraImg =
+                                      items[0]?.img_url || null;
+                                    return (
+                                      <div
+                                        key={p.id}
+                                        className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-orange-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                        onClick={() =>
+                                          abrirListaUrgentes(
+                                            pedidosShopeeUrgentes,
+                                          )
+                                        }
+                                      >
+                                        {primeiraImg ? (
+                                          <img
+                                            src={primeiraImg}
+                                            alt=""
+                                            className="h-14 w-14 rounded-md object-cover border"
+                                          />
+                                        ) : (
+                                          <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                            sem foto
+                                          </div>
+                                        )}
+                                        <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                          {p.id_externo || p.id}
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                        {/* Mercado Livre Organizador */}
+                        {pedidosMLOrganizador.length > 0 &&
+                          (() => {
+                            const mlInfo = plataformaInfoMap.get(
+                              pedidosMLOrganizador[0].id,
+                            ) as any;
+                            return (
+                              <div className="mb-8">
+                                <div className="flex items-center justify-between mb-4">
+                                  <div className="flex items-center gap-2">
+                                    {mlInfo?.img_url && (
+                                      <img
+                                        src={mlInfo.img_url}
+                                        alt="Mercado Livre"
+                                        className="w-5 h-5 rounded object-cover"
+                                      />
+                                    )}
+                                    <h3
+                                      className="text-xl font-medium"
+                                      style={{
+                                        fontSize: "18px",
+                                        fontWeight: 600,
+                                        color: "#ffe600",
+                                        textShadow: "0 1px 2px rgba(0,0,0,0.3)",
+                                      }}
+                                    >
+                                      MERCADO LIVRE{" "}
+                                      <span
+                                        style={{
+                                          fontSize: "13px",
+                                          fontWeight: 400,
+                                          color: "#888",
+                                        }}
+                                      >
+                                        organizador
+                                      </span>
+                                    </h3>
+                                  </div>
+                                  <div className="flex items-center gap-3">
+                                    <span className="text-sm text-muted-foreground">
+                                      {pedidosMLOrganizador.length} pedido(s)
+                                    </span>
+                                    <button
+                                      className="text-xs text-yellow-600 hover:underline font-medium"
+                                      onClick={() =>
+                                        abrirListaUrgentes(pedidosMLOrganizador)
+                                      }
+                                    >
+                                      Abrir todos
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="flex flex-wrap gap-3">
+                                  {pedidosMLOrganizador.map((p: any) => {
+                                    const items =
+                                      platformOrderItems[p.id] || [];
+                                    const primeiraImg =
+                                      items[0]?.img_url || null;
+                                    return (
+                                      <div
+                                        key={p.id}
+                                        className="relative flex flex-col items-center gap-1.5 rounded-lg border-2 border-yellow-400 bg-card p-2 w-24 shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                                        onClick={() =>
+                                          abrirListaUrgentes(
+                                            pedidosMLOrganizador,
+                                          )
+                                        }
+                                      >
+                                        {primeiraImg ? (
+                                          <img
+                                            src={primeiraImg}
+                                            alt=""
+                                            className="h-14 w-14 rounded-md object-cover border"
+                                          />
+                                        ) : (
+                                          <div className="h-14 w-14 rounded-md border bg-muted flex items-center justify-center text-[9px] text-muted-foreground">
+                                            sem foto
+                                          </div>
+                                        )}
+                                        <p className="text-[10px] font-semibold text-center leading-tight line-clamp-2 w-full">
+                                          {p.id_externo || p.id}
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })()}
+
+                        {/* Pacotes Comuns */}
+                        <div className="mb-8">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3
+                              className="text-xl font-medium"
+                              style={{ fontSize: "18px", fontWeight: 600 }}
+                            >
+                              PACOTES COMUNS
+                            </h3>
+                            <span className="text-sm text-muted-foreground">
+                              {pedidosComuns.length} pedido(s) •{" "}
+                              {gruposComunsArray.length} tipo(s)
+                            </span>
+                          </div>
+                          {gruposComunsArray.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">
+                              Nenhum pacote comum pendente.
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-3">
+                              {gruposComunsArray.map(renderCardComum)}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Pacotes Incomuns */}
+                        <div className="mb-8">
+                          <div className="flex items-center justify-between mb-4">
+                            <h3
+                              className="text-xl font-medium"
+                              style={{ fontSize: "18px", fontWeight: 600 }}
+                            >
+                              PACOTES INCOMUNS
+                            </h3>
+                            <span className="text-sm text-muted-foreground">
+                              {pedidosIncomuns.length} pedido(s)
+                            </span>
+                          </div>
+                          {pedidosIncomuns.length === 0 ? (
+                            <div className="text-sm text-muted-foreground">
+                              Nenhum pacote incomum pendente.
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-3">
+                              {pedidosIncomuns.map(renderCardIncomum)}
+                            </div>
+                          )}
+                        </div>
+                      </>
+                    );
+                  })()}
+
+                <div className="flex items-center justify-between mb-4">
+                  <h3
+                    className="text-xl font-medium"
+                    style={{ fontSize: "18px", fontWeight: 600 }}
+                  >
+                    ITENS A ENVIAR
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      onClick={() => fetchLogItems()}
+                      className="border border-gray-200 rounded-md px-2 py-1 flex items-center gap-2"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Atualizar
+                    </Button>
+                  </div>
+                </div>
+
+                {loadingPlataformaCards ? (
+                  <div className="text-sm text-muted-foreground">
+                    Carregando plataformas...
+                  </div>
+                ) : plataformasCards.length === 0 ? (
+                  <div className="text-sm text-muted-foreground">
+                    Nenhuma plataforma com pedidos prontos para etiqueta.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 w-full mx-auto">
+                    {plataformasCards.map((pc) => {
+                      const isSyntheticCard =
+                        pc.id === "urgentes" || pc.id === "leads";
+
+                      return (
+                        <Card
+                          key={pc.id}
+                          className="p-4 cursor-pointer select-none"
                           onClick={async (e) => {
-                            e.stopPropagation();
-                            setOpenPlatformId(null);
-                            if (isSyntheticCard) {
-                              setLoadingPedidosFiltrados(true);
+                            e.preventDefault();
+                            const next =
+                              openPlatformId === pc.id ? null : pc.id;
+                            setOpenPlatformId(next);
+                            if (next) {
+                              setPlatformPage((s) => ({ ...s, [pc.id]: 1 }));
                               try {
-                                const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                                setModoListaPorPlataforma(true);
-                                setFilterPlataformaId('');
-                                setPedidosFiltrados(fullList);
-                                setPedidoAtualIndex(0);
-                                setFoundPedido(fullList[0] || null);
-                                setFoundItemIds([]);
-                                setItemInputs({});
-                                setItemStatus({});
+                                const ids = (pc.pedidos || [])
+                                  .map((x: any) => x.id)
+                                  .filter(Boolean);
+                                if (ids.length > 0)
+                                  await fetchItemsForPedidoIds(ids);
                               } catch (err) {
-                                console.error('Erro ao buscar pedidos do card:', err);
-                              } finally {
-                                setLoadingPedidosFiltrados(false);
+                                console.error(err);
                               }
-                            } else {
-                              setFilterPlataformaId(pc.id);
-                              try { await fetchPedidosPorPlataforma(pc.id); } catch (_) {}
                             }
                           }}
                         >
-                          Enviar
-                        </Button>
-                        <div className="p-1.5" aria-hidden>
-                          <ChevronDown className={`h-4 w-4 transition-transform ${openPlatformId === pc.id ? 'rotate-180' : ''}`} />
-                        </div>
-                      </div>
-                    </CardContent>
-
-                    {openPlatformId === pc.id && (
-                      <div className="p-2 border-t" onClick={(e) => e.stopPropagation()}>
-                        {(() => {
-                          const allPedidos = pc.pedidos || [];
-                          const pedidosComuns = allPedidos.filter((p: any) => (platformOrderItems[p.id] || []).length <= 1);
-                          const pedidosIncomuns = allPedidos.filter((p: any) => (platformOrderItems[p.id] || []).length > 1);
-
-                          const renderPedidoItem = (p: any) => {
-                            const items = platformOrderItems[p.id] || [];
-                            return (
-                              <div key={p.id} className="rounded border px-3 py-2.5">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    <span className="font-mono text-sm truncate">{p.id_externo || p.id}</span>
-                                    <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">{items.length} {items.length === 1 ? 'item' : 'itens'}</span>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    className="text-sm text-primary underline-offset-4 hover:underline"
-                                    onClick={async (e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setOpenPlatformId(null);
-                                      if (isSyntheticCard) {
-                                        try {
-                                          const ids = (pc.pedidos || []).map((x: any) => x.id).filter(Boolean);
-                                          const fullList = sortPedidos(await fetchPedidosPorIds(ids));
-                                          const startIdx = Math.max(0, fullList.findIndex((x: any) => x.id === p.id));
-                                          setModoListaPorPlataforma(true);
-                                          setFilterPlataformaId('');
-                                          setPedidosFiltrados(fullList);
-                                          setPedidoAtualIndex(startIdx);
-                                          setFoundPedido(fullList[startIdx] || null);
-                                          setFoundItemIds([]);
-                                          setItemInputs({});
-                                          setItemStatus({});
-                                          setTimeout(() => barcodeRef.current?.focus(), 50);
-                                        } catch (err) {
-                                          console.error('Erro ao buscar pedidos do card:', err);
-                                        }
-                                      } else {
-                                        targetPedidoIdRef.current = p.id;
-                                        setFilterPlataformaId(pc.id);
-                                      }
-                                    }}
-                                  >
-                                    Abrir
-                                  </button>
-                                </div>
-                                {items.length > 0 && (
-                                  <div className="flex flex-wrap gap-2 border-t mt-2 pt-2">
-                                    {items.map((item: any, idx: number) => (
-                                      <div key={idx} className="flex flex-col items-center gap-1 max-w-[60px]">
-                                        {item.img_url ? (
-                                          <img src={item.img_url} alt={item.nome || ''} className="h-12 w-12 rounded object-cover border" />
-                                        ) : (
-                                          <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">sem foto</div>
-                                        )}
-                                        <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">{item.nome || '—'}</span>
-                                        {(item.quantidade ?? 1) > 1 && (
-                                          <span className="text-[10px] font-semibold text-muted-foreground">×{item.quantidade}</span>
-                                        )}
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          };
-
-                          if (allPedidos.length === 0) {
-                            return <div className="text-sm text-muted-foreground">Nenhum pedido disponível.</div>;
-                          }
-
-                          return (
-                            <div className="space-y-4">
-                              {/* Pacotes Comuns */}
-                              {pedidosComuns.length > 0 && (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pacotes Comuns</span>
-                                    <span className="rounded-full bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5">{pedidosComuns.length}</span>
-                                  </div>
-                                  <div className="space-y-2">
-                                    {pedidosComuns.map(renderPedidoItem)}
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Pacotes Incomuns */}
-                              {pedidosIncomuns.length > 0 && (
-                                <div>
-                                  <div className="flex items-center gap-2 mb-2">
-                                    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Pacotes Incomuns</span>
-                                    <span className="rounded-full bg-orange-100 text-orange-700 text-xs font-medium px-2 py-0.5">{pedidosIncomuns.length}</span>
-                                  </div>
-                                  <div className="space-y-2">
-                                    {pedidosIncomuns.map(renderPedidoItem)}
-                                  </div>
-                                </div>
+                          <CardContent className="flex items-center gap-4 p-0">
+                            <div className="w-9 h-9 rounded-full overflow-hidden bg-gray-50 flex items-center justify-center flex-shrink-0">
+                              {pc.img_url ? (
+                                <img
+                                  src={pc.img_url}
+                                  alt={pc.nome}
+                                  className="w-9 h-9 object-cover"
+                                />
+                              ) : pc.id === "urgentes" ? (
+                                <TriangleAlert className="w-5 h-5 text-red-500" />
+                              ) : pc.id === "leads" ? (
+                                <Users className="w-5 h-5 text-gray-600" />
+                              ) : (
+                                <FaBoxesStacked className="w-5 h-5 text-gray-500" />
                               )}
                             </div>
-                          );
-                        })()}
-                      </div>
-                    )}
-                  </Card>
-                  );
-                })}
+                            <div className="flex-1">
+                              <div className="font-semibold text-base">
+                                {pc.nome}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {pc.count} pedido(s)
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                size="sm"
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  setOpenPlatformId(null);
+                                  if (isSyntheticCard) {
+                                    setLoadingPedidosFiltrados(true);
+                                    try {
+                                      const ids = (pc.pedidos || [])
+                                        .map((x: any) => x.id)
+                                        .filter(Boolean);
+                                      const fullList = sortPedidos(
+                                        await fetchPedidosPorIds(ids),
+                                      );
+                                      setModoListaPorPlataforma(true);
+                                      setFilterPlataformaId("");
+                                      setPedidosFiltrados(fullList);
+                                      setPedidoAtualIndex(0);
+                                      setFoundPedido(fullList[0] || null);
+                                      setFoundItemIds([]);
+                                      setItemInputs({});
+                                      setItemStatus({});
+                                    } catch (err) {
+                                      console.error(
+                                        "Erro ao buscar pedidos do card:",
+                                        err,
+                                      );
+                                    } finally {
+                                      setLoadingPedidosFiltrados(false);
+                                    }
+                                  } else {
+                                    setFilterPlataformaId(pc.id);
+                                    try {
+                                      await fetchPedidosPorPlataforma(pc.id);
+                                    } catch (_) {}
+                                  }
+                                }}
+                              >
+                                Enviar
+                              </Button>
+                              <div className="p-1.5" aria-hidden>
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${openPlatformId === pc.id ? "rotate-180" : ""}`}
+                                />
+                              </div>
+                            </div>
+                          </CardContent>
+
+                          {openPlatformId === pc.id && (
+                            <div
+                              className="p-2 border-t"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {(() => {
+                                const allPedidos = pc.pedidos || [];
+                                const pedidosComuns = allPedidos.filter(
+                                  (p: any) =>
+                                    (platformOrderItems[p.id] || []).length <=
+                                    1,
+                                );
+                                const pedidosIncomuns = allPedidos.filter(
+                                  (p: any) =>
+                                    (platformOrderItems[p.id] || []).length > 1,
+                                );
+
+                                const renderPedidoItem = (p: any) => {
+                                  const items = platformOrderItems[p.id] || [];
+                                  return (
+                                    <div
+                                      key={p.id}
+                                      className="rounded border px-3 py-2.5"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2 min-w-0">
+                                          <span className="font-mono text-sm truncate">
+                                            {p.id_externo || p.id}
+                                          </span>
+                                          <span className="rounded-full bg-muted/60 px-2 py-0.5 text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                                            {items.length}{" "}
+                                            {items.length === 1
+                                              ? "item"
+                                              : "itens"}
+                                          </span>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          className="text-sm text-primary underline-offset-4 hover:underline"
+                                          onClick={async (e) => {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            setOpenPlatformId(null);
+                                            if (isSyntheticCard) {
+                                              try {
+                                                const ids = (pc.pedidos || [])
+                                                  .map((x: any) => x.id)
+                                                  .filter(Boolean);
+                                                const fullList = sortPedidos(
+                                                  await fetchPedidosPorIds(ids),
+                                                );
+                                                const startIdx = Math.max(
+                                                  0,
+                                                  fullList.findIndex(
+                                                    (x: any) => x.id === p.id,
+                                                  ),
+                                                );
+                                                setModoListaPorPlataforma(true);
+                                                setFilterPlataformaId("");
+                                                setPedidosFiltrados(fullList);
+                                                setPedidoAtualIndex(startIdx);
+                                                setFoundPedido(
+                                                  fullList[startIdx] || null,
+                                                );
+                                                setFoundItemIds([]);
+                                                setItemInputs({});
+                                                setItemStatus({});
+                                                setTimeout(
+                                                  () =>
+                                                    barcodeRef.current?.focus(),
+                                                  50,
+                                                );
+                                              } catch (err) {
+                                                console.error(
+                                                  "Erro ao buscar pedidos do card:",
+                                                  err,
+                                                );
+                                              }
+                                            } else {
+                                              targetPedidoIdRef.current = p.id;
+                                              setFilterPlataformaId(pc.id);
+                                            }
+                                          }}
+                                        >
+                                          Abrir
+                                        </button>
+                                      </div>
+                                      {items.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 border-t mt-2 pt-2">
+                                          {items.map(
+                                            (item: any, idx: number) => (
+                                              <div
+                                                key={idx}
+                                                className="flex flex-col items-center gap-1 max-w-[60px]"
+                                              >
+                                                {item.img_url ? (
+                                                  <img
+                                                    src={item.img_url}
+                                                    alt={item.nome || ""}
+                                                    className="h-12 w-12 rounded object-cover border"
+                                                  />
+                                                ) : (
+                                                  <div className="h-12 w-12 rounded border bg-muted flex items-center justify-center text-[10px] text-muted-foreground">
+                                                    sem foto
+                                                  </div>
+                                                )}
+                                                <span className="text-[10px] text-center leading-tight line-clamp-2 w-full">
+                                                  {item.nome || "—"}
+                                                </span>
+                                                {(item.quantidade ?? 1) > 1 && (
+                                                  <span className="text-[10px] font-semibold text-muted-foreground">
+                                                    ×{item.quantidade}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            ),
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                };
+
+                                if (allPedidos.length === 0) {
+                                  return (
+                                    <div className="text-sm text-muted-foreground">
+                                      Nenhum pedido disponível.
+                                    </div>
+                                  );
+                                }
+
+                                return (
+                                  <div className="space-y-4">
+                                    {/* Pacotes Comuns */}
+                                    {pedidosComuns.length > 0 && (
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                            Pacotes Comuns
+                                          </span>
+                                          <span className="rounded-full bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5">
+                                            {pedidosComuns.length}
+                                          </span>
+                                        </div>
+                                        <div className="space-y-2">
+                                          {pedidosComuns.map(renderPedidoItem)}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Pacotes Incomuns */}
+                                    {pedidosIncomuns.length > 0 && (
+                                      <div>
+                                        <div className="flex items-center gap-2 mb-2">
+                                          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                                            Pacotes Incomuns
+                                          </span>
+                                          <span className="rounded-full bg-orange-100 text-orange-700 text-xs font-medium px-2 py-0.5">
+                                            {pedidosIncomuns.length}
+                                          </span>
+                                        </div>
+                                        <div className="space-y-2">
+                                          {pedidosIncomuns.map(
+                                            renderPedidoItem,
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </Card>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
 
-          </div>
-        )}
+            {/* Estado vazio/carregando do modo de pedidos por plataforma */}
+            {!foundPedido && modoListaPorPlataforma && (
+              <div className="mt-4 text-sm text-muted-foreground">
+                {loadingPedidosFiltrados
+                  ? "Carregando pedidos da plataforma..."
+                  : "Nenhum pedido pendente encontrado para esta plataforma."}
+              </div>
+            )}
 
-        {/* Estado vazio/carregando do modo de pedidos por plataforma */}
-        {!foundPedido && modoListaPorPlataforma && (
-          <div className="mt-4 text-sm text-muted-foreground">
-            {loadingPedidosFiltrados
-              ? 'Carregando pedidos da plataforma...'
-              : 'Nenhum pedido pendente encontrado para esta plataforma.'}
-          </div>
-        )}
-
-          {/* If a pedido was found, show a single pedido card with its items */}
-          {foundPedido && (
-            <div className="mt-6">
-              <Card>
-                {/* make the header area itself use the app header color (inline style for gradient) */}
-                <CardHeader className="!p-4 text-white rounded-t" style={{ background: 'var(--gradient-primary)' }}>
-                  <div className="flex items-center justify-between w-full">
-                    <div className="flex items-center gap-4">
+            {/* If a pedido was found, show a single pedido card with its items */}
+            {foundPedido && (
+              <div className="mt-6">
+                <Card>
+                  {/* make the header area itself use the app header color (inline style for gradient) */}
+                  <CardHeader
+                    className="!p-4 text-white rounded-t"
+                    style={{ background: "var(--gradient-primary)" }}
+                  >
+                    <div className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-4">
                         <div className="flex items-center">
                           <Avatar className="h-10 w-10">
                             {foundPedido.responsavel?.img_url ? (
-                              <img src={foundPedido.responsavel.img_url} alt={foundPedido.responsavel?.nome} className="h-full w-full object-cover rounded-full" />
+                              <img
+                                src={foundPedido.responsavel.img_url}
+                                alt={foundPedido.responsavel?.nome}
+                                className="h-full w-full object-cover rounded-full"
+                              />
                             ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-white/20 rounded-full text-sm font-medium text-white">{(foundPedido.responsavel?.nome || '—').split(' ').map((n: string) => n[0]).slice(0,2).join('')}</div>
+                              <div className="w-full h-full flex items-center justify-center bg-white/20 rounded-full text-sm font-medium text-white">
+                                {(foundPedido.responsavel?.nome || "—")
+                                  .split(" ")
+                                  .map((n: string) => n[0])
+                                  .slice(0, 2)
+                                  .join("")}
+                              </div>
                             )}
                           </Avatar>
                         </div>
-                      <div className="flex items-center gap-2">
-                        {foundPedido.plataformas?.img_url && (
-                          <img src={foundPedido.plataformas.img_url} alt={foundPedido.plataformas.nome} className="w-8 h-8 rounded" />
-                        )}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <div className="text-sm font-medium text-white/90">{foundPedido.id_externo || foundPedido.id || '—'}</div>
-                            {(foundPedido?.urgente === true || String(foundPedido?.urgente).toLowerCase() === 'true' || pedidoTemItemPrioritario(foundPedido)) && (
-                              <Badge className="bg-red-600 text-white border-red-600 h-5 px-2 text-[10px]">
-                                URGENTE
-                              </Badge>
-                            )}
-                          </div>
-                          {modoListaPorPlataforma && foundPedido?.criado_em && (
-                            <div className="text-sm text-white/80">
-                              {new Intl.DateTimeFormat('pt-BR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric',
-                                hour: '2-digit',
-                                minute: '2-digit',
-                              }).format(new Date(foundPedido.criado_em))}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {modoListaPorPlataforma && pedidosFiltrados.length > 0 && (
-                      <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-white hover:bg-white/20 disabled:opacity-40"
-                          disabled={pedidoAtualIndex <= 0}
-                          onClick={() => handleMudarPedidoPaginacao(pedidoAtualIndex - 1)}
-                        >
-                          <ChevronLeft className="h-5 w-5" />
-                        </Button>
-                        <div className="text-base font-semibold text-white">
-                          {pedidoAtualIndex + 1} de {pedidosFiltrados.length}
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-white hover:bg-white/20 disabled:opacity-40"
-                          disabled={pedidoAtualIndex >= pedidosFiltrados.length - 1}
-                          onClick={() => handleMudarPedidoPaginacao(pedidoAtualIndex + 1)}
-                        >
-                          <ChevronRight className="h-5 w-5" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </CardHeader>
-                <CardContent className="mt-3">
-                  {/* Badges dos grupos (antes da lista de itens) */}
-                  {(() => {
-                    const items = foundPedido.itens_pedido || [];
-                    const gruposExibidos = new Set<string>();
-                    const badges = [];
-                    
-                    for (const it of items) {
-                      const item_referencia_id = it.variacao_id || it.produto_id;
-                      const grupoInfo = gruposAgrupados[item_referencia_id];
-                      
-                      if (grupoInfo && !gruposExibidos.has(item_referencia_id)) {
-                        gruposExibidos.add(item_referencia_id);
-                        badges.push(
-                          <Badge key={item_referencia_id} variant="secondary" className="text-sm font-medium px-3 py-1">
-                            {grupoInfo.nome_completo} - {grupoInfo.quantidade_total}x
-                          </Badge>
-                        );
-                      }
-                    }
-                    
-                    return badges.length > 0 ? (
-                      <div className="mb-4 flex flex-wrap items-center gap-2">
-                        {badges}
-                      </div>
-                    ) : null;
-                  })()}
-                  
-                  <div className="space-y-3">
-                    {(() => {
-                      const items = foundPedido.itens_pedido || [];
-                      console.log('Logística - Items with pintado:', items.map(it => ({ 
-                        nome: it.produto?.nome, 
-                        pintado: it.pintado,
-                        item: it 
-                      })));
-                      
-                      // Renderizar apenas os itens (sem badges)
-                      return items.map((it: any) => {
-                        return (
-                          <div key={it.id}>
-                            <div className={`relative border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? 'border-red-500' : 'border-gray-200'}`}>
-                              {it.pintado === true && (
-                                <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
-                                  <Badge 
-                                    variant="default"
-                                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-4 py-1"
-                                  >
-                                     PINTADO
-                                  </Badge>
-                                </div>
-                              )}
-                              <div className="flex items-center gap-3">
-                          {it.produto?.img_url || it.variacao?.img_url ? (
-                            <img src={it.variacao?.img_url || it.produto?.img_url} className="w-12 h-12 rounded-full border-2 border-gray-200" />
-                          ) : (
-                            <div className="w-12 h-12 bg-gray-100 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-400">
-                              <FaBoxesStacked className="w-6 h-6" aria-hidden />
-                            </div>
+                        <div className="flex items-center gap-2">
+                          {foundPedido.plataformas?.img_url && (
+                            <img
+                              src={foundPedido.plataformas.img_url}
+                              alt={foundPedido.plataformas.nome}
+                              className="w-8 h-8 rounded"
+                            />
                           )}
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-medium">{it.produto?.nome || it.variacao?.nome}</span>
+                              <div className="text-sm font-medium text-white/90">
+                                {foundPedido.id_externo ||
+                                  foundPedido.id ||
+                                  "—"}
+                              </div>
+                              {(foundPedido?.urgente === true ||
+                                String(foundPedido?.urgente).toLowerCase() ===
+                                  "true" ||
+                                pedidoTemItemPrioritario(foundPedido)) && (
+                                <Badge className="bg-red-600 text-white border-red-600 h-5 px-2 text-[10px]">
+                                  URGENTE
+                                </Badge>
+                              )}
                             </div>
-                            {it.variacao?.nome ? (
-                              <div className="text-sm text-muted-foreground">{it.variacao.nome}</div>
-                            ) : null}
+                            {modoListaPorPlataforma &&
+                              foundPedido?.criado_em && (
+                                <div className="text-sm text-white/80">
+                                  {new Intl.DateTimeFormat("pt-BR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  }).format(new Date(foundPedido.criado_em))}
+                                </div>
+                              )}
                           </div>
                         </div>
-
-                        <div className="flex items-center gap-3">
-                          <div className="text-sm">Qtd: {it.quantidade}</div>
-                          {foundItemIds.includes(it.id) ? (
-                            <div className="px-3 py-1 border border-red-500 rounded text-sm font-medium text-red-700">{it.codigo_barras}</div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <input
-                                ref={(el) => (itemRefs.current[it.id] = el)}
-                                className={`border rounded px-2 py-1 text-sm ${itemStatus[it.id] === 'success' ? 'border-green-600' : ''} ${itemStatus[it.id] === 'error' ? 'border-red-600' : ''}`}
-                                placeholder="Código"
-                                value={itemInputs[it.id] || ''}
-                                onChange={(e) => setItemInputs(prev => ({ ...prev, [it.id]: e.target.value }))}
-                                onKeyDown={async (e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    const val = (itemInputs[it.id] || '').trim();
-                                    if (!val) return;
-
-                                    // immediate local comparison
-                                    if (val === it.codigo_barras) {
-                                      // success UI
-                                      setItemStatus(prev => ({ ...prev, [it.id]: 'success' }));
-                                      setFoundItemIds(prev => Array.from(new Set([...(prev || []), it.id])));
-                                      setItemInputs(prev => ({ ...prev, [it.id]: '' }));
-
-                                      // focus next missing item if present
-                                      const items = foundPedido?.itens_pedido || [];
-                                      const next = items.find((x: any) => x.id !== it.id && !((x.bipado === true) || (foundItemIds || []).includes(x.id)));
-                                      if (next) {
-                                        setTimeout(() => itemRefs.current[next.id]?.focus(), 0);
-                                      } else {
-                                        // Todos os itens foram bipados - não foca no input principal
-                                        // O botão de imprimir etiqueta será habilitado automaticamente
-                                      }
-                                    } else {
-                                      // error UI: clear the input but keep focus so the user can bip again
-                                      setItemStatus(prev => ({ ...prev, [it.id]: 'error' }));
-                                      setItemInputs(prev => ({ ...prev, [it.id]: '' }));
-                                      // ensure focus stays on this input for immediate re-scan
-                                      setTimeout(() => itemRefs.current[it.id]?.focus(), 0);
-                                      setTimeout(() => setItemStatus(prev => ({ ...prev, [it.id]: 'idle' })), 2000);
-                                    }
-                                  }
-                                }}
-                              />
-                              {itemStatus[it.id] === 'success' && (
-                                <CheckCircle className="text-green-600" />
-                              )}
-                              {itemStatus[it.id] === 'error' && (
-                                <XCircle className="text-red-600" />
-                              )}
+                      </div>
+                      {modoListaPorPlataforma &&
+                        pedidosFiltrados.length > 0 && (
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-white hover:bg-white/20 disabled:opacity-40"
+                              disabled={pedidoAtualIndex <= 0}
+                              onClick={() =>
+                                handleMudarPedidoPaginacao(pedidoAtualIndex - 1)
+                              }
+                            >
+                              <ChevronLeft className="h-5 w-5" />
+                            </Button>
+                            <div className="text-base font-semibold text-white">
+                              {pedidoAtualIndex + 1} de{" "}
+                              {pedidosFiltrados.length}
                             </div>
-                          )}
-                        </div>
-                      </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-white hover:bg-white/20 disabled:opacity-40"
+                              disabled={
+                                pedidoAtualIndex >= pedidosFiltrados.length - 1
+                              }
+                              onClick={() =>
+                                handleMudarPedidoPaginacao(pedidoAtualIndex + 1)
+                              }
+                            >
+                              <ChevronRight className="h-5 w-5" />
+                            </Button>
+                          </div>
+                        )}
                     </div>
-                        );
-                      });
+                  </CardHeader>
+                  <CardContent className="mt-3">
+                    {/* Badges dos grupos (antes da lista de itens) */}
+                    {(() => {
+                      const items = foundPedido.itens_pedido || [];
+                      const gruposExibidos = new Set<string>();
+                      const badges = [];
+
+                      for (const it of items) {
+                        const item_referencia_id =
+                          it.variacao_id || it.produto_id;
+                        const grupoInfo = gruposAgrupados[item_referencia_id];
+
+                        if (
+                          grupoInfo &&
+                          !gruposExibidos.has(item_referencia_id)
+                        ) {
+                          gruposExibidos.add(item_referencia_id);
+                          badges.push(
+                            <Badge
+                              key={item_referencia_id}
+                              variant="secondary"
+                              className="text-sm font-medium px-3 py-1"
+                            >
+                              {grupoInfo.nome_completo} -{" "}
+                              {grupoInfo.quantidade_total}x
+                            </Badge>,
+                          );
+                        }
+                      }
+
+                      return badges.length > 0 ? (
+                        <div className="mb-4 flex flex-wrap items-center gap-2">
+                          {badges}
+                        </div>
+                      ) : null;
                     })()}
-                  </div>
-                </CardContent>
-                {allItemsBipado && (
-                  <div className="p-4 flex justify-center">
-                    {shouldShowMLButton ? (
-                      // Botão Etiqueta Mercado Livre
-                      <Button
-                        onClick={handleGerarEtiquetaML}
-                        disabled={gerandoEtiquetaML}
-                        className="bg-yellow-500 hover:bg-yellow-600"
-                      >
-                        {gerandoEtiquetaML ? (
-                          <>
-                            <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
-                            Gerando...
-                          </>
-                        ) : (
-                          '📦 Etiqueta Mercado Livre'
-                        )}
-                      </Button>
-                    ) : (
-                      // Botão Imprimir Etiqueta original
-                      <Button
-                        disabled={loadingScan}
-                        onClick={() => void handleImprimirEtiqueta()}
-                      >
-                        {loadingScan ? 'PROCESSANDO...' : 'IMPRIMIR ETIQUETA'}
-                      </Button>
-                    )}
-                  </div>
-                )}
-              </Card>
-            </div>
-          )}
-      </div>
-      
-      {/* Modal: Confirmação de Envio */}
-      <Dialog
-        open={!!confirmEnvioModal?.open}
-        onOpenChange={(open) => { if (!open) setConfirmEnvioModal(null); }}
-      >
-        <DialogContent
-          className="max-w-md"
-          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void handleConfirmarEnvio(); } }}
-        >
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              Confirmar envio do pedido
-            </DialogTitle>
-          </DialogHeader>
 
-          <div className="py-4 space-y-3">
-            <p className="text-sm text-muted-foreground text-center">
-              A etiqueta foi aberta em uma nova aba.
-            </p>
-            <div className="rounded-lg border bg-muted/30 px-4 py-3 text-center">
-              <p className="text-xs text-muted-foreground mb-0.5">Pedido</p>
-              <p className="font-mono font-semibold text-base">
-                {confirmEnvioModal?.pedidoIdExterno || confirmEnvioModal?.pedidoId || '—'}
-              </p>
-            </div>
-            <p className="text-sm text-center font-medium">
-              Após imprimir a etiqueta, confirme para atualizar o status para <span className="text-green-600 font-semibold">Enviado</span>.
-            </p>
-            <p className="text-xs text-center text-muted-foreground">
-              Pressione <kbd className="rounded border px-1.5 py-0.5 font-mono text-xs bg-muted">Enter</kbd> ou clique em Confirmar.
-            </p>
-          </div>
+                    <div className="space-y-3">
+                      {(() => {
+                        const items = foundPedido.itens_pedido || [];
+                        console.log(
+                          "Logística - Items with pintado:",
+                          items.map((it) => ({
+                            nome: it.produto?.nome,
+                            pintado: it.pintado,
+                            item: it,
+                          })),
+                        );
 
-          <DialogFooter className="gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setConfirmEnvioModal(null)}
-            >
-              Cancelar
-            </Button>
-            <Button
-              ref={confirmBtnRef}
-              type="button"
-              autoFocus
-              className="bg-green-600 hover:bg-green-700 text-white"
-              onClick={() => void handleConfirmarEnvio()}
-            >
-              <CheckCircle className="h-4 w-4 mr-1.5" />
-              Confirmar envio
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                        // Renderizar apenas os itens (sem badges)
+                        return items.map((it: any) => {
+                          return (
+                            <div key={it.id}>
+                              <div
+                                className={`relative border rounded p-3 flex items-center justify-between ${foundItemIds.includes(it.id) ? "border-red-500" : "border-gray-200"}`}
+                              >
+                                {it.pintado === true && (
+                                  <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                                    <Badge
+                                      variant="default"
+                                      className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-base px-4 py-1"
+                                    >
+                                      PINTADO
+                                    </Badge>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-3">
+                                  {it.produto?.img_url ||
+                                  it.variacao?.img_url ? (
+                                    <img
+                                      src={
+                                        it.variacao?.img_url ||
+                                        it.produto?.img_url
+                                      }
+                                      className="w-12 h-12 rounded-full border-2 border-gray-200"
+                                    />
+                                  ) : (
+                                    <div className="w-12 h-12 bg-gray-100 rounded-full border-2 border-gray-200 flex items-center justify-center text-gray-400">
+                                      <FaBoxesStacked
+                                        className="w-6 h-6"
+                                        aria-hidden
+                                      />
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium">
+                                        {it.produto?.nome || it.variacao?.nome}
+                                      </span>
+                                    </div>
+                                    {it.variacao?.nome ? (
+                                      <div className="text-sm text-muted-foreground">
+                                        {it.variacao.nome}
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                </div>
 
-      {/* Modal: Etiqueta Mercado Livre */}
-      <Dialog open={etiquetaMLModalOpen} onOpenChange={(open) => { if (!open) handleFecharModalEtiquetaML(); }}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>📦 Etiqueta Mercado Livre</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0">
-            {etiquetaMLPdfUrl && (
-              <iframe
-                src={etiquetaMLPdfUrl}
-                className="w-full h-full border rounded-lg"
-                title="Etiqueta ML PDF"
-              />
-            )}
-          </div>
-          <DialogFooter>
-            <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={handleFecharModalEtiquetaML}>
-                Fechar
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                                <div className="flex items-center gap-3">
+                                  <div className="text-sm">
+                                    Qtd: {it.quantidade}
+                                  </div>
+                                  {foundItemIds.includes(it.id) ? (
+                                    <div className="px-3 py-1 border border-red-500 rounded text-sm font-medium text-red-700">
+                                      {it.codigo_barras}
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <input
+                                        ref={(el) =>
+                                          (itemRefs.current[it.id] = el)
+                                        }
+                                        className={`border rounded px-2 py-1 text-sm ${itemStatus[it.id] === "success" ? "border-green-600" : ""} ${itemStatus[it.id] === "error" ? "border-red-600" : ""}`}
+                                        placeholder="Código"
+                                        value={itemInputs[it.id] || ""}
+                                        onChange={(e) =>
+                                          setItemInputs((prev) => ({
+                                            ...prev,
+                                            [it.id]: e.target.value,
+                                          }))
+                                        }
+                                        onKeyDown={async (e) => {
+                                          if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            const val = (
+                                              itemInputs[it.id] || ""
+                                            ).trim();
+                                            if (!val) return;
 
-      {/* Modal: Etiqueta Padrão */}
-      <Dialog open={etiquetaModalOpen} onOpenChange={setEtiquetaModalOpen}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>📄 Etiqueta de Envio</DialogTitle>
-          </DialogHeader>
-          <div className="flex-1 min-h-0">
-            {etiquetaUrl && (
-              <iframe
-                src={etiquetaUrl}
-                className="w-full h-full border rounded-lg"
-                title="Etiqueta de Envio"
-              />
-            )}
-          </div>
-          <DialogFooter>
-            <div className="flex justify-between w-full">
-              <Button variant="outline" onClick={() => setEtiquetaModalOpen(false)}>
-                Fechar
-              </Button>
-              <Button onClick={() => {
-                if (etiquetaUrl) {
-                  window.open(etiquetaUrl, '_blank');
-                }
-              }}>
-                Abrir em Nova Guia
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+                                            // immediate local comparison
+                                            if (val === it.codigo_barras) {
+                                              // success UI
+                                              setItemStatus((prev) => ({
+                                                ...prev,
+                                                [it.id]: "success",
+                                              }));
+                                              setFoundItemIds((prev) =>
+                                                Array.from(
+                                                  new Set([
+                                                    ...(prev || []),
+                                                    it.id,
+                                                  ]),
+                                                ),
+                                              );
+                                              setItemInputs((prev) => ({
+                                                ...prev,
+                                                [it.id]: "",
+                                              }));
 
-      {/* Modal: ID do Pedido */}
-      <Dialog open={pedidoIdModalOpen} onOpenChange={setPedidoIdModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>📦 Buscar Pedido</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <label className="text-sm text-muted-foreground mb-2 block">
-              Digite o ID ou ID Externo do pedido:
-            </label>
-            <input
-              type="text"
-              value={pedidoIdInput}
-              onChange={(e) => setPedidoIdInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleBuscarPedidoPorId();
-                }
-              }}
-              placeholder="Ex: 12345 ou abc-123-xyz"
-              className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-custom-600"
-              autoFocus
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPedidoIdModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleBuscarPedidoPorId} disabled={loadingPedidoManual}>
-              {loadingPedidoManual ? 'Buscando...' : 'Buscar'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Pedido Já Enviado */}
-      <Dialog open={pedidoJaEnviadoModalOpen} onOpenChange={setPedidoJaEnviadoModalOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>⚠️ Pedido Já Enviado</DialogTitle>
-          </DialogHeader>
-          <div className="py-4">
-            <p className="text-center text-muted-foreground mb-4">
-              Este pedido já foi enviado anteriormente.
-            </p>
-            <p className="text-center font-medium">
-              Deseja gerar a etiqueta novamente?
-            </p>
-          </div>
-          <DialogFooter className="flex justify-center">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setPedidoJaEnviadoModalOpen(false);
-                setPedidoJaEnviado(null);
-                setPedidoIdModalOpen(true);
-              }}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={handleConfirmarPedidoJaEnviado}>
-              Confirmar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Pedidos do Produto */}
-      <Dialog open={produtoPedidosModal.open} onOpenChange={(open) => { if (!open) setProdutoPedidosModal((prev) => ({ ...prev, open: false })); }}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>
-              <div className="flex items-center gap-3">
-                {produtoPedidosModal.item?.imgUrl ? (
-                  <img src={produtoPedidosModal.item.imgUrl} alt="" className="h-10 w-10 rounded-lg object-cover border flex-shrink-0" />
-                ) : (
-                  <div className="h-10 w-10 rounded-lg border bg-muted flex-shrink-0" />
-                )}
-                <div className="leading-tight">
-                  <div className="text-base font-semibold">{produtoPedidosModal.item?.nomeProduto}</div>
-                  {produtoPedidosModal.item?.nomeVariacao && (
-                    <div className="text-sm font-normal text-muted-foreground">{produtoPedidosModal.item.nomeVariacao}</div>
-                  )}
-                </div>
-              </div>
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="py-2">
-            {produtoPedidosModal.loading ? (
-              <div className="space-y-2">
-                {[...Array(3)].map((_, i) => (
-                  <div key={i} className="h-12 rounded-lg bg-muted/40 animate-pulse" />
-                ))}
-              </div>
-            ) : produtoPedidosModal.pedidos.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">Nenhum pedido encontrado para este produto.</p>
-            ) : (
-              <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-                <p className="text-xs text-muted-foreground mb-3">{produtoPedidosModal.pedidos.length} pedido(s) com este produto</p>
-                {produtoPedidosModal.pedidos.map((p: any) => (
-                  <div key={p.id} className="flex items-center justify-between rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors">
-                    <div className="flex items-center gap-3">
-                      {p.plataformas?.img_url ? (
-                        <img src={p.plataformas.img_url} alt={p.plataformas.nome} className="h-6 w-6 rounded object-cover" />
+                                              // focus next missing item if present
+                                              const items =
+                                                foundPedido?.itens_pedido || [];
+                                              const next = items.find(
+                                                (x: any) =>
+                                                  x.id !== it.id &&
+                                                  !(
+                                                    x.bipado === true ||
+                                                    (
+                                                      foundItemIds || []
+                                                    ).includes(x.id)
+                                                  ),
+                                              );
+                                              if (next) {
+                                                setTimeout(
+                                                  () =>
+                                                    itemRefs.current[
+                                                      next.id
+                                                    ]?.focus(),
+                                                  0,
+                                                );
+                                              } else {
+                                                // Todos os itens foram bipados - não foca no input principal
+                                                // O botão de imprimir etiqueta será habilitado automaticamente
+                                              }
+                                            } else {
+                                              // error UI: clear the input but keep focus so the user can bip again
+                                              setItemStatus((prev) => ({
+                                                ...prev,
+                                                [it.id]: "error",
+                                              }));
+                                              setItemInputs((prev) => ({
+                                                ...prev,
+                                                [it.id]: "",
+                                              }));
+                                              // ensure focus stays on this input for immediate re-scan
+                                              setTimeout(
+                                                () =>
+                                                  itemRefs.current[
+                                                    it.id
+                                                  ]?.focus(),
+                                                0,
+                                              );
+                                              setTimeout(
+                                                () =>
+                                                  setItemStatus((prev) => ({
+                                                    ...prev,
+                                                    [it.id]: "idle",
+                                                  })),
+                                                2000,
+                                              );
+                                            }
+                                          }
+                                        }}
+                                      />
+                                      {itemStatus[it.id] === "success" && (
+                                        <CheckCircle className="text-green-600" />
+                                      )}
+                                      {itemStatus[it.id] === "error" && (
+                                        <XCircle className="text-red-600" />
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  </CardContent>
+                  {allItemsBipado && (
+                    <div className="p-4 flex justify-center">
+                      {foundPedido?.retirada ? (
+                        // Botão Concluir Retirada (sem imprimir etiqueta)
+                        <Button
+                          onClick={() => void handleConcluirRetirada()}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          CONCLUIR RETIRADA
+                        </Button>
+                      ) : shouldShowMLButton ? (
+                        // Botão Etiqueta Mercado Livre
+                        <Button
+                          onClick={handleGerarEtiquetaML}
+                          disabled={gerandoEtiquetaML}
+                          className="bg-yellow-500 hover:bg-yellow-600"
+                        >
+                          {gerandoEtiquetaML ? (
+                            <>
+                              <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                              Gerando...
+                            </>
+                          ) : (
+                            "📦 Etiqueta Mercado Livre"
+                          )}
+                        </Button>
                       ) : (
-                        <div className="h-6 w-6 rounded bg-muted" />
+                        // Botão Imprimir Etiqueta original
+                        <Button
+                          disabled={loadingScan}
+                          onClick={() => void handleImprimirEtiqueta()}
+                        >
+                          {loadingScan ? "PROCESSANDO..." : "IMPRIMIR ETIQUETA"}
+                        </Button>
                       )}
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-sm font-medium">{p.id_externo || p.id}</span>
-                          <button
-                            type="button"
-                            onClick={() => handleCopyPedidoId(p.id_externo || p.id)}
-                            className="text-muted-foreground hover:text-foreground transition-colors"
-                            title="Copiar ID"
-                          >
-                            {copiedPedidoId === (p.id_externo || p.id) ? (
-                              <Check className="h-3.5 w-3.5 text-green-500" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </button>
-                        </div>
-                        {p.plataformas?.nome && (
-                          <div className="text-[10px] text-muted-foreground">{p.plataformas.nome}</div>
-                        )}
-                      </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      {p.urgente && (
-                        <span className="text-[10px] font-semibold text-red-500 uppercase">Urgente</span>
+                  )}
+                </Card>
+              </div>
+            )}
+          </div>
+
+          {/* Modal: Confirmação de Envio */}
+          <Dialog
+            open={!!confirmEnvioModal?.open}
+            onOpenChange={(open) => {
+              if (!open) setConfirmEnvioModal(null);
+            }}
+          >
+            <DialogContent
+              className="max-w-md"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void handleConfirmarEnvio();
+                }
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-lg">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  Confirmar envio do pedido
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="py-4 space-y-3">
+                <p className="text-sm text-muted-foreground text-center">
+                  A etiqueta foi aberta em uma nova aba.
+                </p>
+                <div className="rounded-lg border bg-muted/30 px-4 py-3 text-center">
+                  <p className="text-xs text-muted-foreground mb-0.5">Pedido</p>
+                  <p className="font-mono font-semibold text-base">
+                    {confirmEnvioModal?.pedidoIdExterno ||
+                      confirmEnvioModal?.pedidoId ||
+                      "—"}
+                  </p>
+                </div>
+                <p className="text-sm text-center font-medium">
+                  Após imprimir a etiqueta, confirme para atualizar o status
+                  para{" "}
+                  <span className="text-green-600 font-semibold">Enviado</span>.
+                </p>
+                <p className="text-xs text-center text-muted-foreground">
+                  Pressione{" "}
+                  <kbd className="rounded border px-1.5 py-0.5 font-mono text-xs bg-muted">
+                    Enter
+                  </kbd>{" "}
+                  ou clique em Confirmar.
+                </p>
+              </div>
+
+              <DialogFooter className="gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setConfirmEnvioModal(null)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  ref={confirmBtnRef}
+                  type="button"
+                  autoFocus
+                  className="bg-green-600 hover:bg-green-700 text-white"
+                  onClick={() => void handleConfirmarEnvio()}
+                >
+                  <CheckCircle className="h-4 w-4 mr-1.5" />
+                  Confirmar envio
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal: Etiqueta Mercado Livre */}
+          <Dialog
+            open={etiquetaMLModalOpen}
+            onOpenChange={(open) => {
+              if (!open) handleFecharModalEtiquetaML();
+            }}
+          >
+            <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>📦 Etiqueta Mercado Livre</DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 min-h-0">
+                {etiquetaMLPdfUrl && (
+                  <iframe
+                    src={etiquetaMLPdfUrl}
+                    className="w-full h-full border rounded-lg"
+                    title="Etiqueta ML PDF"
+                  />
+                )}
+              </div>
+              <DialogFooter>
+                <div className="flex justify-between w-full">
+                  <Button
+                    variant="outline"
+                    onClick={handleFecharModalEtiquetaML}
+                  >
+                    Fechar
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal: Etiqueta Padrão */}
+          <Dialog open={etiquetaModalOpen} onOpenChange={setEtiquetaModalOpen}>
+            <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+              <DialogHeader>
+                <DialogTitle>📄 Etiqueta de Envio</DialogTitle>
+              </DialogHeader>
+              <div className="flex-1 min-h-0">
+                {etiquetaUrl && (
+                  <iframe
+                    src={etiquetaUrl}
+                    className="w-full h-full border rounded-lg"
+                    title="Etiqueta de Envio"
+                  />
+                )}
+              </div>
+              <DialogFooter>
+                <div className="flex justify-between w-full">
+                  <Button
+                    variant="outline"
+                    onClick={() => setEtiquetaModalOpen(false)}
+                  >
+                    Fechar
+                  </Button>
+                  <Button
+                    onClick={() => {
+                      if (etiquetaUrl) {
+                        window.open(etiquetaUrl, "_blank");
+                      }
+                    }}
+                  >
+                    Abrir em Nova Guia
+                  </Button>
+                </div>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal: ID do Pedido */}
+          <Dialog open={pedidoIdModalOpen} onOpenChange={setPedidoIdModalOpen}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>📦 Buscar Pedido</DialogTitle>
+              </DialogHeader>
+              <div className="py-4">
+                <label className="text-sm text-muted-foreground mb-2 block">
+                  Digite o ID ou ID Externo do pedido:
+                </label>
+                <input
+                  type="text"
+                  value={pedidoIdInput}
+                  onChange={(e) => setPedidoIdInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleBuscarPedidoPorId();
+                    }
+                  }}
+                  placeholder="Ex: 12345 ou abc-123-xyz"
+                  className="w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-custom-600"
+                  autoFocus
+                />
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setPedidoIdModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleBuscarPedidoPorId}
+                  disabled={loadingPedidoManual}
+                >
+                  {loadingPedidoManual ? "Buscando..." : "Buscar"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal: Pedido Já Enviado */}
+          <Dialog
+            open={pedidoJaEnviadoModalOpen}
+            onOpenChange={setPedidoJaEnviadoModalOpen}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>⚠️ Pedido Já Enviado</DialogTitle>
+              </DialogHeader>
+              <div className="py-4">
+                <p className="text-center text-muted-foreground mb-4">
+                  Este pedido já foi enviado anteriormente.
+                </p>
+                <p className="text-center font-medium">
+                  Deseja gerar a etiqueta novamente?
+                </p>
+              </div>
+              <DialogFooter className="flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setPedidoJaEnviadoModalOpen(false);
+                    setPedidoJaEnviado(null);
+                    setPedidoIdModalOpen(true);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button onClick={handleConfirmarPedidoJaEnviado}>
+                  Confirmar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal: Pedidos do Produto */}
+          <Dialog
+            open={produtoPedidosModal.open}
+            onOpenChange={(open) => {
+              if (!open)
+                setProdutoPedidosModal((prev) => ({ ...prev, open: false }));
+            }}
+          >
+            <DialogContent className="max-w-lg">
+              <DialogHeader>
+                <DialogTitle>
+                  <div className="flex items-center gap-3">
+                    {produtoPedidosModal.item?.imgUrl ? (
+                      <img
+                        src={produtoPedidosModal.item.imgUrl}
+                        alt=""
+                        className="h-10 w-10 rounded-lg object-cover border flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 rounded-lg border bg-muted flex-shrink-0" />
+                    )}
+                    <div className="leading-tight">
+                      <div className="text-base font-semibold">
+                        {produtoPedidosModal.item?.nomeProduto}
+                      </div>
+                      {produtoPedidosModal.item?.nomeVariacao && (
+                        <div className="text-sm font-normal text-muted-foreground">
+                          {produtoPedidosModal.item.nomeVariacao}
+                        </div>
                       )}
-                      <span className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs px-2 py-0.5 min-w-[1.5rem]">
-                        ×{p.quantidade_item}
-                      </span>
                     </div>
                   </div>
+                </DialogTitle>
+              </DialogHeader>
+
+              <div className="py-2">
+                {produtoPedidosModal.loading ? (
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => (
+                      <div
+                        key={i}
+                        className="h-12 rounded-lg bg-muted/40 animate-pulse"
+                      />
+                    ))}
+                  </div>
+                ) : produtoPedidosModal.pedidos.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    Nenhum pedido encontrado para este produto.
+                  </p>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
+                    <p className="text-xs text-muted-foreground mb-3">
+                      {produtoPedidosModal.pedidos.length} pedido(s) com este
+                      produto
+                    </p>
+                    {produtoPedidosModal.pedidos.map((p: any) => (
+                      <div
+                        key={p.id}
+                        className="flex items-center justify-between rounded-lg border px-3 py-2.5 hover:bg-muted/30 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          {p.plataformas?.img_url ? (
+                            <img
+                              src={p.plataformas.img_url}
+                              alt={p.plataformas.nome}
+                              className="h-6 w-6 rounded object-cover"
+                            />
+                          ) : (
+                            <div className="h-6 w-6 rounded bg-muted" />
+                          )}
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-sm font-medium">
+                                {p.id_externo || p.id}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleCopyPedidoId(p.id_externo || p.id)
+                                }
+                                className="text-muted-foreground hover:text-foreground transition-colors"
+                                title="Copiar ID"
+                              >
+                                {copiedPedidoId === (p.id_externo || p.id) ? (
+                                  <Check className="h-3.5 w-3.5 text-green-500" />
+                                ) : (
+                                  <Copy className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
+                            {p.plataformas?.nome && (
+                              <div className="text-[10px] text-muted-foreground">
+                                {p.plataformas.nome}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          {p.urgente && (
+                            <span className="text-[10px] font-semibold text-red-500 uppercase">
+                              Urgente
+                            </span>
+                          )}
+                          <span className="inline-flex items-center justify-center rounded-full bg-primary/10 text-primary font-semibold text-xs px-2 py-0.5 min-w-[1.5rem]">
+                            ×{p.quantidade_item}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setProdutoPedidosModal((prev) => ({ ...prev, open: false }))
+                  }
+                >
+                  Fechar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Modal: Selecionar Variação do Produto */}
+          <Dialog
+            open={showVariacoesModal}
+            onOpenChange={setShowVariacoesModal}
+          >
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Escolha uma variação</DialogTitle>
+              </DialogHeader>
+              <div className="max-h-80 overflow-y-auto space-y-2 py-2">
+                {selectedProdutoParaVariacao && (
+                  <div className="text-sm text-muted-foreground mb-2">
+                    Produto: {selectedProdutoParaVariacao.nome}
+                  </div>
+                )}
+                {variacoesList.map((variacao) => (
+                  <button
+                    key={variacao.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 border rounded hover:bg-muted"
+                    onClick={() => selecionarVariacao(variacao)}
+                  >
+                    {variacao.nome}
+                  </button>
                 ))}
+                {variacoesList.length === 0 && (
+                  <div className="text-sm text-muted-foreground">
+                    Nenhuma variação encontrada.
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setProdutoPedidosModal((prev) => ({ ...prev, open: false }))}>
-              Fechar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal: Selecionar Variação do Produto */}
-      <Dialog open={showVariacoesModal} onOpenChange={setShowVariacoesModal}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Escolha uma variação</DialogTitle>
-          </DialogHeader>
-          <div className="max-h-80 overflow-y-auto space-y-2 py-2">
-            {selectedProdutoParaVariacao && (
-              <div className="text-sm text-muted-foreground mb-2">
-                Produto: {selectedProdutoParaVariacao.nome}
-              </div>
-            )}
-            {variacoesList.map((variacao) => (
-              <button
-                key={variacao.id}
-                type="button"
-                className="w-full text-left px-3 py-2 border rounded hover:bg-muted"
-                onClick={() => selecionarVariacao(variacao)}
-              >
-                {variacao.nome}
-              </button>
-            ))}
-            {variacoesList.length === 0 && (
-              <div className="text-sm text-muted-foreground">Nenhuma variação encontrada.</div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowVariacoesModal(false)}>
-              Cancelar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setShowVariacoesModal(false)}
+                >
+                  Cancelar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     </div>

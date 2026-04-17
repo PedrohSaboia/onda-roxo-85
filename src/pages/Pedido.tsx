@@ -28,6 +28,16 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import EmbalagensManager from "@/components/shipping/EmbalagensManager";
 import RemetentesManager from "@/components/shipping/RemetentesManager";
 import CotacaoFreteModal from "@/components/shipping/CotacaoFreteModal";
@@ -382,6 +392,8 @@ export default function Pedido() {
   const [removeValueStr, setRemoveValueStr] = useState("");
   const [removingItem, setRemovingItem] = useState(false);
   const [savingUrgente, setSavingUrgente] = useState(false);
+  const [savingRetirada, setSavingRetirada] = useState(false);
+  const [confirmRetiradaOpen, setConfirmRetiradaOpen] = useState(false);
   // Wizard for adding sale details when confirming modal cart
   const [wizardOpen, setWizardOpen] = useState(false);
   const [wizardStep, setWizardStep] = useState(1);
@@ -2519,7 +2531,9 @@ export default function Pedido() {
           <TabsList>
             <TabsTrigger value="resumo">Resumo</TabsTrigger>
             <TabsTrigger value="status">Status</TabsTrigger>
-            <TabsTrigger value="entrega">Entrega</TabsTrigger>
+            {!pedido?.retirada && (
+              <TabsTrigger value="entrega">Entrega</TabsTrigger>
+            )}
             <TabsTrigger value="tempo-ganho">Tempo Ganho</TabsTrigger>
             <TabsTrigger value="subir-etiqueta">Subir etiqueta</TabsTrigger>
             <TabsTrigger value="historico">Histórico</TabsTrigger>
@@ -2919,6 +2933,63 @@ export default function Pedido() {
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground">
+                      🏠 Retirada
+                    </div>
+                    <div className="font-medium">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={!!pedido?.retirada}
+                          disabled={readonly || savingRetirada}
+                          onChange={(e) => {
+                            if (readonly) return;
+                            if (!pedido) return;
+                            if (e.target.checked) {
+                              setConfirmRetiradaOpen(true);
+                            } else {
+                              // Desmarcar direto
+                              (async () => {
+                                try {
+                                  setSavingRetirada(true);
+                                  const { error } = await supabase
+                                    .from("pedidos")
+                                    .update({
+                                      retirada: false,
+                                      atualizado_em: new Date().toISOString(),
+                                    } as any)
+                                    .eq("id", pedido.id);
+                                  if (error) throw error;
+                                  await registrarHistoricoMovimentacao(
+                                    pedido.id,
+                                    "Retirada removida do pedido",
+                                  );
+                                  setPedido((p: any) =>
+                                    p ? { ...p, retirada: false } : p,
+                                  );
+                                  toast({
+                                    title: "Atualizado",
+                                    description:
+                                      "Marcação de retirada removida.",
+                                  });
+                                } catch (err: any) {
+                                  toast({
+                                    title: "Erro",
+                                    description: err?.message || String(err),
+                                    variant: "destructive",
+                                  });
+                                } finally {
+                                  setSavingRetirada(false);
+                                }
+                              })();
+                            }
+                          }}
+                        />
+                        <span>{pedido?.retirada ? "Sim" : "Não"}</span>
+                      </label>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-sm text-muted-foreground">
                       Observações
                     </div>
                     <div className="font-medium whitespace-pre-wrap">
@@ -2938,326 +3009,328 @@ export default function Pedido() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="entrega">
-            <Card>
-              <CardContent className="pt-6">
-                {/* Dados do envio atual */}
-                <div className="grid grid-cols-3 gap-6 mb-6">
-                  <div>
-                    <div className="text-sm text-muted-foreground">
-                      CEP de destino
+          {!pedido?.retirada && (
+            <TabsContent value="entrega">
+              <Card>
+                <CardContent className="pt-6">
+                  {/* Dados do envio atual */}
+                  <div className="grid grid-cols-3 gap-6 mb-6">
+                    <div>
+                      <div className="text-sm text-muted-foreground">
+                        CEP de destino
+                      </div>
+                      <div className="font-medium mt-1">
+                        {pedido?.cliente?.cep || "—"}
+                      </div>
                     </div>
-                    <div className="font-medium mt-1">
-                      {pedido?.cliente?.cep || "—"}
+                    <div>
+                      <div className="text-sm text-muted-foreground">
+                        Transportadora atual
+                      </div>
+                      <div className="font-medium mt-1">
+                        {pedido?.frete_melhor_envio?.transportadora || "—"}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">
+                        Prazo estimado
+                      </div>
+                      <div className="font-medium mt-1">
+                        {pedido?.frete_melhor_envio?.prazo || "—"}
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">
-                      Transportadora atual
-                    </div>
-                    <div className="font-medium mt-1">
-                      {pedido?.frete_melhor_envio?.transportadora || "—"}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">
-                      Prazo estimado
-                    </div>
-                    <div className="font-medium mt-1">
-                      {pedido?.frete_melhor_envio?.prazo || "—"}
-                    </div>
-                  </div>
-                </div>
 
-                {/* Seleção de remetente e embalagem */}
-                <Card className="mb-6">
-                  <CardContent className="pt-6">
-                    <div className="grid grid-cols-1 gap-6">
-                      <div>
-                        <div className="text-sm text-muted-foreground mb-2">
-                          Remetente
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <select
-                            className="flex-1 border rounded px-3 py-2"
-                            value={selectedRemetente?.id || ""}
-                            onChange={(e) =>
-                              setSelectedRemetente(
-                                remetentes.find(
-                                  (r) => r.id === e.target.value,
-                                ) || null,
-                              )
-                            }
-                            disabled={readonly}
-                          >
-                            {remetentes.map((r) => (
-                              <option key={r.id} value={r.id}>
-                                {r.nome}
-                                {r.cidade ? ` - ${r.cidade}` : ""}
-                              </option>
-                            ))}
-                          </select>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (readonly) return;
-                              if (!canManageRemetentes) {
-                                toast({
-                                  title: "Sem permissão",
-                                  description:
-                                    "Você não tem permissão para isso",
-                                  variant: "destructive",
-                                });
-                                return;
+                  {/* Seleção de remetente e embalagem */}
+                  <Card className="mb-6">
+                    <CardContent className="pt-6">
+                      <div className="grid grid-cols-1 gap-6">
+                        <div>
+                          <div className="text-sm text-muted-foreground mb-2">
+                            Remetente
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <select
+                              className="flex-1 border rounded px-3 py-2"
+                              value={selectedRemetente?.id || ""}
+                              onChange={(e) =>
+                                setSelectedRemetente(
+                                  remetentes.find(
+                                    (r) => r.id === e.target.value,
+                                  ) || null,
+                                )
                               }
-                              setRemetentesVisible(true);
-                            }}
-                            disabled={readonly}
-                            aria-label="Gerenciar remetentes"
+                              disabled={readonly}
+                            >
+                              {remetentes.map((r) => (
+                                <option key={r.id} value={r.id}>
+                                  {r.nome}
+                                  {r.cidade ? ` - ${r.cidade}` : ""}
+                                </option>
+                              ))}
+                            </select>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                if (readonly) return;
+                                if (!canManageRemetentes) {
+                                  toast({
+                                    title: "Sem permissão",
+                                    description:
+                                      "Você não tem permissão para isso",
+                                    variant: "destructive",
+                                  });
+                                  return;
+                                }
+                                setRemetentesVisible(true);
+                              }}
+                              disabled={readonly}
+                              aria-label="Gerenciar remetentes"
+                            >
+                              Gerenciar
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="mb-6">
+                    <CardContent className="pt-6">
+                      <div className="space-y-2">
+                        <div className="text-sm text-muted-foreground">
+                          Link da etiqueta
+                        </div>
+                        <div className="flex gap-2">
+                          <Input
+                            placeholder="Cole aqui o link da etiqueta"
+                            value={linkEtiqueta}
+                            onChange={(e) => setLinkEtiqueta(e.target.value)}
+                            disabled={readonly || savingLink}
+                          />
+                          <Button
+                            onClick={saveLinkEtiqueta}
+                            disabled={readonly || savingLink}
+                            className="whitespace-nowrap"
                           >
-                            Gerenciar
+                            {savingLink ? "Salvando..." : "Salvar link"}
                           </Button>
                         </div>
+                        <div className="text-xs text-muted-foreground">
+                          Ao salvar com um link válido, o pedido vai para
+                          Logística e a etiqueta é marcada como Disponível.
+                        </div>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                    </CardContent>
+                  </Card>
 
-                <Card className="mb-6">
-                  <CardContent className="pt-6">
-                    <div className="space-y-2">
-                      <div className="text-sm text-muted-foreground">
-                        Link da etiqueta
-                      </div>
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Cole aqui o link da etiqueta"
-                          value={linkEtiqueta}
-                          onChange={(e) => setLinkEtiqueta(e.target.value)}
-                          disabled={readonly || savingLink}
-                        />
+                  {/* Botões de ação */}
+                  <div className="flex justify-center gap-3">
+                    {pedido?.carrinho_me === true ? (
+                      // Mostra botões de imprimir / cancelar etiqueta quando já foi enviado ao carrinho ME
+                      <>
                         <Button
-                          onClick={saveLinkEtiqueta}
-                          disabled={readonly || savingLink}
-                          className="whitespace-nowrap"
-                        >
-                          {savingLink ? "Salvando..." : "Salvar link"}
-                        </Button>
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        Ao salvar com um link válido, o pedido vai para
-                        Logística e a etiqueta é marcada como Disponível.
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
+                          onClick={async () => {
+                            if (readonly) return;
+                            if (!pedido) return;
+                            setProcessingLabel(true);
+                            try {
+                              const payload = {
+                                pedidoId: pedido.id,
+                                id_melhor_envio: pedido.id_melhor_envio,
+                              };
 
-                {/* Botões de ação */}
-                <div className="flex justify-center gap-3">
-                  {pedido?.carrinho_me === true ? (
-                    // Mostra botões de imprimir / cancelar etiqueta quando já foi enviado ao carrinho ME
-                    <>
-                      <Button
-                        onClick={async () => {
-                          if (readonly) return;
-                          if (!pedido) return;
-                          setProcessingLabel(true);
-                          try {
-                            const payload = {
-                              pedidoId: pedido.id,
-                              id_melhor_envio: pedido.id_melhor_envio,
-                            };
+                              const { data, error: fnError } =
+                                await supabase.functions.invoke(
+                                  "processar-etiqueta-melhorenvio",
+                                  {
+                                    body: payload,
+                                  },
+                                );
 
-                            const { data, error: fnError } =
-                              await supabase.functions.invoke(
-                                "processar-etiqueta-melhorenvio",
-                                {
-                                  body: payload,
-                                },
-                              );
+                              if (fnError) throw fnError;
 
-                            if (fnError) throw fnError;
-
-                            // Se a função retornar uma URL absoluta para a etiqueta, abrir
-                            console.log(
-                              "Resposta processar-etiqueta-melhorenvio:",
-                              data,
-                            );
-                            const returnedUrl =
-                              data?.url || pedido?.etiqueta?.url;
-                            if (
-                              returnedUrl &&
-                              /^https?:\/\//i.test(returnedUrl)
-                            ) {
-                              window.open(returnedUrl, "_blank");
-                              toast({
-                                title: "Etiqueta processada",
-                                description:
-                                  "A etiqueta foi processada e aberta em nova aba",
-                              });
-                            } else if (data?.id) {
-                              // A função retornou um id, mas não uma URL absoluta.
-                              // Mostrar mensagem amigável de sucesso para o usuário.
-                              toast({
-                                title: "Etiqueta impressa com sucesso 🎉",
-                                description:
-                                  "A etiqueta foi gerada no Melhor Envio. Verifique o painel do Melhor Envio para visualizar ou baixar.",
-                              });
-                              console.warn(
-                                "Etiqueta processada sem URL pública. Retorno:",
+                              // Se a função retornar uma URL absoluta para a etiqueta, abrir
+                              console.log(
+                                "Resposta processar-etiqueta-melhorenvio:",
                                 data,
                               );
-                            } else {
-                              // Sem id nem URL: ainda assim apresentar mensagem positiva ao usuário
+                              const returnedUrl =
+                                data?.url || pedido?.etiqueta?.url;
+                              if (
+                                returnedUrl &&
+                                /^https?:\/\//i.test(returnedUrl)
+                              ) {
+                                window.open(returnedUrl, "_blank");
+                                toast({
+                                  title: "Etiqueta processada",
+                                  description:
+                                    "A etiqueta foi processada e aberta em nova aba",
+                                });
+                              } else if (data?.id) {
+                                // A função retornou um id, mas não uma URL absoluta.
+                                // Mostrar mensagem amigável de sucesso para o usuário.
+                                toast({
+                                  title: "Etiqueta impressa com sucesso 🎉",
+                                  description:
+                                    "A etiqueta foi gerada no Melhor Envio. Verifique o painel do Melhor Envio para visualizar ou baixar.",
+                                });
+                                console.warn(
+                                  "Etiqueta processada sem URL pública. Retorno:",
+                                  data,
+                                );
+                              } else {
+                                // Sem id nem URL: ainda assim apresentar mensagem positiva ao usuário
+                                toast({
+                                  title: "Etiqueta impressa com sucesso 🎉",
+                                  description:
+                                    "A etiqueta foi processada. Verifique o painel do Melhor Envio para mais detalhes.",
+                                });
+                                console.warn(
+                                  "Nenhuma URL retornada ao processar etiqueta:",
+                                  data,
+                                );
+                              }
+                            } catch (err) {
+                              console.error("Erro ao processar etiqueta:", err);
                               toast({
-                                title: "Etiqueta impressa com sucesso 🎉",
+                                title: "Erro",
                                 description:
-                                  "A etiqueta foi processada. Verifique o painel do Melhor Envio para mais detalhes.",
+                                  "Não foi possível processar a etiqueta",
+                                variant: "destructive",
                               });
-                              console.warn(
-                                "Nenhuma URL retornada ao processar etiqueta:",
-                                data,
-                              );
-                            }
-                          } catch (err) {
-                            console.error("Erro ao processar etiqueta:", err);
-                            toast({
-                              title: "Erro",
-                              description:
-                                "Não foi possível processar a etiqueta",
-                              variant: "destructive",
-                            });
-                          } finally {
-                            setProcessingLabel(false);
-                          }
-                        }}
-                        disabled={processingLabel || readonly}
-                        className="border-2 border-sky-400 text-sky-700 bg-white hover:bg-sky-50"
-                      >
-                        <span className="inline-flex items-center gap-2">
-                          {processingLabel ? (
-                            <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
-                          ) : (
-                            <svg
-                              xmlns="http://www.w3.org/2000/svg"
-                              className="h-5 w-5"
-                              viewBox="0 0 20 20"
-                              fill="currentColor"
-                            >
-                              <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 00-1 1v6a1 1 0 001 1h2v3a1 1 0 001 1h8a1 1 0 001-1v-3h2a1 1 0 001-1V7a1 1 0 00-1-1h-2V3a1 1 0 00-1-1H6zM8 5h4v3H8V5z" />
-                            </svg>
-                          )}
-                          Imprimir Etiqueta
-                        </span>
-                      </Button>
-
-                      <Button
-                        onClick={async () => {
-                          if (readonly) return;
-                          // Cancelar etiqueta: limpar id_melhor_envio e carrinho_me no pedido
-                          try {
-                            const { error } = await supabase
-                              .from("pedidos")
-                              .update({
-                                id_melhor_envio: null,
-                                carrinho_me: false,
-                              } as any)
-                              .eq("id", id);
-
-                            if (error) throw error;
-                            await registrarHistoricoMovimentacao(
-                              id,
-                              "Etiqueta Melhor Envio cancelada",
-                            );
-                            toast({
-                              title: "Sucesso",
-                              description: "Etiqueta cancelada",
-                            });
-                            navigate(0);
-                          } catch (err) {
-                            console.error("Erro ao cancelar etiqueta:", err);
-                            toast({
-                              title: "Erro",
-                              description:
-                                "Não foi possível cancelar a etiqueta",
-                              variant: "destructive",
-                            });
-                          }
-                        }}
-                        className="bg-red-600 hover:bg-red-700 text-white"
-                        disabled={readonly}
-                      >
-                        Cancelar etiqueta
-                      </Button>
-                    </>
-                  ) : (
-                    // Botões baseados na verificação de entregue_ml
-                    <>
-                      {temProdutoEntregueML ? (
-                        // Botão para etiqueta Mercado Livre (quando entregue_ml = true)
-                        <Button
-                          onClick={() => {
-                            if (!readonly) {
-                              handleGerarEtiquetaML();
+                            } finally {
+                              setProcessingLabel(false);
                             }
                           }}
-                          disabled={readonly || gerandoEtiquetaML}
-                          className="bg-yellow-500 hover:bg-yellow-600"
+                          disabled={processingLabel || readonly}
+                          className="border-2 border-sky-400 text-sky-700 bg-white hover:bg-sky-50"
                         >
-                          {gerandoEtiquetaML ? (
-                            <>
-                              <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
-                              Gerando...
-                            </>
-                          ) : (
-                            "📦 Etiqueta Mercado Livre"
-                          )}
+                          <span className="inline-flex items-center gap-2">
+                            {processingLabel ? (
+                              <div className="animate-spin h-4 w-4 border-2 border-b-transparent rounded-full" />
+                            ) : (
+                              <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                className="h-5 w-5"
+                                viewBox="0 0 20 20"
+                                fill="currentColor"
+                              >
+                                <path d="M6 2a1 1 0 00-1 1v3H3a1 1 0 00-1 1v6a1 1 0 001 1h2v3a1 1 0 001 1h8a1 1 0 001-1v-3h2a1 1 0 001-1V7a1 1 0 00-1-1h-2V3a1 1 0 00-1-1H6zM8 5h4v3H8V5z" />
+                              </svg>
+                            )}
+                            Imprimir Etiqueta
+                          </span>
                         </Button>
-                      ) : (
-                        // Botões originais para calcular e enviar mais barato (quando entregue_ml = null ou false)
-                        <>
+
+                        <Button
+                          onClick={async () => {
+                            if (readonly) return;
+                            // Cancelar etiqueta: limpar id_melhor_envio e carrinho_me no pedido
+                            try {
+                              const { error } = await supabase
+                                .from("pedidos")
+                                .update({
+                                  id_melhor_envio: null,
+                                  carrinho_me: false,
+                                } as any)
+                                .eq("id", id);
+
+                              if (error) throw error;
+                              await registrarHistoricoMovimentacao(
+                                id,
+                                "Etiqueta Melhor Envio cancelada",
+                              );
+                              toast({
+                                title: "Sucesso",
+                                description: "Etiqueta cancelada",
+                              });
+                              navigate(0);
+                            } catch (err) {
+                              console.error("Erro ao cancelar etiqueta:", err);
+                              toast({
+                                title: "Erro",
+                                description:
+                                  "Não foi possível cancelar a etiqueta",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                          className="bg-red-600 hover:bg-red-700 text-white"
+                          disabled={readonly}
+                        >
+                          Cancelar etiqueta
+                        </Button>
+                      </>
+                    ) : (
+                      // Botões baseados na verificação de entregue_ml
+                      <>
+                        {temProdutoEntregueML ? (
+                          // Botão para etiqueta Mercado Livre (quando entregue_ml = true)
                           <Button
                             onClick={() => {
-                              if (!readonly) handleCalcularFrete();
+                              if (!readonly) {
+                                handleGerarEtiquetaML();
+                              }
                             }}
-                            disabled={calculandoFrete || readonly}
-                            className="bg-amber-500 hover:bg-amber-600"
+                            disabled={readonly || gerandoEtiquetaML}
+                            className="bg-yellow-500 hover:bg-yellow-600"
                           >
-                            {calculandoFrete ? (
+                            {gerandoEtiquetaML ? (
                               <>
                                 <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
-                                Calculando...
+                                Gerando...
                               </>
                             ) : (
-                              "📦 Calcular Frete"
+                              "📦 Etiqueta Mercado Livre"
                             )}
                           </Button>
+                        ) : (
+                          // Botões originais para calcular e enviar mais barato (quando entregue_ml = null ou false)
+                          <>
+                            <Button
+                              onClick={() => {
+                                if (!readonly) handleCalcularFrete();
+                              }}
+                              disabled={calculandoFrete || readonly}
+                              className="bg-amber-500 hover:bg-amber-600"
+                            >
+                              {calculandoFrete ? (
+                                <>
+                                  <div className="animate-spin mr-2 h-4 w-4 border-2 border-b-transparent rounded-full" />
+                                  Calculando...
+                                </>
+                              ) : (
+                                "📦 Calcular Frete"
+                              )}
+                            </Button>
 
-                          <Button
-                            onClick={() => {
-                              if (!readonly) handleEnviarMaisBarato();
-                            }}
-                            disabled={calculandoFrete || readonly}
-                            className="bg-custom-700 hover:bg-custom-800"
-                          >
-                            {calculandoFrete
-                              ? "Calculando..."
-                              : "ENVIAR O MAIS BARATO"}
-                          </Button>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
+                            <Button
+                              onClick={() => {
+                                if (!readonly) handleEnviarMaisBarato();
+                              }}
+                              disabled={calculandoFrete || readonly}
+                              className="bg-custom-700 hover:bg-custom-800"
+                            >
+                              {calculandoFrete
+                                ? "Calculando..."
+                                : "ENVIAR O MAIS BARATO"}
+                            </Button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
 
-            {/* Cards de gerenciamento */}
-            <div className="grid grid-cols-2 gap-6 mt-6">
-              {/* Link Etiqueta moved to the top delivery info card as requested */}
-            </div>
-          </TabsContent>
+              {/* Cards de gerenciamento */}
+              <div className="grid grid-cols-2 gap-6 mt-6">
+                {/* Link Etiqueta moved to the top delivery info card as requested */}
+              </div>
+            </TabsContent>
+          )}
 
           <TabsContent value="tempo-ganho">
             <Card>
@@ -6738,6 +6811,71 @@ export default function Pedido() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Confirmação para marcar como Retirada */}
+        <AlertDialog
+          open={confirmRetiradaOpen}
+          onOpenChange={(open) => {
+            if (!open) setConfirmRetiradaOpen(false);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>🏠 Marcar como Retirada</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja marcar este pedido como{" "}
+                <strong>Retirada</strong>?<br />
+                <span className="text-amber-600 font-medium">
+                  O pedido será movido automaticamente para Logística com
+                  etiqueta Disponível. A aba de Entrega ficará oculta.
+                </span>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmRetiradaOpen(false)}>
+                Cancelar
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-amber-600 hover:bg-amber-700 text-white"
+                onClick={async () => {
+                  setConfirmRetiradaOpen(false);
+                  if (!pedido) return;
+                  try {
+                    setSavingRetirada(true);
+                    const { error } = await supabase
+                      .from("pedidos")
+                      .update({
+                        retirada: true,
+                        atualizado_em: new Date().toISOString(),
+                      } as any)
+                      .eq("id", pedido.id);
+                    if (error) throw error;
+                    await registrarHistoricoMovimentacao(
+                      pedido.id,
+                      "Pedido marcado como Retirada — movido para Logística",
+                    );
+                    setPedido((p: any) => (p ? { ...p, retirada: true } : p));
+                    toast({
+                      title: "🏠 Retirada marcada",
+                      description:
+                        "Pedido movido para Logística com etiqueta Disponível.",
+                    });
+                  } catch (err: any) {
+                    toast({
+                      title: "Erro",
+                      description: err?.message || String(err),
+                      variant: "destructive",
+                    });
+                  } finally {
+                    setSavingRetirada(false);
+                  }
+                }}
+              >
+                Confirmar
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </>
   );
